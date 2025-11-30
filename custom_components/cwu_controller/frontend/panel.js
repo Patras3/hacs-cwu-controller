@@ -87,7 +87,6 @@ let powerChart = null;
 let techChart = null;
 let modalChart = null;
 let stateStartTime = null;
-let powerHistory10min = [];
 let cwuTemp1hAgo = null;
 
 // CWU Session - now tracked by backend, just store temp history for UI
@@ -351,7 +350,6 @@ async function refreshData() {
         if (kidsTemp) currentData.kidsTemp = parseFloat(kidsTemp.state);
         if (power) {
             currentData.power = parseFloat(power.state) || 0;
-            trackPowerHistory(currentData.power);
         }
         if (waterHeater) currentData.waterHeaterState = waterHeater.state;
         if (climate) currentData.climateState = climate.state;
@@ -382,30 +380,57 @@ async function refreshData() {
     }
 }
 
-/**
- * Track power history for 10 minute analysis
- */
-function trackPowerHistory(power) {
-    const now = Date.now();
-    powerHistory10min.push({ time: now, power });
+// Cached power stats (fetched from HA history)
+let cachedPowerStats = { avg: 0, peak: 0, hasPeaks: false };
+let lastPowerStatsFetch = 0;
 
-    // Keep only last 10 minutes
-    const tenMinAgo = now - 10 * 60 * 1000;
-    powerHistory10min = powerHistory10min.filter(p => p.time > tenMinAgo);
+/**
+ * Fetch power statistics from HA history for last 10 minutes
+ */
+async function fetchPowerStats() {
+    const now = Date.now();
+    // Fetch every 30 seconds to avoid API spam
+    if (now - lastPowerStatsFetch < 30000) {
+        return cachedPowerStats;
+    }
+    lastPowerStatsFetch = now;
+
+    try {
+        const history = await fetchHistory(EXTERNAL_ENTITIES.power, 0.2); // ~12 minutes
+
+        if (history.length < 2) {
+            return cachedPowerStats;
+        }
+
+        // Filter to last 10 minutes
+        const tenMinAgo = now - 10 * 60 * 1000;
+        const recentHistory = history.filter(item => {
+            const itemTime = new Date(item.last_changed || item.last_updated).getTime();
+            return itemTime >= tenMinAgo;
+        });
+
+        if (recentHistory.length === 0) {
+            return cachedPowerStats;
+        }
+
+        const powers = recentHistory.map(item => parseFloat(item.state) || 0);
+        const avg = powers.reduce((a, b) => a + b, 0) / powers.length;
+        const peak = Math.max(...powers);
+        const hasPeaks = peak > 500;
+
+        cachedPowerStats = { avg: Math.round(avg), peak: Math.round(peak), hasPeaks };
+        return cachedPowerStats;
+    } catch (error) {
+        console.error('Failed to fetch power stats:', error);
+        return cachedPowerStats;
+    }
 }
 
 /**
- * Get power statistics for last 10 minutes
+ * Get cached power statistics (sync version for UI)
  */
 function getPowerStats() {
-    if (powerHistory10min.length === 0) return { avg: 0, peak: 0, hasPeaks: false };
-
-    const powers = powerHistory10min.map(p => p.power);
-    const avg = powers.reduce((a, b) => a + b, 0) / powers.length;
-    const peak = Math.max(...powers);
-    const hasPeaks = peak > 500; // Had a heating peak
-
-    return { avg: Math.round(avg), peak: Math.round(peak), hasPeaks };
+    return cachedPowerStats;
 }
 
 /**
@@ -453,6 +478,9 @@ async function updateUI() {
 
     updateUrgencyGauge('cwu', currentData.cwuUrgency || 0);
     updateUrgencyGauge('floor', currentData.floorUrgency || 0);
+
+    // Fetch power stats from HA history (cached, updates every 30s)
+    await fetchPowerStats();
 
     updatePowerDisplay(currentData.power || attrs.power, currentData.avgPower);
     updateCycleTimer(currentData.heatingTime || 0);
