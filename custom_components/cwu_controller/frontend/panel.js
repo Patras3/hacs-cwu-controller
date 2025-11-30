@@ -93,12 +93,8 @@ let cwuTemp1hAgo = null;
 // CWU Session - now tracked by backend, just store temp history for UI
 let cwuTempHistory = [];
 
-// Session energy tracking (kWh calculation)
-let sessionEnergy = {
-    lastPowerTime: null,
-    lastPower: 0,
-    totalWh: 0,  // Watt-hours accumulated
-};
+// Session energy (calculated from HA history)
+let sessionEnergyKwh = 0;
 
 // Chart ranges
 let chartRanges = {
@@ -222,6 +218,52 @@ async function fetchCwuTemp1hAgo() {
 }
 
 /**
+ * Calculate session energy from HA power history
+ * @param {string} sessionStartTime - ISO timestamp of session start
+ * @returns {Promise<number>} Energy in kWh
+ */
+async function calculateSessionEnergy(sessionStartTime) {
+    if (!sessionStartTime) return 0;
+
+    const startTime = new Date(sessionStartTime);
+    const now = new Date();
+    const hoursBack = (now.getTime() - startTime.getTime()) / 3600000;
+
+    // Fetch power history for session duration (max 4h to be safe)
+    const history = await fetchHistory(EXTERNAL_ENTITIES.power, Math.min(hoursBack + 0.5, 4));
+
+    if (history.length < 2) return 0;
+
+    // Filter to only include readings from session start
+    const sessionHistory = history.filter(item => {
+        const itemTime = new Date(item.last_changed || item.last_updated).getTime();
+        return itemTime >= startTime.getTime();
+    });
+
+    if (sessionHistory.length < 2) return 0;
+
+    // Calculate energy using trapezoidal integration
+    let totalWh = 0;
+    for (let i = 1; i < sessionHistory.length; i++) {
+        const prevItem = sessionHistory[i - 1];
+        const currItem = sessionHistory[i];
+
+        const prevTime = new Date(prevItem.last_changed || prevItem.last_updated).getTime();
+        const currTime = new Date(currItem.last_changed || currItem.last_updated).getTime();
+        const prevPower = parseFloat(prevItem.state) || 0;
+        const currPower = parseFloat(currItem.state) || 0;
+
+        // Hours between readings
+        const hours = (currTime - prevTime) / 3600000;
+        // Average power * time = Wh
+        const avgPower = (prevPower + currPower) / 2;
+        totalWh += avgPower * hours;
+    }
+
+    return totalWh / 1000; // Convert to kWh
+}
+
+/**
  * Call Home Assistant service
  */
 async function callService(domain, service, data = {}) {
@@ -332,7 +374,7 @@ async function refreshData() {
         document.getElementById('connection-state').textContent = 'Connected';
         document.getElementById('connection-state').style.color = '#68d391';
 
-        updateUI();
+        await updateUI();
     } catch (error) {
         console.error('Failed to refresh data:', error);
         document.getElementById('connection-state').textContent = 'Error';
@@ -367,20 +409,20 @@ function getPowerStats() {
 }
 
 /**
- * Handle CWU session state change - manages temp history and energy tracking
+ * Handle CWU session state change - manages temp history
  */
 function handleCwuSessionChange(oldState, newState) {
     if (newState === 'heating_cwu' && oldState !== 'heating_cwu') {
         // Session started - reset tracking
         cwuTempHistory = [];
-        sessionEnergy = { lastPowerTime: null, lastPower: 0, totalWh: 0 };
+        sessionEnergyKwh = 0;
         console.log('CWU Session started (tracked by backend)');
     } else if (oldState === 'heating_cwu' && newState !== 'heating_cwu') {
         // Session ended
-        console.log('CWU Session ended, total energy:', (sessionEnergy.totalWh / 1000).toFixed(2), 'kWh');
+        console.log('CWU Session ended');
     }
 
-    // Track temp during active session
+    // Track temp during active session (for local UI smoothness)
     if (currentData.cwuHeatingActive && currentData.cwuTemp) {
         cwuTempHistory.push({
             time: Date.now(),
@@ -390,31 +432,18 @@ function handleCwuSessionChange(oldState, newState) {
         const cutoff = Date.now() - 30 * 60 * 1000;
         cwuTempHistory = cwuTempHistory.filter(t => t.time > cutoff);
     }
-
-    // Track energy during active session
-    if (currentData.cwuHeatingActive && currentData.power !== undefined) {
-        const now = Date.now();
-        if (sessionEnergy.lastPowerTime !== null) {
-            // Calculate Wh: power (W) * time (hours)
-            const hoursElapsed = (now - sessionEnergy.lastPowerTime) / 3600000;
-            const avgPower = (sessionEnergy.lastPower + currentData.power) / 2;
-            sessionEnergy.totalWh += avgPower * hoursElapsed;
-        }
-        sessionEnergy.lastPowerTime = now;
-        sessionEnergy.lastPower = currentData.power;
-    }
 }
 
 /**
  * Update all UI elements
  */
-function updateUI() {
+async function updateUI() {
     const attrs = currentData.attributes || {};
 
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
-    updateCwuSessionCard();
+    await updateCwuSessionCard();
 
     updateTemperature('temp-cwu', currentData.cwuTemp || attrs.cwu_temp, currentData.cwuTargetTemp || 45, currentData.cwuMinTemp || 35);
     updateTemperature('temp-salon', currentData.salonTemp || attrs.salon_temp, 22, 19);
@@ -435,10 +464,13 @@ function updateUI() {
     updateStateHistory(attrs.state_history || []);
 }
 
+// Last energy calculation time (to avoid too many API calls)
+let lastEnergyCalcTime = 0;
+
 /**
  * Update CWU Session tracking card - uses backend session data
  */
-function updateCwuSessionCard() {
+async function updateCwuSessionCard() {
     const card = document.getElementById('cwu-session-card');
     const attrs = currentData.attributes || {};
 
@@ -456,6 +488,13 @@ function updateCwuSessionCard() {
     }
 
     card.style.display = 'block';
+
+    // Calculate energy from history (every 30 seconds to avoid API spam)
+    const now = Date.now();
+    if (now - lastEnergyCalcTime > 30000) {
+        lastEnergyCalcTime = now;
+        sessionEnergyKwh = await calculateSessionEnergy(sessionStartTime);
+    }
 
     const currentTemp = currentData.cwuTemp || sessionStartTemp;
     const tempChange = currentTemp - sessionStartTemp;
@@ -516,9 +555,8 @@ function updateCwuSessionCard() {
     document.getElementById('session-rate').textContent = heatingRate > 0 ? heatingRate.toFixed(1) : '--';
     document.getElementById('session-eta').textContent = eta;
 
-    // Energy consumption
-    const energyKwh = sessionEnergy.totalWh / 1000;
-    document.getElementById('session-energy').textContent = energyKwh.toFixed(2);
+    // Energy consumption (from HA history)
+    document.getElementById('session-energy').textContent = sessionEnergyKwh.toFixed(2);
 
     document.getElementById('forecast-completion').textContent = etaTime;
     document.getElementById('forecast-temp-at-end').textContent = `${tempAtSessionEnd}°C`;
