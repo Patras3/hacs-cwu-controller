@@ -93,6 +93,13 @@ let cwuTemp1hAgo = null;
 // CWU Session - now tracked by backend, just store temp history for UI
 let cwuTempHistory = [];
 
+// Session energy tracking (kWh calculation)
+let sessionEnergy = {
+    lastPowerTime: null,
+    lastPower: 0,
+    totalWh: 0,  // Watt-hours accumulated
+};
+
 // Chart ranges
 let chartRanges = {
     tempChart: '6h',
@@ -360,16 +367,17 @@ function getPowerStats() {
 }
 
 /**
- * Handle CWU session state change - now just manages temp history for UI
+ * Handle CWU session state change - manages temp history and energy tracking
  */
 function handleCwuSessionChange(oldState, newState) {
     if (newState === 'heating_cwu' && oldState !== 'heating_cwu') {
-        // Session started - clear temp history
+        // Session started - reset tracking
         cwuTempHistory = [];
+        sessionEnergy = { lastPowerTime: null, lastPower: 0, totalWh: 0 };
         console.log('CWU Session started (tracked by backend)');
     } else if (oldState === 'heating_cwu' && newState !== 'heating_cwu') {
         // Session ended
-        console.log('CWU Session ended');
+        console.log('CWU Session ended, total energy:', (sessionEnergy.totalWh / 1000).toFixed(2), 'kWh');
     }
 
     // Track temp during active session
@@ -381,6 +389,19 @@ function handleCwuSessionChange(oldState, newState) {
         // Keep only last 30 minutes of data
         const cutoff = Date.now() - 30 * 60 * 1000;
         cwuTempHistory = cwuTempHistory.filter(t => t.time > cutoff);
+    }
+
+    // Track energy during active session
+    if (currentData.cwuHeatingActive && currentData.power !== undefined) {
+        const now = Date.now();
+        if (sessionEnergy.lastPowerTime !== null) {
+            // Calculate Wh: power (W) * time (hours)
+            const hoursElapsed = (now - sessionEnergy.lastPowerTime) / 3600000;
+            const avgPower = (sessionEnergy.lastPower + currentData.power) / 2;
+            sessionEnergy.totalWh += avgPower * hoursElapsed;
+        }
+        sessionEnergy.lastPowerTime = now;
+        sessionEnergy.lastPower = currentData.power;
     }
 }
 
@@ -494,6 +515,10 @@ function updateCwuSessionCard() {
     document.getElementById('session-duration').textContent = formatDuration(durationMin);
     document.getElementById('session-rate').textContent = heatingRate > 0 ? heatingRate.toFixed(1) : '--';
     document.getElementById('session-eta').textContent = eta;
+
+    // Energy consumption
+    const energyKwh = sessionEnergy.totalWh / 1000;
+    document.getElementById('session-energy').textContent = energyKwh.toFixed(2);
 
     document.getElementById('forecast-completion').textContent = etaTime;
     document.getElementById('forecast-temp-at-end').textContent = `${tempAtSessionEnd}°C`;
