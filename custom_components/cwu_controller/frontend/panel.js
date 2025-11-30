@@ -89,9 +89,6 @@ let modalChart = null;
 let stateStartTime = null;
 let cwuTemp1hAgo = null;
 
-// CWU Session - now tracked by backend, just store temp history for UI
-let cwuTempHistory = [];
-
 // Session energy (calculated from HA history)
 let sessionEnergyKwh = 0;
 
@@ -358,17 +355,6 @@ async function refreshData() {
         if (cwuInlet) currentData.cwuInlet = parseFloat(cwuInlet.state);
         if (floorInlet) currentData.floorInlet = parseFloat(floorInlet.state);
 
-        // Track CWU temp history for UI (session is managed by backend)
-        if (currentData.cwuHeatingActive && currentData.cwuTemp) {
-            cwuTempHistory.push({
-                time: Date.now(),
-                temp: currentData.cwuTemp
-            });
-            // Keep only last 30 minutes
-            const cutoff = Date.now() - 30 * 60 * 1000;
-            cwuTempHistory = cwuTempHistory.filter(t => t.time > cutoff);
-        }
-
         document.getElementById('connection-state').textContent = 'Connected';
         document.getElementById('connection-state').style.color = '#68d391';
 
@@ -434,28 +420,16 @@ function getPowerStats() {
 }
 
 /**
- * Handle CWU session state change - manages temp history
+ * Handle CWU session state change
  */
 function handleCwuSessionChange(oldState, newState) {
     if (newState === 'heating_cwu' && oldState !== 'heating_cwu') {
-        // Session started - reset tracking
-        cwuTempHistory = [];
+        // Session started - reset cached energy
         sessionEnergyKwh = 0;
+        lastEnergyCalcTime = 0; // Force recalculation
         console.log('CWU Session started (tracked by backend)');
     } else if (oldState === 'heating_cwu' && newState !== 'heating_cwu') {
-        // Session ended
         console.log('CWU Session ended');
-    }
-
-    // Track temp during active session (for local UI smoothness)
-    if (currentData.cwuHeatingActive && currentData.cwuTemp) {
-        cwuTempHistory.push({
-            time: Date.now(),
-            temp: currentData.cwuTemp
-        });
-        // Keep only last 30 minutes of data
-        const cutoff = Date.now() - 30 * 60 * 1000;
-        cwuTempHistory = cwuTempHistory.filter(t => t.time > cutoff);
     }
 }
 
