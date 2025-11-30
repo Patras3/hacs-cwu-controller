@@ -1,13 +1,13 @@
 {
   "domain": "cwu_controller",
   "name": "CWU Controller",
-  "codeowners": ["@your-github-username"],
+  "codeowners": ["@Patras3"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/your-github-username/hacs-cwu-controller",
+  "documentation": "https://github.com/Patras3/hacs-cwu-controller",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/your-github-username/hacs-cwu-controller/issues",
+  "issue_tracker": "https://github.com/Patras3/hacs-cwu-controller/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "2.0.0"
 }
