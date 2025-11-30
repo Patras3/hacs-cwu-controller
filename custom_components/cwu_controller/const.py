@@ -44,6 +44,7 @@ POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating
 CWU_MAX_HEATING_TIME: Final = 170  # 2h50m in minutes (before 3h limit)
 CWU_PAUSE_TIME: Final = 10  # 10 minutes pause between cycles
 FAKE_HEATING_DETECTION_TIME: Final = 5  # Minutes of low power before detection
+FAKE_HEATING_RESTART_WAIT: Final = 2  # Minutes to wait before restarting after fake heating
 SENSOR_UNAVAILABLE_GRACE: Final = 30  # Minutes before using fallback
 
 # Evening bath time settings
@@ -58,6 +59,7 @@ STATE_PAUSE: Final = "pause"
 STATE_EMERGENCY_CWU: Final = "emergency_cwu"
 STATE_EMERGENCY_FLOOR: Final = "emergency_floor"
 STATE_FAKE_HEATING_DETECTED: Final = "fake_heating_detected"
+STATE_FAKE_HEATING_RESTARTING: Final = "fake_heating_restarting"
 
 # Urgency levels
 URGENCY_NONE: Final = 0

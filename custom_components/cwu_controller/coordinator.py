@@ -23,6 +23,7 @@ from .const import (
     STATE_EMERGENCY_CWU,
     STATE_EMERGENCY_FLOOR,
     STATE_FAKE_HEATING_DETECTED,
+    STATE_FAKE_HEATING_RESTARTING,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -33,6 +34,7 @@ from .const import (
     CWU_MAX_HEATING_TIME,
     CWU_PAUSE_TIME,
     FAKE_HEATING_DETECTION_TIME,
+    FAKE_HEATING_RESTART_WAIT,
     SENSOR_UNAVAILABLE_GRACE,
     EVENING_PREP_HOUR,
     BATH_TIME_HOUR,
@@ -78,6 +80,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._cwu_heating_start: datetime | None = None
         self._pause_start: datetime | None = None
         self._low_power_start: datetime | None = None
+        self._fake_heating_detected_at: datetime | None = None
         self._last_state_change: datetime = datetime.now()
 
         # Sensor tracking
@@ -517,7 +520,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
             "cwu_session_start_temp": self._cwu_session_start_temp,
+            # Fake heating recovery data
+            "fake_heating_restart_in": None,
         }
+
+        if self._fake_heating_detected_at:
+            elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
+            remaining = max(0, FAKE_HEATING_RESTART_WAIT - elapsed)
+            data["fake_heating_restart_in"] = round(remaining, 1)
 
         if self._cwu_heating_start:
             data["cwu_heating_minutes"] = (now - self._cwu_heating_start).total_seconds() / 60
@@ -564,20 +574,30 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Run the main control logic."""
 
-        # Handle fake heating detection
+        # Handle fake heating detection - first detection
         if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
+            self._fake_heating_detected_at = datetime.now()
+            await self._async_set_water_heater_mode(WH_MODE_OFF)
             await self._async_send_notification(
                 "CWU Controller Alert",
                 f"Fake heating detected! Power < 10W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
-                f"CWU temp: {cwu_temp}°C. Restarting cycle..."
+                f"CWU temp: {cwu_temp}°C. Waiting {FAKE_HEATING_RESTART_WAIT} min before restart..."
             )
-            # Try to restart by turning off and on
-            await self._async_set_water_heater_mode(WH_MODE_OFF)
-            await asyncio.sleep(2)
-            await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
-            self._low_power_start = None
-            self._change_state(STATE_HEATING_CWU)
+            self._log_action(f"Fake heating detected - CWU OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+            return
+
+        # Handle fake heating restart - wait period complete
+        if self._current_state == STATE_FAKE_HEATING_DETECTED and self._fake_heating_detected_at:
+            elapsed = (datetime.now() - self._fake_heating_detected_at).total_seconds() / 60
+            if elapsed >= FAKE_HEATING_RESTART_WAIT:
+                self._change_state(STATE_FAKE_HEATING_RESTARTING)
+                self._log_action("Fake heating wait complete - restarting CWU...")
+                await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+                self._low_power_start = None
+                self._fake_heating_detected_at = None
+                self._change_state(STATE_HEATING_CWU)
+                self._log_action("CWU restarted after fake heating recovery")
             return
 
         # Handle pause state
