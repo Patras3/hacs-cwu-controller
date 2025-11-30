@@ -115,13 +115,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
     @property
     def state_history(self) -> list[dict]:
-        """Return state history."""
-        return self._state_history[-100:]  # Last 100 entries
+        """Return state history (today + yesterday)."""
+        return self._state_history
 
     @property
     def action_history(self) -> list[dict]:
-        """Return action history."""
-        return self._action_history[-100:]  # Last 100 entries
+        """Return action history (today + yesterday)."""
+        return self._action_history
 
     def _get_sensor_value(self, entity_id: str | None, default: float | None = None) -> float | None:
         """Get sensor value with fallback handling."""
@@ -342,14 +342,30 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.warning("Failed to send notification: %s", e)
 
+    def _cleanup_old_history(self) -> None:
+        """Remove history entries older than yesterday."""
+        today = datetime.now().date()
+        yesterday = today - timedelta(days=1)
+
+        def is_recent(entry: dict) -> bool:
+            try:
+                entry_date = datetime.fromisoformat(entry["timestamp"]).date()
+                return entry_date >= yesterday
+            except (KeyError, ValueError):
+                return False
+
+        self._state_history = [e for e in self._state_history if is_recent(e)]
+        self._action_history = [e for e in self._action_history if is_recent(e)]
+
     def _log_action(self, action: str) -> None:
-        """Log an action to history."""
+        """Log an action to history (today + yesterday only)."""
         entry = {
             "timestamp": datetime.now().isoformat(),
             "action": action,
             "state": self._current_state,
         }
         self._action_history.append(entry)
+        self._cleanup_old_history()
         _LOGGER.info("CWU Controller: %s", action)
 
     def _change_state(self, new_state: str) -> None:
@@ -365,6 +381,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 "to_state": new_state,
             }
             self._state_history.append(entry)
+            self._cleanup_old_history()
             _LOGGER.info("CWU Controller state: %s -> %s", self._previous_state, new_state)
 
     async def async_enable(self) -> None:
