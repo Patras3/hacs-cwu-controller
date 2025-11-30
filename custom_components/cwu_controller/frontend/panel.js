@@ -1,6 +1,6 @@
 /**
- * CWU Controller Panel JavaScript v3.0
- * Enhanced dashboard with session tracking, fullscreen charts, and relative time
+ * CWU Controller Panel JavaScript v4.0
+ * Redesigned with compact state bar, mode selector, and integrated cycle timer
  */
 
 // Configuration
@@ -54,6 +54,7 @@ const STATE_ICONS = {
     'emergency_cwu': 'mdi-water-boiler-alert',
     'emergency_floor': 'mdi-home-alert',
     'fake_heating_detected': 'mdi-alert-circle',
+    'fake_heating_restarting': 'mdi-refresh-circle',
 };
 
 const STATE_CLASSES = {
@@ -62,6 +63,7 @@ const STATE_CLASSES = {
     'emergency_cwu': 'state-emergency',
     'emergency_floor': 'state-emergency',
     'fake_heating_detected': 'state-emergency',
+    'fake_heating_restarting': 'state-heating-cwu',
     'pause': 'state-pause',
 };
 
@@ -72,7 +74,8 @@ const STATE_DESCRIPTIONS = {
     'pause': 'Mandatory 10-minute pause (3h cycle limit reached)',
     'emergency_cwu': 'Emergency! CWU temperature critically low (<35°C)',
     'emergency_floor': 'Emergency! Room temperature critically low (<19°C)',
-    'fake_heating_detected': 'Warning: Broken heater situation detected - power <10W',
+    'fake_heating_detected': 'Fake heating detected - waiting before restart',
+    'fake_heating_restarting': 'Restarting CWU heating after fake heating recovery',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -100,6 +103,10 @@ let chartRanges = {
 };
 let modalChartType = 'temp';
 let modalChartRange = '24h';
+
+// Mode selection modal state
+let selectedModeType = null; // 'cwu' or 'floor'
+let selectedDuration = 3; // hours
 
 /**
  * Initialize the panel
@@ -457,7 +464,6 @@ async function updateUI() {
     await fetchPowerStats();
 
     updatePowerDisplay(currentData.power || attrs.power, currentData.avgPower);
-    updateCycleTimer(currentData.heatingTime || 0);
     updateHeatPumpStatus();
     updateFakeHeatingAlert();
     updateOverrideAlert();
@@ -570,6 +576,45 @@ async function updateCwuSessionCard() {
         document.getElementById('session-vs-1h').textContent = `${diff1h >= 0 ? '+' : ''}${diff1h.toFixed(1)}°C`;
         document.getElementById('session-vs-1h').style.color = diff1h >= 0 ? '#68d391' : '#fc8181';
     }
+
+    // Update integrated cycle timer
+    updateSessionCycleTimer(durationMin);
+}
+
+/**
+ * Update integrated cycle timer in session card
+ */
+function updateSessionCycleTimer(minutes) {
+    const maxMinutes = 170;
+    const mins = Math.round(minutes);
+    const remaining = Math.max(0, maxMinutes - mins);
+    const percentage = Math.min(mins / maxMinutes, 1);
+
+    // Circumference of r=25 circle = 2 * PI * 25 = ~157
+    const circumference = 157;
+    const offset = circumference - (circumference * percentage);
+
+    const progressEl = document.getElementById('session-cycle-progress');
+    const timeEl = document.getElementById('session-cycle-time');
+    const remainingEl = document.getElementById('session-cycle-remaining');
+    const warningEl = document.getElementById('session-cycle-warning');
+
+    if (progressEl) {
+        progressEl.style.strokeDashoffset = offset;
+
+        // Change color based on progress
+        if (percentage > 0.9) {
+            progressEl.style.stroke = '#fc8181';
+        } else if (percentage > 0.7) {
+            progressEl.style.stroke = '#ed8936';
+        } else {
+            progressEl.style.stroke = '#00d9ff';
+        }
+    }
+
+    if (timeEl) timeEl.textContent = mins;
+    if (remainingEl) remainingEl.textContent = remaining;
+    if (warningEl) warningEl.style.display = percentage > 0.9 ? 'flex' : 'none';
 }
 
 /**
@@ -595,35 +640,36 @@ function updateHeatingIndicators() {
 }
 
 /**
- * Update state display
+ * Update state display (compact version)
  */
 function updateStateDisplay() {
-    const displayEl = document.getElementById('state-display');
-    const iconEl = displayEl.querySelector('.state-icon');
-    const nameEl = document.getElementById('state-name');
-    const descEl = document.getElementById('state-description');
-    const timeEl = document.getElementById('state-time');
-    const durationEl = document.getElementById('state-duration');
+    const compactEl = document.getElementById('state-compact');
+    const iconEl = document.getElementById('state-icon-sm');
+    const nameEl = document.getElementById('state-name-sm');
+    const durationEl = document.getElementById('state-duration-sm');
 
     const state = currentData.state || 'unknown';
     const stateName = state.replace(/_/g, ' ');
 
     const iconClass = STATE_ICONS[state] || 'mdi-help-circle';
-    iconEl.className = `state-icon mdi ${iconClass}`;
+    iconEl.className = `state-icon-sm mdi ${iconClass}`;
 
     nameEl.textContent = stateName.charAt(0).toUpperCase() + stateName.slice(1);
-    descEl.textContent = STATE_DESCRIPTIONS[state] || 'Unknown state';
-
-    const now = new Date();
-    timeEl.innerHTML = `<span class="mdi mdi-clock-outline"></span> ${now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}`;
 
     if (stateStartTime) {
+        const now = new Date();
         const duration = Math.floor((now - stateStartTime) / 1000 / 60);
-        durationEl.innerHTML = `<span class="mdi mdi-timer-outline"></span> ${formatDuration(duration)}`;
+        durationEl.textContent = formatDuration(duration);
+    } else {
+        durationEl.textContent = '--';
     }
 
-    displayEl.className = 'state-display';
-    if (STATE_CLASSES[state]) displayEl.classList.add(STATE_CLASSES[state]);
+    // Apply state class for styling
+    compactEl.className = 'state-compact';
+    if (STATE_CLASSES[state]) compactEl.classList.add(STATE_CLASSES[state]);
+
+    // Update mode buttons based on manual override
+    updateModeButtons();
 }
 
 /**
@@ -802,54 +848,6 @@ function updatePowerDisplay(power, avgPower) {
         cycleTextEl.textContent = `Floor heating active. Max with compressor heater: ${CONFIG.maxPower}W`;
     } else {
         cycleTextEl.textContent = `System standby. Pump works in cycles when heating.`;
-    }
-}
-
-/**
- * Update cycle timer
- */
-function updateCycleTimer(minutes) {
-    const timeEl = document.getElementById('cycle-time');
-    const progressEl = document.getElementById('cycle-progress');
-    const remainingEl = document.getElementById('cycle-remaining');
-    const percentEl = document.getElementById('cycle-percent');
-    const statusEl = document.getElementById('cycle-status');
-    const warningEl = document.getElementById('cycle-warning');
-
-    const maxMinutes = 170;
-    const mins = Math.round(minutes);
-    const remaining = Math.max(0, maxMinutes - mins);
-
-    timeEl.textContent = mins;
-    remainingEl.textContent = remaining;
-
-    const percentage = Math.min(mins / maxMinutes, 1);
-    const offset = 502 - (502 * percentage);
-    progressEl.style.strokeDashoffset = offset;
-    percentEl.textContent = Math.round(percentage * 100);
-
-    if (mins === 0) {
-        statusEl.textContent = 'Idle';
-        statusEl.className = 'badge badge-secondary';
-    } else if (percentage > 0.9) {
-        statusEl.textContent = 'Almost Full';
-        statusEl.className = 'badge badge-danger';
-    } else if (percentage > 0.7) {
-        statusEl.textContent = 'Active';
-        statusEl.className = 'badge badge-warning';
-    } else {
-        statusEl.textContent = 'Active';
-        statusEl.className = 'badge badge-info';
-    }
-
-    warningEl.style.display = percentage > 0.9 ? 'flex' : 'none';
-
-    if (percentage > 0.9) {
-        progressEl.style.stroke = '#fc8181';
-    } else if (percentage > 0.7) {
-        progressEl.style.stroke = '#ed8936';
-    } else {
-        progressEl.style.stroke = 'url(#timer-gradient)';
     }
 }
 
@@ -1366,6 +1364,132 @@ async function forceFloor(duration) {
     const hours = duration / 60;
     if (confirm(`Force floor heating for ${hours}h?`)) {
         await callService('cwu_controller', 'force_floor', { duration });
+    }
+}
+
+/**
+ * Mode control functions
+ */
+function updateModeButtons() {
+    const autoBtn = document.getElementById('mode-btn-auto');
+    const cwuBtn = document.getElementById('mode-btn-cwu');
+    const floorBtn = document.getElementById('mode-btn-floor');
+    const cwuDuration = document.getElementById('mode-cwu-duration');
+    const floorDuration = document.getElementById('mode-floor-duration');
+
+    // Clear active states
+    autoBtn.classList.remove('active');
+    cwuBtn.classList.remove('active');
+    floorBtn.classList.remove('active');
+    cwuDuration.textContent = '';
+    floorDuration.textContent = '';
+
+    if (!currentData.manualOverride) {
+        // Auto mode
+        autoBtn.classList.add('active');
+    } else {
+        // Manual override - check which mode
+        const attrs = currentData.attributes || {};
+        const overrideUntil = attrs.manual_override_until;
+
+        if (currentData.cwuHeatingActive || currentData.state === 'heating_cwu') {
+            cwuBtn.classList.add('active');
+            if (overrideUntil) {
+                const remaining = getTimeRemaining(overrideUntil);
+                cwuDuration.textContent = remaining;
+            }
+        } else if (currentData.floorHeatingActive || currentData.state === 'heating_floor') {
+            floorBtn.classList.add('active');
+            if (overrideUntil) {
+                const remaining = getTimeRemaining(overrideUntil);
+                floorDuration.textContent = remaining;
+            }
+        }
+    }
+}
+
+function getTimeRemaining(isoString) {
+    const until = new Date(isoString);
+    const now = new Date();
+    const diffMs = until - now;
+    if (diffMs <= 0) return '';
+
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remainMins = mins % 60;
+    return remainMins > 0 ? `${hours}h ${remainMins}m` : `${hours}h`;
+}
+
+async function setModeAuto() {
+    if (currentData.manualOverride) {
+        await callService('cwu_controller', 'force_auto');
+    }
+}
+
+function openModeModal(type) {
+    selectedModeType = type;
+    selectedDuration = 3;
+
+    const modal = document.getElementById('mode-modal');
+    const title = document.getElementById('mode-modal-title');
+    const icon = document.getElementById('mode-modal-icon');
+    const desc = document.getElementById('mode-modal-description');
+    const slider = document.getElementById('duration-slider');
+
+    if (type === 'cwu') {
+        title.textContent = 'Force CWU Heating';
+        icon.innerHTML = '<span class="mdi mdi-water-boiler"></span>';
+        icon.querySelector('.mdi').style.color = 'var(--accent-cyan)';
+        desc.textContent = 'Force CWU (hot water) heating for:';
+    } else {
+        title.textContent = 'Force Floor Heating';
+        icon.innerHTML = '<span class="mdi mdi-heating-coil"></span>';
+        icon.querySelector('.mdi').style.color = 'var(--accent-orange)';
+        desc.textContent = 'Force floor heating for:';
+    }
+
+    slider.value = selectedDuration;
+    updateDurationDisplay();
+    updatePresetButtons();
+
+    modal.classList.add('open');
+}
+
+function updateDurationDisplay() {
+    const slider = document.getElementById('duration-slider');
+    const display = document.getElementById('duration-value');
+    selectedDuration = parseFloat(slider.value);
+    display.textContent = selectedDuration;
+    updatePresetButtons();
+}
+
+function setDuration(hours) {
+    selectedDuration = hours;
+    document.getElementById('duration-slider').value = hours;
+    document.getElementById('duration-value').textContent = hours;
+    updatePresetButtons();
+}
+
+function updatePresetButtons() {
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+        const btnHours = parseFloat(btn.textContent);
+        if (btnHours === selectedDuration) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+async function confirmMode() {
+    const durationMinutes = selectedDuration * 60;
+
+    closeModal('mode-modal');
+
+    if (selectedModeType === 'cwu') {
+        await callService('cwu_controller', 'force_cwu', { duration: durationMinutes });
+    } else {
+        await callService('cwu_controller', 'force_floor', { duration: durationMinutes });
     }
 }
 

@@ -59,14 +59,36 @@
 
         <!-- Main Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Current State Card - Full Width -->
-            <div class="card state-card glass-effect">
-                <div class="card-header">
-                    <span class="card-title">
-                        <span class="icon mdi mdi-state-machine"></span>
-                        Current State
-                    </span>
-                    <div class="state-indicators">
+            <!-- Compact State Bar + Mode Control - Full Width -->
+            <div class="card mode-control-card glass-effect">
+                <div class="mode-control-row">
+                    <!-- Current State (compact) -->
+                    <div class="state-compact" id="state-compact">
+                        <span class="state-icon-sm mdi mdi-loading mdi-spin" id="state-icon-sm"></span>
+                        <span class="state-name-sm" id="state-name-sm">Loading...</span>
+                        <span class="state-duration-sm" id="state-duration-sm">--</span>
+                    </div>
+
+                    <!-- Mode Control -->
+                    <div class="mode-selector">
+                        <button class="mode-btn mode-auto active" id="mode-btn-auto" onclick="setModeAuto()">
+                            <span class="mdi mdi-autorenew"></span>
+                            <span class="mode-label">AUTO</span>
+                        </button>
+                        <button class="mode-btn mode-cwu" id="mode-btn-cwu" onclick="openModeModal('cwu')">
+                            <span class="mdi mdi-water-boiler"></span>
+                            <span class="mode-label">CWU</span>
+                            <span class="mode-duration" id="mode-cwu-duration"></span>
+                        </button>
+                        <button class="mode-btn mode-floor" id="mode-btn-floor" onclick="openModeModal('floor')">
+                            <span class="mdi mdi-heating-coil"></span>
+                            <span class="mode-label">FLOOR</span>
+                            <span class="mode-duration" id="mode-floor-duration"></span>
+                        </button>
+                    </div>
+
+                    <!-- Heating Indicators -->
+                    <div class="heating-indicators">
                         <div class="indicator" id="cwu-indicator" title="CWU Heating">
                             <span class="mdi mdi-water-boiler"></span>
                         </div>
@@ -75,23 +97,9 @@
                         </div>
                     </div>
                 </div>
-                <div class="state-display" id="state-display">
-                    <div class="state-icon-container">
-                        <span class="state-icon mdi mdi-loading mdi-spin"></span>
-                        <div class="state-ring"></div>
-                    </div>
-                    <div class="state-info">
-                        <h2 id="state-name">Loading...</h2>
-                        <p id="state-description">Connecting to Home Assistant...</p>
-                        <div class="state-meta">
-                            <span id="state-time"><span class="mdi mdi-clock-outline"></span> --</span>
-                            <span id="state-duration"><span class="mdi mdi-timer-outline"></span> --</span>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- CWU Session Tracking Card - NEW -->
+            <!-- CWU Session Tracking Card (with cycle info merged) -->
             <div class="card glass-effect cwu-session-card" id="cwu-session-card" style="display: none;">
                 <div class="card-header">
                     <span class="card-title">
@@ -172,6 +180,30 @@
                     <div class="session-comparison">
                         <span class="mdi mdi-history"></span>
                         <span>vs 1h ago: <strong id="session-vs-1h">--</strong></span>
+                    </div>
+
+                    <!-- Cycle Timer (merged from separate card) -->
+                    <div class="session-cycle">
+                        <div class="cycle-mini">
+                            <div class="cycle-progress-ring">
+                                <svg width="60" height="60" viewBox="0 0 60 60">
+                                    <circle class="bg" cx="30" cy="30" r="25" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+                                    <circle class="progress" id="session-cycle-progress" cx="30" cy="30" r="25"
+                                        fill="none" stroke="#00d9ff" stroke-width="4"
+                                        stroke-dasharray="157" stroke-dashoffset="157"
+                                        transform="rotate(-90 30 30)"/>
+                                </svg>
+                                <span class="cycle-mini-value" id="session-cycle-time">0</span>
+                            </div>
+                            <div class="cycle-mini-info">
+                                <span class="cycle-mini-label">Cycle Time</span>
+                                <span class="cycle-mini-remaining"><span id="session-cycle-remaining">170</span> min left (max 170)</span>
+                            </div>
+                        </div>
+                        <div class="cycle-warning-mini" id="session-cycle-warning" style="display: none;">
+                            <span class="mdi mdi-alert"></span>
+                            <span>Pause coming soon!</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -333,52 +365,6 @@
                 </div>
             </div>
 
-            <!-- CWU Cycle Timer -->
-            <div class="card glass-effect">
-                <div class="card-header">
-                    <span class="card-title">
-                        <span class="icon mdi mdi-timer"></span>
-                        CWU Heating Cycle
-                    </span>
-                    <span class="badge badge-info" id="cycle-status">Idle</span>
-                </div>
-                <div class="cycle-timer">
-                    <div class="timer-circle">
-                        <svg width="180" height="180" viewBox="0 0 180 180">
-                            <defs>
-                                <linearGradient id="timer-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" style="stop-color:#00d9ff"/>
-                                    <stop offset="100%" style="stop-color:#4299e1"/>
-                                </linearGradient>
-                            </defs>
-                            <circle class="bg" cx="90" cy="90" r="80"/>
-                            <circle class="progress" id="cycle-progress" cx="90" cy="90" r="80"
-                                stroke="url(#timer-gradient)"
-                                stroke-dasharray="502" stroke-dashoffset="502"/>
-                        </svg>
-                        <div class="timer-text">
-                            <div class="timer-value" id="cycle-time">0</div>
-                            <div class="timer-label">minutes</div>
-                            <div class="timer-max">of 170 max</div>
-                        </div>
-                    </div>
-                    <div class="cycle-info">
-                        <div class="cycle-stat">
-                            <span class="mdi mdi-clock-end"></span>
-                            <span>Remaining: <strong id="cycle-remaining">170</strong> min</span>
-                        </div>
-                        <div class="cycle-stat">
-                            <span class="mdi mdi-percent"></span>
-                            <span>Progress: <strong id="cycle-percent">0</strong>%</span>
-                        </div>
-                    </div>
-                    <div class="cycle-warning" id="cycle-warning" style="display: none;">
-                        <span class="mdi mdi-alert"></span>
-                        Approaching 3h limit - pause coming soon!
-                    </div>
-                </div>
-            </div>
-
             <!-- Temperature Chart - with fullscreen -->
             <div class="card glass-effect chart-card">
                 <div class="card-header">
@@ -446,38 +432,6 @@
                     <span class="legend-item"><span class="legend-color" style="background:#68d391"></span>Pump Outlet</span>
                     <span class="legend-item"><span class="legend-color" style="background:#ed8936"></span>CWU Inlet</span>
                     <span class="legend-item"><span class="legend-color" style="background:#9f7aea"></span>Floor Inlet</span>
-                </div>
-            </div>
-
-            <!-- Manual Controls -->
-            <div class="card glass-effect">
-                <div class="card-header">
-                    <span class="card-title">
-                        <span class="icon mdi mdi-gamepad-variant"></span>
-                        Manual Override
-                    </span>
-                </div>
-                <div class="controls-grid">
-                    <button class="control-btn cwu-btn" onclick="forceCWU(180)">
-                        <span class="control-icon mdi mdi-water-boiler"></span>
-                        <span class="control-label">Force CWU</span>
-                        <span class="control-duration">3 Hours</span>
-                    </button>
-                    <button class="control-btn cwu-btn" onclick="forceCWU(360)">
-                        <span class="control-icon mdi mdi-water-boiler-auto"></span>
-                        <span class="control-label">Force CWU</span>
-                        <span class="control-duration">6 Hours</span>
-                    </button>
-                    <button class="control-btn floor-btn" onclick="forceFloor(180)">
-                        <span class="control-icon mdi mdi-heating-coil"></span>
-                        <span class="control-label">Force Floor</span>
-                        <span class="control-duration">3 Hours</span>
-                    </button>
-                    <button class="control-btn floor-btn" onclick="forceFloor(360)">
-                        <span class="control-icon mdi mdi-home-thermometer"></span>
-                        <span class="control-label">Force Floor</span>
-                        <span class="control-duration">6 Hours</span>
-                    </button>
                 </div>
             </div>
 
@@ -596,7 +550,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>CWU Controller v2.0.0 | Last update: <span id="last-update">--</span></p>
+            <p>CWU Controller v2.1.0 | Last update: <span id="last-update">--</span></p>
         </footer>
     </div>
 
@@ -641,9 +595,46 @@
         </div>
     </div>
 
+    <!-- Mode Selection Modal -->
+    <div class="modal" id="mode-modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3 id="mode-modal-title">Select Duration</h3>
+                <button class="btn btn-icon" onclick="closeModal('mode-modal')">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="mode-modal-icon" id="mode-modal-icon">
+                    <span class="mdi mdi-water-boiler"></span>
+                </div>
+                <p class="mode-modal-description" id="mode-modal-description">Force CWU heating for:</p>
+                <div class="duration-slider-container">
+                    <input type="range" id="duration-slider" min="1" max="12" step="0.5" value="3"
+                           oninput="updateDurationDisplay()">
+                    <div class="duration-display">
+                        <span class="duration-value" id="duration-value">3</span>
+                        <span class="duration-unit">hours</span>
+                    </div>
+                </div>
+                <div class="duration-presets">
+                    <button class="preset-btn" onclick="setDuration(1)">1h</button>
+                    <button class="preset-btn" onclick="setDuration(2)">2h</button>
+                    <button class="preset-btn active" onclick="setDuration(3)">3h</button>
+                    <button class="preset-btn" onclick="setDuration(6)">6h</button>
+                    <button class="preset-btn" onclick="setDuration(12)">12h</button>
+                </div>
+                <button class="btn btn-primary btn-block" id="mode-confirm-btn" onclick="confirmMode()">
+                    <span class="mdi mdi-check"></span>
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=3.0.0"></script>
+    <script src="panel.js?v=4.0.0"></script>
 </body>
 </html>
