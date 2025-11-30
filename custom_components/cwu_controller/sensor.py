@@ -30,6 +30,7 @@ async def async_setup_entry(
         FloorUrgencySensor(coordinator, entry),
         AveragePowerSensor(coordinator, entry),
         CWUHeatingTimeSensor(coordinator, entry),
+        CWUTargetTempSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -93,6 +94,10 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             "fake_heating_detected": data.get("fake_heating"),
             "state_history": data.get("state_history", []),
             "action_history": data.get("action_history", []),
+            # CWU Session tracking
+            "cwu_session_start_time": data.get("cwu_session_start_time"),
+            "cwu_session_start_temp": data.get("cwu_session_start_temp"),
+            "cwu_heating_minutes": data.get("cwu_heating_minutes", 0),
         }
 
 
@@ -195,4 +200,32 @@ class CWUHeatingTimeSensor(CWUControllerBaseSensor):
             "max_minutes": max_minutes,
             "remaining_minutes": max(0, max_minutes - minutes),
             "percentage": min(100, (minutes / max_minutes) * 100) if max_minutes > 0 else 0,
+        }
+
+
+class CWUTargetTempSensor(CWUControllerBaseSensor):
+    """Sensor showing CWU target temperature from config."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "cwu_target_temp", "CWU Target Temp")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-water"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return target temperature."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("cwu_target_temp", 45.0)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "cwu_min_temp": self.coordinator.data.get("cwu_min_temp"),
+            "salon_target_temp": self.coordinator.data.get("salon_target_temp"),
         }

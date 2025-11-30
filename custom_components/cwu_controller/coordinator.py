@@ -87,12 +87,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._last_cwu_temp_for_trend: float | None = None
         self._last_cwu_temp_time: datetime | None = None
 
+        # CWU Session tracking (for UI)
+        self._cwu_session_start_temp: float | None = None
+
         # History for UI
         self._state_history: list[dict] = []
         self._action_history: list[dict] = []
 
         # Power tracking for trend analysis
         self._recent_power_readings: list[tuple[datetime, float]] = []
+
+        # First run flag - detect current state on startup
+        self._first_run: bool = True
 
     @property
     def current_state(self) -> str:
@@ -137,6 +143,39 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if state is None:
             return None
         return state.state
+
+    def _detect_initial_state(
+        self,
+        wh_state: str | None,
+        climate_state: str | None,
+        power: float | None,
+        cwu_temp: float | None,
+    ) -> None:
+        """Detect initial state after HA restart based on device states."""
+        _LOGGER.info("CWU Controller: Detecting initial state after startup...")
+
+        # Check if CWU heating is active (water heater in heat_pump mode with power)
+        cwu_active = wh_state == WH_MODE_HEAT_PUMP and power is not None and power > POWER_IDLE_THRESHOLD
+
+        # Check if floor heating is active
+        floor_active = climate_state in (CLIMATE_HEAT, CLIMATE_AUTO)
+
+        if cwu_active:
+            self._current_state = STATE_HEATING_CWU
+            self._cwu_heating_start = datetime.now()  # Approximate - we don't know exact start
+            self._cwu_session_start_temp = cwu_temp  # Current temp as start (approximate)
+            self._log_action(f"Detected CWU heating in progress after restart (temp: {cwu_temp}°C)")
+            _LOGGER.info("CWU Controller: Detected active CWU heating, resuming tracking")
+
+        elif floor_active:
+            self._current_state = STATE_HEATING_FLOOR
+            self._log_action("Detected floor heating in progress after restart")
+            _LOGGER.info("CWU Controller: Detected active floor heating")
+
+        else:
+            self._current_state = STATE_IDLE
+            self._log_action("Started in idle state after restart")
+            _LOGGER.info("CWU Controller: Starting in idle state")
 
     def _calculate_cwu_urgency(self, cwu_temp: float | None, current_hour: int) -> int:
         """Calculate CWU heating urgency."""
@@ -398,6 +437,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         wh_state = self._get_entity_state(self.config.get("water_heater"))
         climate_state = self._get_entity_state(self.config.get("climate"))
 
+        # First run - detect current state from actual device states
+        if self._first_run:
+            self._first_run = False
+            self._detect_initial_state(wh_state, climate_state, power, cwu_temp)
+
         # Track CWU temp for trend analysis
         if cwu_temp is not None:
             self._last_known_cwu_temp = cwu_temp
@@ -457,6 +501,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "cwu_heating_minutes": 0,
             "state_history": self._state_history[-20:],
             "action_history": self._action_history[-20:],
+            "cwu_target_temp": self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP),
+            "cwu_min_temp": self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP),
+            "salon_target_temp": self.config.get("salon_target_temp", DEFAULT_SALON_TARGET_TEMP),
+            # CWU Session data
+            "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
+            "cwu_session_start_temp": self._cwu_session_start_temp,
         }
 
         if self._cwu_heating_start:
@@ -524,11 +574,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if self._current_state == STATE_PAUSE:
             if self._is_pause_complete():
                 self._pause_start = None
-                # Resume CWU heating
+                # Resume CWU heating - start new session
                 await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
                 self._change_state(STATE_HEATING_CWU)
                 self._cwu_heating_start = datetime.now()
-                self._log_action("Pause complete, resuming CWU heating")
+                self._cwu_session_start_temp = self._last_known_cwu_temp  # New session start temp
+                self._log_action(f"Pause complete, starting new CWU session (temp: {self._last_known_cwu_temp}°C)")
             return
 
         # Check 3-hour CWU limit
@@ -618,19 +669,33 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._change_state(STATE_HEATING_FLOOR)
 
     async def _switch_to_cwu(self) -> None:
-        """Switch to CWU heating mode."""
+        """Switch to CWU heating mode with proper delays."""
+        self._log_action("Switching to CWU heating...")
+
         # First turn off floor heating
         await self._async_set_climate(False)
-        await asyncio.sleep(1)
+        self._log_action("Floor heating off, waiting 60s...")
+        await asyncio.sleep(60)  # Wait 1 minute for pump to settle
+
         # Then enable CWU
         await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
-        self._log_action("Switched to CWU heating")
+        self._log_action("CWU heating enabled")
+
+        # Track session start
+        self._cwu_session_start_temp = self._last_known_cwu_temp
 
     async def _switch_to_floor(self) -> None:
-        """Switch to floor heating mode."""
+        """Switch to floor heating mode with proper delays."""
+        self._log_action("Switching to floor heating...")
+
         # First turn off CWU
         await self._async_set_water_heater_mode(WH_MODE_OFF)
-        await asyncio.sleep(1)
+        self._log_action("CWU off, waiting 60s...")
+        await asyncio.sleep(60)  # Wait 1 minute for pump to settle
+
         # Then enable floor heating
         await self._async_set_climate(True)
-        self._log_action("Switched to floor heating")
+        self._log_action("Floor heating enabled")
+
+        # Clear CWU session
+        self._cwu_session_start_temp = None

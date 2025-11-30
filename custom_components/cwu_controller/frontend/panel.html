@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=2.0.0">
+    <link rel="stylesheet" href="styles.css?v=3.0.0">
 </head>
 <body>
     <div class="container">
@@ -43,7 +43,7 @@
             <span class="alert-icon mdi mdi-alert-circle mdi-spin"></span>
             <div>
                 <strong>Fake Heating Detected!</strong>
-                <p>Power is below 10W while water heater is active. The broken heater situation is detected. System will attempt to restart the cycle.</p>
+                <p>Power is below 10W while water heater is active. The broken heater situation is detected.</p>
             </div>
             <button class="btn btn-sm" onclick="dismissAlert()">Dismiss</button>
         </div>
@@ -87,6 +87,87 @@
                             <span id="state-time"><span class="mdi mdi-clock-outline"></span> --</span>
                             <span id="state-duration"><span class="mdi mdi-timer-outline"></span> --</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CWU Session Tracking Card - NEW -->
+            <div class="card glass-effect cwu-session-card" id="cwu-session-card" style="display: none;">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-water-thermometer"></span>
+                        CWU Heating Session
+                    </span>
+                    <span class="badge badge-info" id="session-status">Active</span>
+                </div>
+                <div class="session-content">
+                    <div class="session-temps">
+                        <div class="session-temp-item">
+                            <span class="session-temp-label">Start</span>
+                            <span class="session-temp-value" id="session-start-temp">--°C</span>
+                        </div>
+                        <div class="session-temp-arrow">
+                            <span class="mdi mdi-arrow-right"></span>
+                            <span class="session-temp-change" id="session-temp-change">+0.0°C</span>
+                        </div>
+                        <div class="session-temp-item">
+                            <span class="session-temp-label">Current</span>
+                            <span class="session-temp-value" id="session-current-temp">--°C</span>
+                        </div>
+                        <div class="session-temp-arrow">
+                            <span class="mdi mdi-arrow-right-bold"></span>
+                        </div>
+                        <div class="session-temp-item target">
+                            <span class="session-temp-label">Target</span>
+                            <span class="session-temp-value" id="session-target-temp">45°C</span>
+                        </div>
+                    </div>
+                    <div class="session-progress-container">
+                        <div class="session-progress-bar">
+                            <div class="session-progress-fill" id="session-progress-fill"></div>
+                            <div class="session-progress-marker" id="session-progress-marker"></div>
+                        </div>
+                        <div class="session-progress-labels">
+                            <span id="session-progress-start">35°C</span>
+                            <span id="session-progress-percent">0%</span>
+                            <span id="session-progress-end">45°C</span>
+                        </div>
+                    </div>
+                    <div class="session-stats">
+                        <div class="session-stat">
+                            <span class="mdi mdi-clock-start"></span>
+                            <span>Started: <strong id="session-start-time">--</strong></span>
+                        </div>
+                        <div class="session-stat">
+                            <span class="mdi mdi-timer-sand"></span>
+                            <span>Duration: <strong id="session-duration">--</strong></span>
+                        </div>
+                        <div class="session-stat">
+                            <span class="mdi mdi-speedometer"></span>
+                            <span>Rate: <strong id="session-rate">--</strong>°C/h</span>
+                        </div>
+                        <div class="session-stat">
+                            <span class="mdi mdi-clock-end"></span>
+                            <span>ETA: <strong id="session-eta">--</strong></span>
+                        </div>
+                    </div>
+                    <div class="session-forecast">
+                        <div class="forecast-item">
+                            <span class="forecast-label">Estimated completion</span>
+                            <span class="forecast-value" id="forecast-completion">--</span>
+                        </div>
+                        <div class="forecast-item">
+                            <span class="forecast-label">Temp at session end (170min)</span>
+                            <span class="forecast-value" id="forecast-temp-at-end">--°C</span>
+                        </div>
+                        <div class="forecast-item">
+                            <span class="forecast-label">Sessions needed</span>
+                            <span class="forecast-value" id="forecast-sessions">--</span>
+                        </div>
+                    </div>
+                    <div class="session-comparison">
+                        <span class="mdi mdi-history"></span>
+                        <span>vs 1h ago: <strong id="session-vs-1h">--</strong></span>
                     </div>
                 </div>
             </div>
@@ -156,13 +237,6 @@
                     <div class="urgency-item">
                         <div class="urgency-gauge">
                             <svg width="140" height="140" viewBox="0 0 140 140">
-                                <defs>
-                                    <linearGradient id="cwu-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" style="stop-color:#68d391"/>
-                                        <stop offset="50%" style="stop-color:#ed8936"/>
-                                        <stop offset="100%" style="stop-color:#fc8181"/>
-                                    </linearGradient>
-                                </defs>
                                 <circle class="bg" cx="70" cy="70" r="60"/>
                                 <circle class="value" id="cwu-urgency-circle" cx="70" cy="70" r="60"
                                     stroke-dasharray="377" stroke-dashoffset="377"/>
@@ -181,13 +255,6 @@
                     <div class="urgency-item">
                         <div class="urgency-gauge">
                             <svg width="140" height="140" viewBox="0 0 140 140">
-                                <defs>
-                                    <linearGradient id="floor-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                        <stop offset="0%" style="stop-color:#68d391"/>
-                                        <stop offset="50%" style="stop-color:#ed8936"/>
-                                        <stop offset="100%" style="stop-color:#fc8181"/>
-                                    </linearGradient>
-                                </defs>
                                 <circle class="bg" cx="70" cy="70" r="60"/>
                                 <circle class="value" id="floor-urgency-circle" cx="70" cy="70" r="60"
                                     stroke-dasharray="377" stroke-dashoffset="377"/>
@@ -206,7 +273,7 @@
                 </div>
             </div>
 
-            <!-- Power Card -->
+            <!-- Power Card - IMPROVED -->
             <div class="card glass-effect">
                 <div class="card-header">
                     <span class="card-title">
@@ -228,27 +295,36 @@
                     </div>
                     <div class="power-bar-container">
                         <div class="power-bar-labels">
-                            <span>0W</span>
-                            <span>500W</span>
-                            <span>1000W</span>
-                            <span>1500W</span>
+                            <span>0</span>
+                            <span>1kW</span>
+                            <span>2kW</span>
+                            <span>3kW</span>
+                            <span>4.5kW</span>
                         </div>
                         <div class="power-bar">
                             <div class="power-bar-fill" id="power-bar"></div>
-                            <div class="power-threshold" style="left: 6.6%;" title="Idle (100W)"></div>
-                            <div class="power-threshold" style="left: 33.3%;" title="Active (500W)"></div>
-                            <div class="power-threshold" style="left: 66.6%;" title="Full (1000W)"></div>
+                            <div class="power-threshold" style="left: 1.7%;" title="Pump working (80W)"></div>
+                            <div class="power-threshold major" style="left: 33%;" title="CWU Heating (~1.5kW)"></div>
+                            <div class="power-threshold major" style="left: 71%;" title="CWU Max (~3.2kW)"></div>
                         </div>
                     </div>
                     <div class="power-stats">
                         <div class="power-stat">
-                            <span class="label">Average</span>
+                            <span class="label">10min Avg</span>
                             <span class="value" id="power-avg">--</span>W
                         </div>
                         <div class="power-stat">
-                            <span class="label">Status</span>
-                            <span class="value" id="power-mode">--</span>
+                            <span class="label">Peak (10m)</span>
+                            <span class="value" id="power-peak">--</span>W
                         </div>
+                        <div class="power-stat">
+                            <span class="label">Cycle</span>
+                            <span class="value" id="power-cycle-status">--</span>
+                        </div>
+                    </div>
+                    <div class="power-cycle-info" id="power-cycle-info">
+                        <span class="mdi mdi-information-outline"></span>
+                        <span id="power-cycle-text">Pump works in cycles: peaks ~1.5kW with 6-7min intervals, 80W = pump circulating</span>
                     </div>
                 </div>
             </div>
@@ -299,7 +375,7 @@
                 </div>
             </div>
 
-            <!-- Temperature Chart -->
+            <!-- Temperature Chart - with fullscreen -->
             <div class="card glass-effect chart-card">
                 <div class="card-header">
                     <span class="card-title">
@@ -307,9 +383,12 @@
                         Temperature History
                     </span>
                     <div class="chart-controls">
-                        <button class="btn btn-sm" onclick="updateChartRange('1h')">1H</button>
-                        <button class="btn btn-sm active" onclick="updateChartRange('6h')">6H</button>
-                        <button class="btn btn-sm" onclick="updateChartRange('24h')">24H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('tempChart', '1h')">1H</button>
+                        <button class="btn btn-sm active" onclick="updateChartRange('tempChart', '6h')" id="temp-6h-btn">6H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('tempChart', '24h')">24H</button>
+                        <button class="btn btn-icon btn-sm" onclick="openFullscreenChart('temp')" title="Fullscreen">
+                            <span class="mdi mdi-fullscreen"></span>
+                        </button>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -317,16 +396,52 @@
                 </div>
             </div>
 
-            <!-- Power Chart -->
+            <!-- Power Chart - with fullscreen -->
             <div class="card glass-effect chart-card">
                 <div class="card-header">
                     <span class="card-title">
                         <span class="icon mdi mdi-chart-areaspline"></span>
                         Power History
                     </span>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm" onclick="updateChartRange('powerChart', '1h')">1H</button>
+                        <button class="btn btn-sm active" onclick="updateChartRange('powerChart', '6h')" id="power-6h-btn">6H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('powerChart', '24h')">24H</button>
+                        <button class="btn btn-icon btn-sm" onclick="openFullscreenChart('power')" title="Fullscreen">
+                            <span class="mdi mdi-fullscreen"></span>
+                        </button>
+                    </div>
                 </div>
                 <div class="chart-container">
                     <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Technical Temps Chart - NEW -->
+            <div class="card glass-effect chart-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-thermometer-lines"></span>
+                        Technical Temperatures
+                    </span>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm" onclick="updateChartRange('techChart', '1h')">1H</button>
+                        <button class="btn btn-sm active" onclick="updateChartRange('techChart', '6h')" id="tech-6h-btn">6H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('techChart', '24h')">24H</button>
+                        <button class="btn btn-icon btn-sm" onclick="openFullscreenChart('tech')" title="Fullscreen">
+                            <span class="mdi mdi-fullscreen"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="techChart"></canvas>
+                </div>
+                <div class="chart-legend-custom">
+                    <span class="legend-item"><span class="legend-color" style="background:#00d9ff"></span>CWU</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#fc8181"></span>Pump Inlet</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#68d391"></span>Pump Outlet</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#ed8936"></span>CWU Inlet</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#9f7aea"></span>Floor Inlet</span>
                 </div>
             </div>
 
@@ -436,15 +551,15 @@
                 </div>
             </div>
 
-            <!-- Action History -->
+            <!-- Action History - with relative time and modal -->
             <div class="card glass-effect history-card">
                 <div class="card-header">
                     <span class="card-title">
                         <span class="icon mdi mdi-history"></span>
                         Action History
                     </span>
-                    <button class="btn btn-icon btn-sm" onclick="refreshData()" title="Refresh">
-                        <span class="mdi mdi-refresh"></span>
+                    <button class="btn btn-icon btn-sm" onclick="openHistoryModal('actions')" title="View All">
+                        <span class="mdi mdi-arrow-expand"></span>
                     </button>
                 </div>
                 <div class="history-log" id="action-history">
@@ -455,13 +570,16 @@
                 </div>
             </div>
 
-            <!-- State History Timeline -->
+            <!-- State History Timeline - with relative time and modal -->
             <div class="card glass-effect history-card">
                 <div class="card-header">
                     <span class="card-title">
                         <span class="icon mdi mdi-timeline-clock"></span>
                         State Timeline
                     </span>
+                    <button class="btn btn-icon btn-sm" onclick="openHistoryModal('states')" title="View All">
+                        <span class="mdi mdi-arrow-expand"></span>
+                    </button>
                 </div>
                 <div class="timeline" id="state-history">
                     <div class="loading">
@@ -474,13 +592,54 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>CWU Controller v1.0.0 | Last update: <span id="last-update">--</span></p>
+            <p>CWU Controller v2.0.0 | Last update: <span id="last-update">--</span></p>
         </footer>
+    </div>
+
+    <!-- Fullscreen Chart Modal -->
+    <div class="modal" id="chart-modal">
+        <div class="modal-content modal-fullscreen">
+            <div class="modal-header">
+                <h3 id="chart-modal-title">Chart</h3>
+                <div class="modal-controls">
+                    <button class="btn btn-sm" onclick="updateModalChartRange('1h')">1H</button>
+                    <button class="btn btn-sm" onclick="updateModalChartRange('6h')">6H</button>
+                    <button class="btn btn-sm active" onclick="updateModalChartRange('24h')" id="modal-24h-btn">24H</button>
+                    <button class="btn btn-sm" onclick="updateModalChartRange('48h')">48H</button>
+                    <button class="btn btn-sm" onclick="updateModalChartRange('7d')">7D</button>
+                    <button class="btn btn-icon" onclick="closeModal('chart-modal')">
+                        <span class="mdi mdi-close"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="chart-container-fullscreen">
+                    <canvas id="modalChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div class="modal" id="history-modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 id="history-modal-title">History</h3>
+                <button class="btn btn-icon" onclick="closeModal('history-modal')">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="history-full" id="history-modal-content">
+                    <!-- Content loaded dynamically -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=2.0.0"></script>
+    <script src="panel.js?v=3.0.0"></script>
 </body>
 </html>
