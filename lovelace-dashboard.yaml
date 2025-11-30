@@ -1,0 +1,555 @@
+# CWU Controller Lovelace Dashboard
+# Copy this configuration to your Lovelace dashboard
+#
+# Required custom cards (install via HACS):
+# - mini-graph-card
+# - mushroom-cards
+# - apexcharts-card (optional, for advanced charts)
+# - stack-in-card
+# - card-mod
+
+title: CWU Controller
+views:
+  - title: CWU Controller
+    path: cwu-controller
+    icon: mdi:water-boiler
+    type: sections
+    sections:
+      # ==================== STATUS SECTION ====================
+      - type: grid
+        title: Current Status
+        cards:
+          # Main State Card
+          - type: custom:mushroom-template-card
+            primary: CWU Controller
+            secondary: >-
+              {{ states('sensor.cwu_controller_state') | replace('_', ' ') | title }}
+            icon: mdi:heat-pump
+            icon_color: >-
+              {% set state = states('sensor.cwu_controller_state') %}
+              {% if 'cwu' in state %}
+                blue
+              {% elif 'floor' in state %}
+                orange
+              {% elif state == 'pause' %}
+                grey
+              {% elif 'emergency' in state %}
+                red
+              {% else %}
+                green
+              {% endif %}
+            badge_icon: >-
+              {% if is_state('switch.cwu_controller_enabled', 'off') %}
+                mdi:power-off
+              {% endif %}
+            badge_color: red
+            tap_action:
+              action: more-info
+              entity: sensor.cwu_controller_state
+            card_mod:
+              style: |
+                ha-card {
+                  --ha-card-background: var(--card-background-color);
+                  border: 2px solid var(--primary-color);
+                }
+
+          # Controller Enabled Switch
+          - type: custom:mushroom-entity-card
+            entity: switch.cwu_controller_enabled
+            name: Controller
+            icon: mdi:power
+            tap_action:
+              action: toggle
+
+          # Fake Heating Alert
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.cwu_controller_fake_heating
+                state: "on"
+            card:
+              type: custom:mushroom-template-card
+              primary: Fake Heating Detected!
+              secondary: Power <10W while heater is "on"
+              icon: mdi:alert
+              icon_color: red
+              card_mod:
+                style: |
+                  ha-card {
+                    background: rgba(255, 0, 0, 0.1);
+                    border: 2px solid red;
+                    animation: pulse 2s infinite;
+                  }
+                  @keyframes pulse {
+                    0% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                    100% { opacity: 1; }
+                  }
+
+      # ==================== TEMPERATURES SECTION ====================
+      - type: grid
+        title: Temperatures
+        cards:
+          # CWU Temperature
+          - type: custom:mushroom-template-card
+            primary: CWU Water
+            secondary: "{{ states('sensor.temperatura_c_w_u') | round(1) }}°C"
+            icon: mdi:water-thermometer
+            icon_color: >-
+              {% set temp = states('sensor.temperatura_c_w_u') | float(0) %}
+              {% if temp >= 45 %}
+                green
+              {% elif temp >= 40 %}
+                blue
+              {% elif temp >= 35 %}
+                orange
+              {% else %}
+                red
+              {% endif %}
+            badge_icon: >-
+              {% set urg = states('sensor.cwu_controller_cwu_urgency') | int(0) %}
+              {% if urg >= 4 %}
+                mdi:alert-circle
+              {% elif urg >= 3 %}
+                mdi:alert
+              {% endif %}
+            badge_color: "{{ 'red' if states('sensor.cwu_controller_cwu_urgency') | int(0) >= 3 else 'orange' }}"
+            tap_action:
+              action: more-info
+              entity: sensor.temperatura_c_w_u
+
+          # Salon Temperature
+          - type: custom:mushroom-template-card
+            primary: Living Room
+            secondary: "{{ states('sensor.temperatura_govee_salon') | round(1) }}°C"
+            icon: mdi:sofa
+            icon_color: >-
+              {% set temp = states('sensor.temperatura_govee_salon') | float(0) %}
+              {% if temp >= 22 %}
+                green
+              {% elif temp >= 21 %}
+                blue
+              {% elif temp >= 19 %}
+                orange
+              {% else %}
+                red
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.temperatura_govee_salon
+
+          # Bedroom Temperature
+          - type: custom:mushroom-template-card
+            primary: Bedroom
+            secondary: "{{ states('sensor.temperatura_govee_sypialnia') | round(1) }}°C"
+            icon: mdi:bed
+            icon_color: >-
+              {% set temp = states('sensor.temperatura_govee_sypialnia') | float(0) %}
+              {% if temp >= 20 %}
+                green
+              {% elif temp >= 19 %}
+                blue
+              {% else %}
+                orange
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.temperatura_govee_sypialnia
+
+          # Kids Room Temperature
+          - type: custom:mushroom-template-card
+            primary: Kids Room
+            secondary: "{{ states('sensor.temperatura_govee_dzieciecy') | round(1) }}°C"
+            icon: mdi:teddy-bear
+            icon_color: >-
+              {% set temp = states('sensor.temperatura_govee_dzieciecy') | float(0) %}
+              {% if temp >= 20 %}
+                green
+              {% elif temp >= 19 %}
+                blue
+              {% else %}
+                orange
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.temperatura_govee_dzieciecy
+
+      # ==================== POWER & CYCLE SECTION ====================
+      - type: grid
+        title: Power & Cycle
+        cards:
+          # Current Power
+          - type: custom:mushroom-template-card
+            primary: Current Power
+            secondary: "{{ states('sensor.ogrzewanie_total_system_power') | round(0) }} W"
+            icon: mdi:flash
+            icon_color: >-
+              {% set power = states('sensor.ogrzewanie_total_system_power') | float(0) %}
+              {% if power > 1000 %}
+                red
+              {% elif power > 300 %}
+                orange
+              {% elif power > 80 %}
+                blue
+              {% else %}
+                grey
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.ogrzewanie_total_system_power
+
+          # CWU Heating Time / Cycle Progress
+          - type: custom:mushroom-template-card
+            primary: CWU Cycle
+            secondary: >-
+              {% set mins = states('sensor.cwu_controller_cwu_heating_time') | float(0) | round(0) %}
+              {% set remaining = 170 - mins %}
+              {{ mins }}min / 170min ({{ remaining }}min left)
+            icon: mdi:timer
+            icon_color: >-
+              {% set mins = states('sensor.cwu_controller_cwu_heating_time') | float(0) %}
+              {% if mins > 150 %}
+                red
+              {% elif mins > 120 %}
+                orange
+              {% else %}
+                blue
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.cwu_controller_cwu_heating_time
+
+          # Heating Mode Indicators
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-template-card
+                primary: CWU
+                icon: mdi:water-boiler
+                icon_color: "{{ 'blue' if is_state('binary_sensor.cwu_controller_cwu_heating', 'on') else 'grey' }}"
+                card_mod:
+                  style: |
+                    ha-card {
+                      {% if is_state('binary_sensor.cwu_controller_cwu_heating', 'on') %}
+                      background: rgba(33, 150, 243, 0.2);
+                      border: 1px solid rgb(33, 150, 243);
+                      {% endif %}
+                    }
+              - type: custom:mushroom-template-card
+                primary: Floor
+                icon: mdi:heating-coil
+                icon_color: "{{ 'orange' if is_state('binary_sensor.cwu_controller_floor_heating', 'on') else 'grey' }}"
+                card_mod:
+                  style: |
+                    ha-card {
+                      {% if is_state('binary_sensor.cwu_controller_floor_heating', 'on') %}
+                      background: rgba(255, 152, 0, 0.2);
+                      border: 1px solid rgb(255, 152, 0);
+                      {% endif %}
+                    }
+
+      # ==================== CHARTS SECTION ====================
+      - type: grid
+        title: History Charts
+        cards:
+          # Temperature Chart
+          - type: custom:mini-graph-card
+            name: Temperature History
+            hours_to_show: 24
+            points_per_hour: 4
+            line_width: 2
+            hour24: true
+            decimals: 1
+            show:
+              labels: true
+              points: false
+              legend: true
+              state: true
+            entities:
+              - entity: sensor.temperatura_c_w_u
+                name: CWU
+                color: "#2196F3"
+              - entity: sensor.temperatura_govee_salon
+                name: Salon
+                color: "#FF9800"
+              - entity: sensor.temperatura_govee_sypialnia
+                name: Bedroom
+                color: "#9C27B0"
+            color_thresholds:
+              - value: 35
+                color: "#F44336"
+              - value: 40
+                color: "#FF9800"
+              - value: 45
+                color: "#4CAF50"
+
+          # Power Chart
+          - type: custom:mini-graph-card
+            name: Power Consumption
+            hours_to_show: 6
+            points_per_hour: 12
+            line_width: 2
+            hour24: true
+            decimals: 0
+            show:
+              labels: true
+              points: false
+              legend: false
+              state: true
+              fill: true
+            entities:
+              - entity: sensor.ogrzewanie_total_system_power
+                name: Power
+            color_thresholds:
+              - value: 10
+                color: "#9E9E9E"
+              - value: 100
+                color: "#2196F3"
+              - value: 500
+                color: "#FF9800"
+              - value: 1000
+                color: "#F44336"
+
+      # ==================== CONTROLS SECTION ====================
+      - type: grid
+        title: Manual Controls
+        cards:
+          # Force CWU 3H Button
+          - type: custom:mushroom-template-card
+            primary: Force CWU 3h
+            secondary: Override automatic control
+            icon: mdi:water-boiler-alert
+            icon_color: blue
+            tap_action:
+              action: call-service
+              service: button.press
+              service_data:
+                entity_id: button.cwu_controller_force_cwu_3h
+              confirmation:
+                text: Force CWU heating for 3 hours?
+
+          # Force CWU 6H Button
+          - type: custom:mushroom-template-card
+            primary: Force CWU 6h
+            secondary: With 10min pause after 3h
+            icon: mdi:water-boiler-auto
+            icon_color: cyan
+            tap_action:
+              action: call-service
+              service: button.press
+              service_data:
+                entity_id: button.cwu_controller_force_cwu_6h
+              confirmation:
+                text: Force CWU heating for 6 hours (with pause)?
+
+          # Force Floor 3H Button
+          - type: custom:mushroom-template-card
+            primary: Force Floor 3h
+            secondary: Override automatic control
+            icon: mdi:home-thermometer
+            icon_color: orange
+            tap_action:
+              action: call-service
+              service: button.press
+              service_data:
+                entity_id: button.cwu_controller_force_floor_3h
+              confirmation:
+                text: Force floor heating for 3 hours?
+
+          # Force Floor 6H Button
+          - type: custom:mushroom-template-card
+            primary: Force Floor 6h
+            secondary: Extended heating period
+            icon: mdi:home-thermometer-outline
+            icon_color: deep-orange
+            tap_action:
+              action: call-service
+              service: button.press
+              service_data:
+                entity_id: button.cwu_controller_force_floor_6h
+              confirmation:
+                text: Force floor heating for 6 hours?
+
+          # Manual Override Indicator
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.cwu_controller_manual_override
+                state: "on"
+            card:
+              type: custom:mushroom-template-card
+              primary: Manual Override Active
+              secondary: Automatic control suspended
+              icon: mdi:hand-back-right
+              icon_color: purple
+              card_mod:
+                style: |
+                  ha-card {
+                    background: rgba(156, 39, 176, 0.1);
+                    border: 2px solid rgb(156, 39, 176);
+                  }
+
+      # ==================== TEST BUTTONS SECTION ====================
+      - type: grid
+        title: Test Actions
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: button.cwu_controller_test_cwu_on
+                name: CWU ON
+                icon: mdi:water-boiler
+                show_state: false
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  service_data:
+                    entity_id: button.cwu_controller_test_cwu_on
+
+              - type: button
+                entity: button.cwu_controller_test_cwu_off
+                name: CWU OFF
+                icon: mdi:water-boiler-off
+                show_state: false
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  service_data:
+                    entity_id: button.cwu_controller_test_cwu_off
+
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: button.cwu_controller_test_floor_on
+                name: Floor ON
+                icon: mdi:heating-coil
+                show_state: false
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  service_data:
+                    entity_id: button.cwu_controller_test_floor_on
+
+              - type: button
+                entity: button.cwu_controller_test_floor_off
+                name: Floor OFF
+                icon: mdi:radiator-off
+                show_state: false
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  service_data:
+                    entity_id: button.cwu_controller_test_floor_off
+
+      # ==================== URGENCY SECTION ====================
+      - type: grid
+        title: Urgency Levels
+        cards:
+          # CWU Urgency Gauge
+          - type: gauge
+            entity: sensor.cwu_controller_cwu_urgency
+            name: CWU Urgency
+            min: 0
+            max: 4
+            needle: true
+            segments:
+              - from: 0
+                color: "#4CAF50"
+              - from: 1
+                color: "#8BC34A"
+              - from: 2
+                color: "#FF9800"
+              - from: 3
+                color: "#FF5722"
+              - from: 4
+                color: "#F44336"
+
+          # Floor Urgency Gauge
+          - type: gauge
+            entity: sensor.cwu_controller_floor_urgency
+            name: Floor Urgency
+            min: 0
+            max: 4
+            needle: true
+            segments:
+              - from: 0
+                color: "#4CAF50"
+              - from: 1
+                color: "#8BC34A"
+              - from: 2
+                color: "#FF9800"
+              - from: 3
+                color: "#FF5722"
+              - from: 4
+                color: "#F44336"
+
+      # ==================== HISTORY LOG SECTION ====================
+      - type: grid
+        title: Activity Log
+        cards:
+          - type: markdown
+            title: Recent Actions
+            content: >-
+              {% set history = state_attr('sensor.cwu_controller_state', 'action_history') or [] %}
+              {% for item in history[-10:] | reverse %}
+              - **{{ item.timestamp[11:16] }}** {{ item.action }}
+              {% endfor %}
+
+          - type: markdown
+            title: State Changes
+            content: >-
+              {% set history = state_attr('sensor.cwu_controller_state', 'state_history') or [] %}
+              {% for item in history[-10:] | reverse %}
+              - **{{ item.timestamp[11:16] }}** {{ item.from_state | replace('_', ' ') }} → {{ item.to_state | replace('_', ' ') }}
+              {% endfor %}
+
+      # ==================== DEVICE INFO SECTION ====================
+      - type: grid
+        title: Heat Pump Info
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Water Heater
+            secondary: "{{ states('water_heater.pompa_ciepla_io_13873843_2') }}"
+            icon: mdi:water-boiler
+            icon_color: >-
+              {% set state = states('water_heater.pompa_ciepla_io_13873843_2') %}
+              {% if state == 'off' %}
+                grey
+              {% elif state == 'heat_pump' %}
+                blue
+              {% elif state == 'performance' %}
+                orange
+              {% else %}
+                red
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: water_heater.pompa_ciepla_io_13873843_2
+
+          - type: custom:mushroom-template-card
+            primary: Floor Heating
+            secondary: "{{ states('climate.pompa_ciepla_dom') }}"
+            icon: mdi:heating-coil
+            icon_color: >-
+              {% set state = states('climate.pompa_ciepla_dom') %}
+              {% if state == 'off' %}
+                grey
+              {% elif state in ['heat', 'auto'] %}
+                orange
+              {% else %}
+                blue
+              {% endif %}
+            tap_action:
+              action: more-info
+              entity: climate.pompa_ciepla_dom
+
+          # Pump Temperatures
+          - type: entities
+            title: Pump Sensors
+            show_header_toggle: false
+            entities:
+              - entity: sensor.temperatura_wejscia_pompy_ciepla
+                name: Pump Input
+              - entity: sensor.temperatura_wyjscia_pompy_ciepla
+                name: Pump Output
+              - entity: sensor.temperatura_wejscia_c_w_u
+                name: CWU Input
+              - entity: sensor.temperatura_wejscia_ogrzewania_podlogowego
+                name: Floor Input

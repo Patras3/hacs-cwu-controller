@@ -1,0 +1,152 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CWU Controller Setup - Entities",
+        "description": "Configure the entities for CWU Controller. All entities with default values are pre-filled based on your typical setup.",
+        "data": {
+          "cwu_temp_sensor": "CWU Temperature Sensor",
+          "salon_temp_sensor": "Living Room Temperature Sensor",
+          "bedroom_temp_sensor": "Bedroom Temperature Sensor (optional)",
+          "kids_room_temp_sensor": "Kids Room Temperature Sensor (optional)",
+          "power_sensor": "Heating Power Consumption Sensor",
+          "water_heater": "Water Heater Entity",
+          "climate": "Floor Heating Climate Entity",
+          "notify_service": "Notification Service (e.g., notify.mobile_app_phone)",
+          "pump_input_temp": "Heat Pump Input Temperature (optional)",
+          "pump_output_temp": "Heat Pump Output Temperature (optional)",
+          "cwu_input_temp": "CWU Input Temperature (optional)",
+          "floor_input_temp": "Floor Heating Input Temperature (optional)"
+        }
+      },
+      "thresholds": {
+        "title": "CWU Controller Setup - Temperature Thresholds",
+        "description": "Set the temperature thresholds for automatic control.",
+        "data": {
+          "cwu_target_temp": "CWU Target Temperature",
+          "cwu_min_temp": "CWU Minimum Acceptable Temperature",
+          "cwu_critical_temp": "CWU Critical Temperature (triggers emergency)",
+          "salon_target_temp": "Living Room Target Temperature",
+          "salon_min_temp": "Living Room Minimum Temperature",
+          "bedroom_min_temp": "Bedroom Minimum Temperature"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found in Home Assistant"
+    },
+    "abort": {
+      "already_configured": "CWU Controller is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CWU Controller Options",
+        "description": "Adjust temperature thresholds",
+        "data": {
+          "cwu_target_temp": "CWU Target Temperature",
+          "cwu_min_temp": "CWU Minimum Acceptable Temperature",
+          "cwu_critical_temp": "CWU Critical Temperature",
+          "salon_target_temp": "Living Room Target Temperature",
+          "salon_min_temp": "Living Room Minimum Temperature",
+          "bedroom_min_temp": "Bedroom Minimum Temperature"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": {
+        "name": "Controller State"
+      },
+      "cwu_urgency": {
+        "name": "CWU Urgency"
+      },
+      "floor_urgency": {
+        "name": "Floor Urgency"
+      },
+      "avg_power": {
+        "name": "Average Power"
+      },
+      "cwu_heating_time": {
+        "name": "CWU Heating Time"
+      }
+    },
+    "switch": {
+      "enabled": {
+        "name": "Controller Enabled"
+      }
+    },
+    "binary_sensor": {
+      "cwu_heating": {
+        "name": "CWU Heating"
+      },
+      "floor_heating": {
+        "name": "Floor Heating"
+      },
+      "fake_heating": {
+        "name": "Fake Heating Detected"
+      },
+      "manual_override": {
+        "name": "Manual Override"
+      }
+    },
+    "button": {
+      "test_cwu_on": {
+        "name": "Test CWU ON"
+      },
+      "test_cwu_off": {
+        "name": "Test CWU OFF"
+      },
+      "test_floor_on": {
+        "name": "Test Floor ON"
+      },
+      "test_floor_off": {
+        "name": "Test Floor OFF"
+      },
+      "force_cwu_3h": {
+        "name": "Force CWU 3 Hours"
+      },
+      "force_cwu_6h": {
+        "name": "Force CWU 6 Hours"
+      },
+      "force_floor_3h": {
+        "name": "Force Floor 3 Hours"
+      },
+      "force_floor_6h": {
+        "name": "Force Floor 6 Hours"
+      }
+    }
+  },
+  "services": {
+    "force_cwu": {
+      "name": "Force CWU Heating",
+      "description": "Force CWU heating for a specified duration, overriding automatic control.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in minutes to force CWU heating"
+        }
+      }
+    },
+    "force_floor": {
+      "name": "Force Floor Heating",
+      "description": "Force floor heating for a specified duration, overriding automatic control.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in minutes to force floor heating"
+        }
+      }
+    },
+    "enable": {
+      "name": "Enable Controller",
+      "description": "Enable the automatic CWU controller"
+    },
+    "disable": {
+      "name": "Disable Controller",
+      "description": "Disable the automatic CWU controller"
+    }
+  }
+}

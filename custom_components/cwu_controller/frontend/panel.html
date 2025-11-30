@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Controller</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link rel="stylesheet" href="styles.css?v=2.0.0">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <div class="header-icon-wrapper">
+                    <span class="mdi mdi-water-boiler"></span>
+                    <div class="icon-pulse"></div>
+                </div>
+                <div>
+                    <h1>CWU Controller</h1>
+                    <p class="header-subtitle">Smart Heat Pump Management</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="status-badge" id="controller-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Loading...</span>
+                </div>
+                <label class="toggle-switch" title="Enable/Disable Controller">
+                    <input type="checkbox" id="controller-toggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <button class="btn btn-icon" onclick="refreshData()" title="Refresh Data">
+                    <span class="mdi mdi-refresh"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Alert for Fake Heating -->
+        <div class="alert alert-danger animated" id="fake-heating-alert" style="display: none;">
+            <span class="alert-icon mdi mdi-alert-circle mdi-spin"></span>
+            <div>
+                <strong>Fake Heating Detected!</strong>
+                <p>Power is below 10W while water heater is active. The broken heater situation is detected. System will attempt to restart the cycle.</p>
+            </div>
+            <button class="btn btn-sm" onclick="dismissAlert()">Dismiss</button>
+        </div>
+
+        <!-- Manual Override Alert -->
+        <div class="alert alert-warning animated" id="override-alert" style="display: none;">
+            <span class="alert-icon mdi mdi-hand-back-right"></span>
+            <div>
+                <strong>Manual Override Active</strong>
+                <p>Automatic control is suspended. Override expires in: <span id="override-remaining">--</span></p>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Current State Card - Full Width -->
+            <div class="card state-card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-state-machine"></span>
+                        Current State
+                    </span>
+                    <div class="state-indicators">
+                        <div class="indicator" id="cwu-indicator" title="CWU Heating">
+                            <span class="mdi mdi-water-boiler"></span>
+                        </div>
+                        <div class="indicator" id="floor-indicator" title="Floor Heating">
+                            <span class="mdi mdi-heating-coil"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="state-display" id="state-display">
+                    <div class="state-icon-container">
+                        <span class="state-icon mdi mdi-loading mdi-spin"></span>
+                        <div class="state-ring"></div>
+                    </div>
+                    <div class="state-info">
+                        <h2 id="state-name">Loading...</h2>
+                        <p id="state-description">Connecting to Home Assistant...</p>
+                        <div class="state-meta">
+                            <span id="state-time"><span class="mdi mdi-clock-outline"></span> --</span>
+                            <span id="state-duration"><span class="mdi mdi-timer-outline"></span> --</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Temperatures Card -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-thermometer"></span>
+                        Temperatures
+                    </span>
+                    <span class="badge" id="temp-status">OK</span>
+                </div>
+                <div class="temp-grid">
+                    <div class="temp-item" id="temp-cwu" data-target="45">
+                        <div class="temp-icon-wrapper">
+                            <span class="icon mdi mdi-water-thermometer"></span>
+                        </div>
+                        <div class="temp-data">
+                            <div class="label">CWU Water</div>
+                            <div class="value">--<span class="unit">°C</span></div>
+                            <div class="temp-bar"><div class="temp-bar-fill"></div></div>
+                        </div>
+                    </div>
+                    <div class="temp-item" id="temp-salon" data-target="22">
+                        <div class="temp-icon-wrapper">
+                            <span class="icon mdi mdi-sofa"></span>
+                        </div>
+                        <div class="temp-data">
+                            <div class="label">Living Room</div>
+                            <div class="value">--<span class="unit">°C</span></div>
+                            <div class="temp-bar"><div class="temp-bar-fill"></div></div>
+                        </div>
+                    </div>
+                    <div class="temp-item" id="temp-bedroom" data-target="20">
+                        <div class="temp-icon-wrapper">
+                            <span class="icon mdi mdi-bed"></span>
+                        </div>
+                        <div class="temp-data">
+                            <div class="label">Bedroom</div>
+                            <div class="value">--<span class="unit">°C</span></div>
+                            <div class="temp-bar"><div class="temp-bar-fill"></div></div>
+                        </div>
+                    </div>
+                    <div class="temp-item" id="temp-kids" data-target="20">
+                        <div class="temp-icon-wrapper">
+                            <span class="icon mdi mdi-teddy-bear"></span>
+                        </div>
+                        <div class="temp-data">
+                            <div class="label">Kids Room</div>
+                            <div class="value">--<span class="unit">°C</span></div>
+                            <div class="temp-bar"><div class="temp-bar-fill"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Urgency Card -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-gauge"></span>
+                        Urgency Levels
+                    </span>
+                </div>
+                <div class="urgency-container">
+                    <div class="urgency-item">
+                        <div class="urgency-gauge">
+                            <svg width="140" height="140" viewBox="0 0 140 140">
+                                <defs>
+                                    <linearGradient id="cwu-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" style="stop-color:#68d391"/>
+                                        <stop offset="50%" style="stop-color:#ed8936"/>
+                                        <stop offset="100%" style="stop-color:#fc8181"/>
+                                    </linearGradient>
+                                </defs>
+                                <circle class="bg" cx="70" cy="70" r="60"/>
+                                <circle class="value" id="cwu-urgency-circle" cx="70" cy="70" r="60"
+                                    stroke-dasharray="377" stroke-dashoffset="377"/>
+                            </svg>
+                            <div class="urgency-center">
+                                <div class="urgency-value" id="cwu-urgency-value">0</div>
+                                <div class="urgency-max">/4</div>
+                            </div>
+                        </div>
+                        <div class="urgency-label">
+                            <span class="mdi mdi-water-thermometer"></span>
+                            CWU Urgency
+                        </div>
+                        <div class="urgency-level" id="cwu-urgency-level">None</div>
+                    </div>
+                    <div class="urgency-item">
+                        <div class="urgency-gauge">
+                            <svg width="140" height="140" viewBox="0 0 140 140">
+                                <defs>
+                                    <linearGradient id="floor-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" style="stop-color:#68d391"/>
+                                        <stop offset="50%" style="stop-color:#ed8936"/>
+                                        <stop offset="100%" style="stop-color:#fc8181"/>
+                                    </linearGradient>
+                                </defs>
+                                <circle class="bg" cx="70" cy="70" r="60"/>
+                                <circle class="value" id="floor-urgency-circle" cx="70" cy="70" r="60"
+                                    stroke-dasharray="377" stroke-dashoffset="377"/>
+                            </svg>
+                            <div class="urgency-center">
+                                <div class="urgency-value" id="floor-urgency-value">0</div>
+                                <div class="urgency-max">/4</div>
+                            </div>
+                        </div>
+                        <div class="urgency-label">
+                            <span class="mdi mdi-home-thermometer"></span>
+                            Floor Urgency
+                        </div>
+                        <div class="urgency-level" id="floor-urgency-level">None</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Power Card -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-flash"></span>
+                        Power Consumption
+                    </span>
+                    <span class="badge" id="power-status">--</span>
+                </div>
+                <div class="power-display">
+                    <div class="power-main">
+                        <div class="power-value-wrapper">
+                            <span class="power-value" id="power-value">--</span>
+                            <span class="power-unit">W</span>
+                        </div>
+                        <div class="power-indicator" id="power-indicator">
+                            <span class="mdi mdi-circle"></span>
+                            <span id="power-status-text">Unknown</span>
+                        </div>
+                    </div>
+                    <div class="power-bar-container">
+                        <div class="power-bar-labels">
+                            <span>0W</span>
+                            <span>500W</span>
+                            <span>1000W</span>
+                            <span>1500W</span>
+                        </div>
+                        <div class="power-bar">
+                            <div class="power-bar-fill" id="power-bar"></div>
+                            <div class="power-threshold" style="left: 6.6%;" title="Idle (100W)"></div>
+                            <div class="power-threshold" style="left: 33.3%;" title="Active (500W)"></div>
+                            <div class="power-threshold" style="left: 66.6%;" title="Full (1000W)"></div>
+                        </div>
+                    </div>
+                    <div class="power-stats">
+                        <div class="power-stat">
+                            <span class="label">Average</span>
+                            <span class="value" id="power-avg">--</span>W
+                        </div>
+                        <div class="power-stat">
+                            <span class="label">Status</span>
+                            <span class="value" id="power-mode">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CWU Cycle Timer -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-timer"></span>
+                        CWU Heating Cycle
+                    </span>
+                    <span class="badge badge-info" id="cycle-status">Idle</span>
+                </div>
+                <div class="cycle-timer">
+                    <div class="timer-circle">
+                        <svg width="180" height="180" viewBox="0 0 180 180">
+                            <defs>
+                                <linearGradient id="timer-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" style="stop-color:#00d9ff"/>
+                                    <stop offset="100%" style="stop-color:#4299e1"/>
+                                </linearGradient>
+                            </defs>
+                            <circle class="bg" cx="90" cy="90" r="80"/>
+                            <circle class="progress" id="cycle-progress" cx="90" cy="90" r="80"
+                                stroke="url(#timer-gradient)"
+                                stroke-dasharray="502" stroke-dashoffset="502"/>
+                        </svg>
+                        <div class="timer-text">
+                            <div class="timer-value" id="cycle-time">0</div>
+                            <div class="timer-label">minutes</div>
+                            <div class="timer-max">of 170 max</div>
+                        </div>
+                    </div>
+                    <div class="cycle-info">
+                        <div class="cycle-stat">
+                            <span class="mdi mdi-clock-end"></span>
+                            <span>Remaining: <strong id="cycle-remaining">170</strong> min</span>
+                        </div>
+                        <div class="cycle-stat">
+                            <span class="mdi mdi-percent"></span>
+                            <span>Progress: <strong id="cycle-percent">0</strong>%</span>
+                        </div>
+                    </div>
+                    <div class="cycle-warning" id="cycle-warning" style="display: none;">
+                        <span class="mdi mdi-alert"></span>
+                        Approaching 3h limit - pause coming soon!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Temperature Chart -->
+            <div class="card glass-effect chart-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-chart-line"></span>
+                        Temperature History
+                    </span>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm" onclick="updateChartRange('1h')">1H</button>
+                        <button class="btn btn-sm active" onclick="updateChartRange('6h')">6H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('24h')">24H</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Power Chart -->
+            <div class="card glass-effect chart-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-chart-areaspline"></span>
+                        Power History
+                    </span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Manual Controls -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-gamepad-variant"></span>
+                        Manual Override
+                    </span>
+                </div>
+                <div class="controls-grid">
+                    <button class="control-btn cwu-btn" onclick="forceCWU(180)">
+                        <span class="control-icon mdi mdi-water-boiler"></span>
+                        <span class="control-label">Force CWU</span>
+                        <span class="control-duration">3 Hours</span>
+                    </button>
+                    <button class="control-btn cwu-btn" onclick="forceCWU(360)">
+                        <span class="control-icon mdi mdi-water-boiler-auto"></span>
+                        <span class="control-label">Force CWU</span>
+                        <span class="control-duration">6 Hours</span>
+                    </button>
+                    <button class="control-btn floor-btn" onclick="forceFloor(180)">
+                        <span class="control-icon mdi mdi-heating-coil"></span>
+                        <span class="control-label">Force Floor</span>
+                        <span class="control-duration">3 Hours</span>
+                    </button>
+                    <button class="control-btn floor-btn" onclick="forceFloor(360)">
+                        <span class="control-icon mdi mdi-home-thermometer"></span>
+                        <span class="control-label">Force Floor</span>
+                        <span class="control-duration">6 Hours</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Test Actions -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-test-tube"></span>
+                        Test Actions
+                    </span>
+                    <span class="badge badge-warning">Testing</span>
+                </div>
+                <p class="card-description">Test individual actions to verify integration works correctly.</p>
+                <div class="test-grid">
+                    <button class="test-btn test-cwu-on" onclick="testAction('cwu_on')">
+                        <span class="mdi mdi-water-boiler"></span>
+                        <span>CWU ON</span>
+                    </button>
+                    <button class="test-btn test-cwu-off" onclick="testAction('cwu_off')">
+                        <span class="mdi mdi-water-boiler-off"></span>
+                        <span>CWU OFF</span>
+                    </button>
+                    <button class="test-btn test-floor-on" onclick="testAction('floor_on')">
+                        <span class="mdi mdi-heating-coil"></span>
+                        <span>Floor ON</span>
+                    </button>
+                    <button class="test-btn test-floor-off" onclick="testAction('floor_off')">
+                        <span class="mdi mdi-radiator-off"></span>
+                        <span>Floor OFF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Heat Pump Status -->
+            <div class="card glass-effect">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-heat-pump"></span>
+                        System Status
+                    </span>
+                </div>
+                <div class="system-status">
+                    <div class="status-row">
+                        <div class="status-item">
+                            <span class="status-icon mdi mdi-water-boiler"></span>
+                            <div class="status-info">
+                                <span class="status-label">Water Heater</span>
+                                <span class="status-value" id="wh-state">--</span>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-icon mdi mdi-heating-coil"></span>
+                            <div class="status-info">
+                                <span class="status-label">Floor Heating</span>
+                                <span class="status-value" id="climate-state">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status-row">
+                        <div class="status-item">
+                            <span class="status-icon mdi mdi-hand-back-right"></span>
+                            <div class="status-info">
+                                <span class="status-label">Manual Override</span>
+                                <span class="status-value" id="override-state">--</span>
+                            </div>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-icon mdi mdi-connection"></span>
+                            <div class="status-info">
+                                <span class="status-label">Connection</span>
+                                <span class="status-value" id="connection-state">Connected</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action History -->
+            <div class="card glass-effect history-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-history"></span>
+                        Action History
+                    </span>
+                    <button class="btn btn-icon btn-sm" onclick="refreshData()" title="Refresh">
+                        <span class="mdi mdi-refresh"></span>
+                    </button>
+                </div>
+                <div class="history-log" id="action-history">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <span>Loading history...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- State History Timeline -->
+            <div class="card glass-effect history-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-timeline-clock"></span>
+                        State Timeline
+                    </span>
+                </div>
+                <div class="timeline" id="state-history">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <span>Loading timeline...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>CWU Controller v1.0.0 | Last update: <span id="last-update">--</span></p>
+        </footer>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <script src="panel.js?v=2.0.0"></script>
+</body>
+</html>

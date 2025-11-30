@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CWU Controller Setup - Entities",
+        "description": "Configure the entities for CWU Controller",
+        "data": {
+          "cwu_temp_sensor": "CWU Temperature Sensor",
+          "salon_temp_sensor": "Living Room Temperature Sensor",
+          "bedroom_temp_sensor": "Bedroom Temperature Sensor",
+          "kids_room_temp_sensor": "Kids Room Temperature Sensor",
+          "power_sensor": "Heating Power Sensor",
+          "water_heater": "Water Heater Entity",
+          "climate": "Floor Heating Climate Entity",
+          "notify_service": "Notification Service",
+          "pump_input_temp": "Heat Pump Input Temperature",
+          "pump_output_temp": "Heat Pump Output Temperature",
+          "cwu_input_temp": "CWU Input Temperature",
+          "floor_input_temp": "Floor Heating Input Temperature"
+        }
+      },
+      "thresholds": {
+        "title": "CWU Controller Setup - Thresholds",
+        "description": "Set the temperature thresholds",
+        "data": {
+          "cwu_target_temp": "CWU Target Temperature",
+          "cwu_min_temp": "CWU Minimum Temperature",
+          "cwu_critical_temp": "CWU Critical Temperature",
+          "salon_target_temp": "Living Room Target Temperature",
+          "salon_min_temp": "Living Room Minimum Temperature",
+          "bedroom_min_temp": "Bedroom Minimum Temperature"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found"
+    }
+  }
+}

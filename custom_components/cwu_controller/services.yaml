@@ -1,0 +1,41 @@
+force_cwu:
+  name: Force CWU Heating
+  description: Force CWU heating for a specified duration (pause after 3h is automatic)
+  fields:
+    duration:
+      name: Duration
+      description: Duration in minutes (3h=180, 6h=360)
+      required: false
+      default: 180
+      example: 180
+      selector:
+        number:
+          min: 30
+          max: 360
+          step: 30
+          unit_of_measurement: "min"
+
+force_floor:
+  name: Force Floor Heating
+  description: Force floor heating for a specified duration
+  fields:
+    duration:
+      name: Duration
+      description: Duration in minutes (3h=180, 6h=360)
+      required: false
+      default: 180
+      example: 180
+      selector:
+        number:
+          min: 30
+          max: 360
+          step: 30
+          unit_of_measurement: "min"
+
+enable:
+  name: Enable Controller
+  description: Enable the automatic CWU controller
+
+disable:
+  name: Disable Controller
+  description: Disable the automatic CWU controller

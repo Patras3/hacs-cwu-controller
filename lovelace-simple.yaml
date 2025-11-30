@@ -1,0 +1,158 @@
+# CWU Controller Simple Lovelace Dashboard
+# Use this if you don't have custom cards installed
+# Works with standard Home Assistant cards only
+
+title: CWU Controller
+views:
+  - title: CWU Controller
+    path: cwu-controller
+    icon: mdi:water-boiler
+    cards:
+      # Status Section
+      - type: entities
+        title: Controller Status
+        show_header_toggle: false
+        entities:
+          - entity: sensor.cwu_controller_state
+            name: Current State
+          - entity: switch.cwu_controller_enabled
+            name: Controller Enabled
+          - entity: binary_sensor.cwu_controller_cwu_heating
+            name: CWU Heating Active
+          - entity: binary_sensor.cwu_controller_floor_heating
+            name: Floor Heating Active
+          - entity: binary_sensor.cwu_controller_fake_heating
+            name: Fake Heating Detected
+          - entity: binary_sensor.cwu_controller_manual_override
+            name: Manual Override
+
+      # Temperature Section
+      - type: entities
+        title: Temperatures
+        show_header_toggle: false
+        entities:
+          - entity: sensor.temperatura_c_w_u
+            name: CWU Water
+          - entity: sensor.temperatura_govee_salon
+            name: Living Room
+          - entity: sensor.temperatura_govee_sypialnia
+            name: Bedroom
+          - entity: sensor.temperatura_govee_dzieciecy
+            name: Kids Room
+
+      # Power & Urgency Section
+      - type: entities
+        title: Power & Urgency
+        show_header_toggle: false
+        entities:
+          - entity: sensor.ogrzewanie_total_system_power
+            name: Current Power
+          - entity: sensor.cwu_controller_average_power
+            name: Average Power
+          - entity: sensor.cwu_controller_cwu_urgency
+            name: CWU Urgency (0-4)
+          - entity: sensor.cwu_controller_floor_urgency
+            name: Floor Urgency (0-4)
+          - entity: sensor.cwu_controller_cwu_heating_time
+            name: CWU Cycle Time
+
+      # Temperature History Chart
+      - type: history-graph
+        title: Temperature History
+        hours_to_show: 24
+        entities:
+          - entity: sensor.temperatura_c_w_u
+            name: CWU
+          - entity: sensor.temperatura_govee_salon
+            name: Salon
+          - entity: sensor.temperatura_govee_sypialnia
+            name: Bedroom
+
+      # Power History Chart
+      - type: history-graph
+        title: Power Consumption
+        hours_to_show: 12
+        entities:
+          - entity: sensor.ogrzewanie_total_system_power
+            name: Power
+
+      # Urgency Gauges
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.cwu_controller_cwu_urgency
+            name: CWU Urgency
+            min: 0
+            max: 4
+            needle: true
+            segments:
+              - from: 0
+                color: green
+              - from: 1
+                color: yellow
+              - from: 2
+                color: orange
+              - from: 3
+                color: red
+
+          - type: gauge
+            entity: sensor.cwu_controller_floor_urgency
+            name: Floor Urgency
+            min: 0
+            max: 4
+            needle: true
+            segments:
+              - from: 0
+                color: green
+              - from: 1
+                color: yellow
+              - from: 2
+                color: orange
+              - from: 3
+                color: red
+
+      # Test Buttons
+      - type: entities
+        title: Test Actions
+        show_header_toggle: false
+        entities:
+          - entity: button.cwu_controller_test_cwu_on
+            name: Test CWU ON
+          - entity: button.cwu_controller_test_cwu_off
+            name: Test CWU OFF
+          - entity: button.cwu_controller_test_floor_on
+            name: Test Floor ON
+          - entity: button.cwu_controller_test_floor_off
+            name: Test Floor OFF
+
+      # Force Buttons
+      - type: entities
+        title: Manual Override
+        show_header_toggle: false
+        entities:
+          - entity: button.cwu_controller_force_cwu_3h
+            name: Force CWU 3 Hours
+          - entity: button.cwu_controller_force_cwu_6h
+            name: Force CWU 6 Hours
+          - entity: button.cwu_controller_force_floor_3h
+            name: Force Floor 3 Hours
+          - entity: button.cwu_controller_force_floor_6h
+            name: Force Floor 6 Hours
+
+      # Heat Pump Info
+      - type: entities
+        title: Heat Pump Status
+        show_header_toggle: false
+        entities:
+          - entity: water_heater.pompa_ciepla_io_13873843_2
+            name: Water Heater
+          - entity: climate.pompa_ciepla_dom
+            name: Floor Heating
+          - entity: sensor.temperatura_wejscia_pompy_ciepla
+            name: Pump Input Temp
+          - entity: sensor.temperatura_wyjscia_pompy_ciepla
+            name: Pump Output Temp
+          - entity: sensor.temperatura_wejscia_c_w_u
+            name: CWU Input Temp
+          - entity: sensor.temperatura_wejscia_ogrzewania_podlogowego
+            name: Floor Input Temp
