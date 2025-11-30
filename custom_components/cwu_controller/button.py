@@ -28,6 +28,7 @@ async def async_setup_entry(
         ForceCWU6HButton(coordinator, entry),
         ForceFloor3HButton(coordinator, entry),
         ForceFloor6HButton(coordinator, entry),
+        ForceAutoButton(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -158,3 +159,16 @@ class ForceFloor6HButton(CWUControllerBaseButton):
     async def async_press(self) -> None:
         """Handle button press - 6 hours = 360 minutes."""
         await self.coordinator.async_force_floor(360)
+
+
+class ForceAutoButton(CWUControllerBaseButton):
+    """Button to cancel manual override and return to auto mode."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize button."""
+        super().__init__(coordinator, entry, "force_auto", "Force Auto")
+        self._attr_icon = "mdi:autorenew"
+
+    async def async_press(self) -> None:
+        """Handle button press - cancel override and let controller decide."""
+        await self.coordinator.async_force_auto()

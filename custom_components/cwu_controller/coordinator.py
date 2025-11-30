@@ -400,6 +400,16 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._change_state(STATE_HEATING_FLOOR)
         self._log_action(f"Force floor heating for {duration_minutes} minutes")
 
+    async def async_force_auto(self) -> None:
+        """Cancel manual override and let controller decide from scratch."""
+        self._manual_override = False
+        self._manual_override_until = None
+        self._change_state(STATE_IDLE)
+        self._cwu_heating_start = None
+        self._cwu_session_start_temp = None
+        self._log_action("Manual override cancelled - switching to auto mode")
+        # Next coordinator update will run control logic and decide
+
     async def async_test_cwu_on(self) -> None:
         """Test action: turn on CWU."""
         await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)

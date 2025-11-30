@@ -105,7 +105,12 @@ async def _async_register_services(hass: HomeAssistant, coordinator: CWUControll
         """Handle disable service."""
         await coordinator.async_disable()
 
+    async def handle_force_auto(call):
+        """Handle force auto service - cancel override."""
+        await coordinator.async_force_auto()
+
     hass.services.async_register(DOMAIN, "force_cwu", handle_force_cwu)
     hass.services.async_register(DOMAIN, "force_floor", handle_force_floor)
+    hass.services.async_register(DOMAIN, "force_auto", handle_force_auto)
     hass.services.async_register(DOMAIN, "enable", handle_enable)
     hass.services.async_register(DOMAIN, "disable", handle_disable)
