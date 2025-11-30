@@ -26,7 +26,7 @@ const ENTITIES = {
     enabled: 'switch.cwu_controller_enabled',
     cwuHeating: 'binary_sensor.cwu_controller_cwu_heating',
     floorHeating: 'binary_sensor.cwu_controller_floor_heating',
-    fakeHeating: 'binary_sensor.cwu_controller_fake_heating',
+    fakeHeating: 'binary_sensor.cwu_controller_fake_heating_detected',
     manualOverride: 'binary_sensor.cwu_controller_manual_override',
 };
 

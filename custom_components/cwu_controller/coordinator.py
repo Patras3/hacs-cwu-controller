@@ -578,8 +578,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
                 self._change_state(STATE_HEATING_CWU)
                 self._cwu_heating_start = datetime.now()
-                self._cwu_session_start_temp = self._last_known_cwu_temp  # New session start temp
-                self._log_action(f"Pause complete, starting new CWU session (temp: {self._last_known_cwu_temp}°C)")
+                # Get session start temp - from cache or fetch directly
+                cwu_start_temp = self._last_known_cwu_temp
+                if cwu_start_temp is None:
+                    cwu_start_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+                self._cwu_session_start_temp = cwu_start_temp
+                self._log_action(f"Pause complete, starting new CWU session (temp: {cwu_start_temp}°C)")
             return
 
         # Check 3-hour CWU limit
@@ -681,8 +685,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
         self._log_action("CWU heating enabled")
 
-        # Track session start
-        self._cwu_session_start_temp = self._last_known_cwu_temp
+        # Track session start - get current temp from sensor if not cached
+        cwu_temp = self._last_known_cwu_temp
+        if cwu_temp is None:
+            cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        self._cwu_session_start_temp = cwu_temp
 
     async def _switch_to_floor(self) -> None:
         """Switch to floor heating mode with proper delays."""
