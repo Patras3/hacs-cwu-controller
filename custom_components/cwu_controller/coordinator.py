@@ -555,7 +555,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Run the main control logic."""
 
         # Handle fake heating detection
-        if fake_heating and self._current_state == STATE_HEATING_CWU:
+        if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
             await self._async_send_notification(
                 "CWU Controller Alert",
