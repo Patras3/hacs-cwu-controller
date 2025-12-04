@@ -795,11 +795,16 @@ function updatePowerDisplay(power, avgPower) {
     const percentage = Math.min((powerVal / CONFIG.maxPower) * 100, 100);
     barEl.style.width = `${percentage}%`;
 
-    // Determine status - improved logic
+    // Determine status - use actual heating state, not just power thresholds
     let colorClass = 'idle';
     let statusText = 'Standby';
     let cycleStatus = 'Idle';
     let badgeClass = 'badge badge-secondary';
+
+    // Determine heating type from actual state
+    const isCwuHeating = currentData.cwuHeatingActive;
+    const isFloorHeating = currentData.floorHeatingActive;
+    const heatingType = isCwuHeating ? 'CWU' : isFloorHeating ? 'Floor' : null;
 
     if (powerVal < CONFIG.idlePower) {
         colorClass = 'idle';
@@ -814,18 +819,18 @@ function updatePowerDisplay(power, avgPower) {
         badgeClass = powerStats.hasPeaks ? 'badge badge-info' : 'badge badge-secondary';
     } else if (powerVal < 800) {
         colorClass = 'medium';
-        statusText = 'Ramping Up';
+        statusText = heatingType ? `${heatingType} Ramping` : 'Ramping Up';
         cycleStatus = 'Starting';
         badgeClass = 'badge badge-warning';
     } else if (powerVal < 2000) {
         colorClass = 'high';
-        statusText = 'CWU Heating';
+        statusText = heatingType ? `${heatingType} Heating` : 'Heating';
         cycleStatus = 'Active Peak';
         badgeClass = 'badge badge-success';
     } else if (powerVal < 3500) {
         colorClass = 'max';
-        statusText = 'High Power';
-        cycleStatus = 'Max CWU';
+        statusText = heatingType ? `${heatingType} High Power` : 'High Power';
+        cycleStatus = isFloorHeating ? 'Max Floor' : 'Max CWU';
         badgeClass = 'badge badge-danger';
     } else {
         colorClass = 'extreme';
