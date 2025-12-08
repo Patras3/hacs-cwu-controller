@@ -449,6 +449,8 @@ async function updateUI() {
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
+    updateOperatingModeDisplay();
+    updateEnergyDisplay();
     await updateCwuSessionCard();
 
     updateTemperature('temp-cwu', currentData.cwuTemp || attrs.cwu_temp, currentData.cwuTargetTemp || 45, currentData.cwuMinTemp || 35);
@@ -470,6 +472,105 @@ async function updateUI() {
 
     updateActionHistory(attrs.action_history || []);
     updateStateHistory(attrs.state_history || []);
+}
+
+/**
+ * Update operating mode display
+ */
+function updateOperatingModeDisplay() {
+    const attrs = currentData.attributes || {};
+    const mode = attrs.operating_mode || 'broken_heater';
+    const isCheapTariff = attrs.is_cheap_tariff || false;
+    const tariffRate = attrs.current_tariff_rate || 0;
+    const isHeatingWindow = attrs.is_cwu_heating_window || false;
+    const winterTarget = attrs.winter_cwu_target;
+
+    // Update mode selector
+    const modeSelect = document.getElementById('operating-mode-select');
+    if (modeSelect && modeSelect.value !== mode) {
+        modeSelect.value = mode;
+    }
+
+    // Update tariff status badge
+    const tariffStatus = document.getElementById('tariff-status');
+    if (tariffStatus) {
+        if (isCheapTariff) {
+            tariffStatus.textContent = 'Cheap Tariff';
+            tariffStatus.className = 'badge badge-success';
+        } else {
+            tariffStatus.textContent = 'Expensive Tariff';
+            tariffStatus.className = 'badge badge-warning';
+        }
+    }
+
+    // Update tariff rate
+    const rateEl = document.getElementById('current-tariff-rate');
+    if (rateEl) {
+        rateEl.textContent = tariffRate.toFixed(2);
+    }
+
+    // Show/hide winter mode specific info
+    const heatingWindowRow = document.getElementById('heating-window-row');
+    const winterTargetRow = document.getElementById('winter-target-row');
+
+    if (mode === 'winter') {
+        if (heatingWindowRow) {
+            heatingWindowRow.style.display = 'flex';
+            const statusEl = document.getElementById('heating-window-status');
+            if (statusEl) {
+                statusEl.textContent = isHeatingWindow ? 'CWU heating window active' : 'Outside heating window';
+                statusEl.style.color = isHeatingWindow ? '#68d391' : '#a0aec0';
+            }
+        }
+        if (winterTargetRow && winterTarget) {
+            winterTargetRow.style.display = 'flex';
+            document.getElementById('winter-cwu-target').textContent = winterTarget.toFixed(1);
+        }
+    } else {
+        if (heatingWindowRow) heatingWindowRow.style.display = 'none';
+        if (winterTargetRow) winterTargetRow.style.display = 'none';
+    }
+}
+
+/**
+ * Update energy consumption display
+ */
+function updateEnergyDisplay() {
+    const attrs = currentData.attributes || {};
+
+    // Today
+    const todayCwu = attrs.energy_today_cwu_kwh || 0;
+    const todayFloor = attrs.energy_today_floor_kwh || 0;
+    const todayTotal = attrs.energy_today_total_kwh || 0;
+    const costToday = attrs.cost_today_estimate || 0;
+
+    document.getElementById('energy-today-cwu').textContent = `${todayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor').textContent = `${todayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-today-total').textContent = `${todayTotal.toFixed(2)} kWh`;
+    document.getElementById('cost-today').textContent = `~${costToday.toFixed(2)} zł`;
+
+    // Yesterday
+    const yesterdayCwu = attrs.energy_yesterday_cwu_kwh || 0;
+    const yesterdayFloor = attrs.energy_yesterday_floor_kwh || 0;
+    const yesterdayTotal = attrs.energy_yesterday_total_kwh || 0;
+    const costYesterday = attrs.cost_yesterday_estimate || 0;
+
+    document.getElementById('energy-yesterday-cwu').textContent = `${yesterdayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor').textContent = `${yesterdayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-total').textContent = `${yesterdayTotal.toFixed(2)} kWh`;
+    document.getElementById('cost-yesterday').textContent = `~${costYesterday.toFixed(2)} zł`;
+}
+
+/**
+ * Change operating mode via HA service
+ */
+async function changeOperatingMode(mode) {
+    if (!mode) return;
+
+    const success = await callService('cwu_controller', 'set_mode', { mode: mode });
+    if (success) {
+        showNotification(`Operating mode changed to: ${mode.replace('_', ' ')}`, 'success');
+    }
 }
 
 // Last energy calculation time (to avoid too many API calls)

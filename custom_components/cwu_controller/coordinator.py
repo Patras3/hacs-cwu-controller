@@ -50,6 +50,21 @@ from .const import (
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    # Mode constants
+    MODE_BROKEN_HEATER,
+    MODE_WINTER,
+    MODE_SUMMER,
+    CONF_OPERATING_MODE,
+    # Tariff constants
+    TARIFF_EXPENSIVE_RATE,
+    TARIFF_CHEAP_RATE,
+    TARIFF_CHEAP_WINDOWS,
+    PUBLIC_HOLIDAYS_2025,
+    # Winter mode settings
+    WINTER_CWU_HEATING_WINDOWS,
+    WINTER_CWU_TARGET_OFFSET,
+    WINTER_CWU_EMERGENCY_OFFSET,
+    WINTER_CWU_MAX_TEMP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,6 +118,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # First run flag - detect current state on startup
         self._first_run: bool = True
 
+        # Operating mode
+        self._operating_mode: str = config.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)
+
+        # Energy tracking (Wh accumulated)
+        self._energy_cwu_today: float = 0.0
+        self._energy_floor_today: float = 0.0
+        self._energy_cwu_yesterday: float = 0.0
+        self._energy_floor_yesterday: float = 0.0
+        self._last_energy_update: datetime | None = None
+        self._last_power_for_energy: float = 0.0
+        self._last_daily_report_date: datetime | None = None
+
     @property
     def current_state(self) -> str:
         """Return current controller state."""
@@ -122,6 +149,95 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def action_history(self) -> list[dict]:
         """Return action history (today + yesterday)."""
         return self._action_history
+
+    @property
+    def operating_mode(self) -> str:
+        """Return current operating mode."""
+        return self._operating_mode
+
+    @property
+    def energy_today(self) -> dict[str, float]:
+        """Return today's energy consumption in kWh."""
+        return {
+            "cwu": self._energy_cwu_today / 1000,
+            "floor": self._energy_floor_today / 1000,
+            "total": (self._energy_cwu_today + self._energy_floor_today) / 1000,
+        }
+
+    @property
+    def energy_yesterday(self) -> dict[str, float]:
+        """Return yesterday's energy consumption in kWh."""
+        return {
+            "cwu": self._energy_cwu_yesterday / 1000,
+            "floor": self._energy_floor_yesterday / 1000,
+            "total": (self._energy_cwu_yesterday + self._energy_floor_yesterday) / 1000,
+        }
+
+    def is_cheap_tariff(self, dt: datetime | None = None) -> bool:
+        """Check if current time is in cheap tariff window (G12w)."""
+        if dt is None:
+            dt = datetime.now()
+
+        # Weekends are always cheap
+        if dt.weekday() >= 5:  # Saturday = 5, Sunday = 6
+            return True
+
+        # Check public holidays
+        month_day = (dt.month, dt.day)
+        if month_day in PUBLIC_HOLIDAYS_2025:
+            return True
+
+        # Check time windows
+        current_hour = dt.hour
+        for start_hour, end_hour in TARIFF_CHEAP_WINDOWS:
+            if start_hour <= current_hour < end_hour:
+                return True
+
+        return False
+
+    def get_current_tariff_rate(self, dt: datetime | None = None) -> float:
+        """Get current electricity rate in zł/kWh."""
+        if self.is_cheap_tariff(dt):
+            return TARIFF_CHEAP_RATE
+        return TARIFF_EXPENSIVE_RATE
+
+    def is_winter_cwu_heating_window(self, dt: datetime | None = None) -> bool:
+        """Check if current time is in winter mode CWU heating window."""
+        if dt is None:
+            dt = datetime.now()
+
+        current_hour = dt.hour
+        for start_hour, end_hour in WINTER_CWU_HEATING_WINDOWS:
+            if start_hour <= current_hour < end_hour:
+                return True
+        return False
+
+    def get_winter_cwu_target(self) -> float:
+        """Get CWU target temperature for winter mode (base + offset, max 55°C)."""
+        base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
+        return min(base_target + WINTER_CWU_TARGET_OFFSET, WINTER_CWU_MAX_TEMP)
+
+    def get_winter_cwu_emergency_threshold(self) -> float:
+        """Get temperature below which CWU heating is forced outside windows."""
+        return self.get_winter_cwu_target() - WINTER_CWU_EMERGENCY_OFFSET
+
+    async def async_set_operating_mode(self, mode: str) -> None:
+        """Set operating mode."""
+        if mode not in (MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER):
+            _LOGGER.warning("Invalid operating mode: %s", mode)
+            return
+
+        old_mode = self._operating_mode
+        self._operating_mode = mode
+        self._log_action(f"Operating mode changed: {old_mode} -> {mode}")
+
+        # Reset state when changing modes
+        self._change_state(STATE_IDLE)
+        self._cwu_heating_start = None
+        self._cwu_session_start_temp = None
+        self._pause_start = None
+        self._low_power_start = None
+        self._fake_heating_detected_at = None
 
     def _get_sensor_value(self, entity_id: str | None, default: float | None = None) -> float | None:
         """Get sensor value with fallback handling."""
@@ -384,6 +500,88 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._cleanup_old_history()
             _LOGGER.info("CWU Controller state: %s -> %s", self._previous_state, new_state)
 
+    def _update_energy_tracking(self, power: float | None) -> None:
+        """Update energy consumption tracking."""
+        now = datetime.now()
+
+        # Check for day rollover (midnight)
+        if self._last_energy_update is not None:
+            if now.date() != self._last_energy_update.date():
+                # New day - move today's stats to yesterday and reset
+                self._energy_cwu_yesterday = self._energy_cwu_today
+                self._energy_floor_yesterday = self._energy_floor_today
+                self._energy_cwu_today = 0.0
+                self._energy_floor_today = 0.0
+                _LOGGER.info(
+                    "Energy tracking day rollover - Yesterday CWU: %.2f kWh, Floor: %.2f kWh",
+                    self._energy_cwu_yesterday / 1000,
+                    self._energy_floor_yesterday / 1000
+                )
+
+        if power is None or self._last_energy_update is None:
+            self._last_energy_update = now
+            self._last_power_for_energy = power or 0.0
+            return
+
+        # Calculate Wh consumed since last update
+        hours_elapsed = (now - self._last_energy_update).total_seconds() / 3600
+        avg_power = (power + self._last_power_for_energy) / 2
+        wh_consumed = avg_power * hours_elapsed
+
+        # Attribute to CWU or Floor based on current state
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU,
+                                   STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING):
+            self._energy_cwu_today += wh_consumed
+        elif self._current_state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR):
+            self._energy_floor_today += wh_consumed
+        # PAUSE and IDLE states don't accumulate significant energy
+
+        self._last_energy_update = now
+        self._last_power_for_energy = power
+
+    async def _check_and_send_daily_report(self) -> None:
+        """Check if it's time to send daily report and send it."""
+        now = datetime.now()
+
+        # Send report between 00:05 and 00:15
+        if not (0 <= now.hour == 0 and 5 <= now.minute <= 15):
+            return
+
+        # Check if we already sent report today
+        if self._last_daily_report_date is not None:
+            if self._last_daily_report_date.date() == now.date():
+                return
+
+        # Send the report for yesterday
+        cwu_kwh = self._energy_cwu_yesterday / 1000
+        floor_kwh = self._energy_floor_yesterday / 1000
+        total_kwh = cwu_kwh + floor_kwh
+
+        if total_kwh < 0.1:
+            # Don't send report if essentially no consumption
+            self._last_daily_report_date = now
+            return
+
+        # Calculate costs (simplified - assume average of tariffs)
+        # In reality, we'd need to track per-hour consumption
+        avg_rate = (TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2
+        cwu_cost = cwu_kwh * avg_rate
+        floor_cost = floor_kwh * avg_rate
+        total_cost = total_kwh * avg_rate
+
+        message = (
+            f"📊 Daily Energy Report (yesterday)\n\n"
+            f"🚿 Hot Water (CWU): {cwu_kwh:.2f} kWh (~{cwu_cost:.2f} zł)\n"
+            f"🏠 Floor Heating: {floor_kwh:.2f} kWh (~{floor_cost:.2f} zł)\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📈 Total: {total_kwh:.2f} kWh (~{total_cost:.2f} zł)\n\n"
+            f"💡 Mode: {self._operating_mode.replace('_', ' ').title()}"
+        )
+
+        await self._async_send_notification("CWU Controller Daily Report", message)
+        self._last_daily_report_date = now
+        _LOGGER.info("Daily energy report sent: CWU %.2f kWh, Floor %.2f kWh", cwu_kwh, floor_kwh)
+
     async def async_enable(self) -> None:
         """Enable the controller."""
         self._enabled = True
@@ -502,8 +700,16 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             kids_temp
         )
 
-        # Detect fake heating
-        fake_heating = self._detect_fake_heating(power, wh_state)
+        # Detect fake heating (only in broken_heater mode)
+        fake_heating = False
+        if self._operating_mode == MODE_BROKEN_HEATER:
+            fake_heating = self._detect_fake_heating(power, wh_state)
+
+        # Update energy tracking
+        self._update_energy_tracking(power)
+
+        # Check for daily report
+        await self._check_and_send_daily_report()
 
         # Calculate average power
         avg_power = 0.0
@@ -539,6 +745,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "cwu_session_start_temp": self._cwu_session_start_temp,
             # Fake heating recovery data
             "fake_heating_restart_in": None,
+            # Operating mode
+            "operating_mode": self._operating_mode,
+            # Tariff information
+            "is_cheap_tariff": self.is_cheap_tariff(),
+            "current_tariff_rate": self.get_current_tariff_rate(),
+            "is_cwu_heating_window": self.is_winter_cwu_heating_window() if self._operating_mode == MODE_WINTER else False,
+            # Winter mode specific
+            "winter_cwu_target": self.get_winter_cwu_target() if self._operating_mode == MODE_WINTER else None,
+            "winter_cwu_emergency_threshold": self.get_winter_cwu_emergency_threshold() if self._operating_mode == MODE_WINTER else None,
+            # Energy tracking
+            "energy_today_cwu_kwh": self._energy_cwu_today / 1000,
+            "energy_today_floor_kwh": self._energy_floor_today / 1000,
+            "energy_today_total_kwh": (self._energy_cwu_today + self._energy_floor_today) / 1000,
+            "energy_yesterday_cwu_kwh": self._energy_cwu_yesterday / 1000,
+            "energy_yesterday_floor_kwh": self._energy_floor_yesterday / 1000,
+            "energy_yesterday_total_kwh": (self._energy_cwu_yesterday + self._energy_floor_yesterday) / 1000,
+            # Cost estimates
+            "cost_today_estimate": ((self._energy_cwu_today + self._energy_floor_today) / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
+            "cost_yesterday_estimate": ((self._energy_cwu_yesterday + self._energy_floor_yesterday) / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
         }
 
         if self._fake_heating_detected_at:
@@ -589,7 +814,34 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         wh_state: str | None,
         climate_state: str | None,
     ) -> None:
-        """Run the main control logic."""
+        """Run the main control logic - routes to mode-specific logic."""
+
+        # Route based on operating mode
+        if self._operating_mode == MODE_WINTER:
+            await self._run_winter_mode_logic(cwu_urgency, floor_urgency, cwu_temp, salon_temp)
+            return
+        elif self._operating_mode == MODE_SUMMER:
+            # Summer mode not implemented yet
+            self._log_action("Summer mode not implemented - using floor heating")
+            if self._current_state != STATE_HEATING_FLOOR:
+                await self._switch_to_floor()
+                self._change_state(STATE_HEATING_FLOOR)
+            return
+
+        # Default: Broken heater mode (original logic)
+        await self._run_broken_heater_mode_logic(
+            cwu_urgency, floor_urgency, fake_heating, cwu_temp, salon_temp
+        )
+
+    async def _run_broken_heater_mode_logic(
+        self,
+        cwu_urgency: int,
+        floor_urgency: int,
+        fake_heating: bool,
+        cwu_temp: float | None,
+        salon_temp: float | None,
+    ) -> None:
+        """Run control logic for broken heater mode (original behavior)."""
 
         # Handle fake heating detection - first detection
         if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
@@ -716,6 +968,110 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._cwu_heating_start = None
         elif self._current_state == STATE_IDLE:
             # Start with floor heating by default
+            await self._switch_to_floor()
+            self._change_state(STATE_HEATING_FLOOR)
+
+    async def _run_winter_mode_logic(
+        self,
+        cwu_urgency: int,
+        floor_urgency: int,
+        cwu_temp: float | None,
+        salon_temp: float | None,
+    ) -> None:
+        """Run control logic for winter mode.
+
+        Winter mode features:
+        - Heat CWU during cheap tariff windows (03:00-06:00 and 13:00-15:00)
+        - No 3-hour session limit (heat until target reached)
+        - No fake heating detection (pump can use real heater)
+        - Higher CWU target temperature (+5°C)
+        - Only heat CWU outside windows if temperature drops significantly
+        - When not heating water -> heat house
+        """
+        now = datetime.now()
+        winter_target = self.get_winter_cwu_target()
+        emergency_threshold = self.get_winter_cwu_emergency_threshold()
+        is_heating_window = self.is_winter_cwu_heating_window()
+
+        # Emergency handling - critical floor temperature takes priority
+        if floor_urgency == URGENCY_CRITICAL:
+            if self._current_state != STATE_EMERGENCY_FLOOR:
+                await self._switch_to_floor()
+                self._change_state(STATE_EMERGENCY_FLOOR)
+                await self._async_send_notification(
+                    "Floor Emergency!",
+                    f"Room critically cold: Salon {salon_temp}°C! Switching to floor heating."
+                )
+            return
+
+        # Handle CWU heating window (03:00-06:00 and 13:00-15:00)
+        if is_heating_window:
+            # During heating window: heat CWU if below target
+            if cwu_temp is not None and cwu_temp < winter_target:
+                if self._current_state != STATE_HEATING_CWU:
+                    await self._switch_to_cwu()
+                    self._change_state(STATE_HEATING_CWU)
+                    self._cwu_heating_start = now
+                    self._log_action(
+                        f"Winter mode: Heating window started, CWU {cwu_temp}°C -> target {winter_target}°C"
+                    )
+                # Continue heating until target reached (no session limit in winter mode)
+                return
+            elif cwu_temp is not None and cwu_temp >= winter_target:
+                # Target reached during window - switch to floor
+                if self._current_state == STATE_HEATING_CWU:
+                    self._log_action(
+                        f"Winter mode: CWU target reached ({cwu_temp}°C >= {winter_target}°C)"
+                    )
+                    await self._switch_to_floor()
+                    self._change_state(STATE_HEATING_FLOOR)
+                    self._cwu_heating_start = None
+                return
+
+        # Outside heating window: only heat CWU in emergency (below threshold)
+        if cwu_temp is not None and cwu_temp < emergency_threshold:
+            if self._current_state not in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+                await self._switch_to_cwu()
+                self._change_state(STATE_EMERGENCY_CWU)
+                self._cwu_heating_start = now
+                await self._async_send_notification(
+                    "CWU Emergency (Winter Mode)",
+                    f"CWU dropped to {cwu_temp}°C (below {emergency_threshold}°C threshold). "
+                    f"Starting emergency heating outside window."
+                )
+                self._log_action(
+                    f"Winter mode: Emergency CWU heating ({cwu_temp}°C < {emergency_threshold}°C)"
+                )
+            # Continue emergency heating until back above threshold + some buffer
+            elif self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+                buffer_temp = emergency_threshold + 3.0
+                if cwu_temp >= buffer_temp:
+                    self._log_action(
+                        f"Winter mode: Emergency CWU complete ({cwu_temp}°C >= {buffer_temp}°C)"
+                    )
+                    await self._switch_to_floor()
+                    self._change_state(STATE_HEATING_FLOOR)
+                    self._cwu_heating_start = None
+            return
+
+        # Currently heating CWU but outside window and above emergency threshold
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            # Check if we should continue (during heating window check above already handles this)
+            if cwu_temp is not None and cwu_temp >= winter_target:
+                self._log_action(
+                    f"Winter mode: CWU at target ({cwu_temp}°C), switching to floor"
+                )
+                await self._switch_to_floor()
+                self._change_state(STATE_HEATING_FLOOR)
+                self._cwu_heating_start = None
+                return
+
+        # Default: heat floor
+        if self._current_state not in (STATE_HEATING_FLOOR, STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            self._log_action("Winter mode: Default to floor heating")
+            await self._switch_to_floor()
+            self._change_state(STATE_HEATING_FLOOR)
+        elif self._current_state == STATE_IDLE:
             await self._switch_to_floor()
             self._change_state(STATE_HEATING_FLOOR)
 

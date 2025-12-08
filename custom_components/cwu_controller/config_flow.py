@@ -28,12 +28,17 @@ from .const import (
     CONF_SALON_TARGET_TEMP,
     CONF_SALON_MIN_TEMP,
     CONF_BEDROOM_MIN_TEMP,
+    CONF_OPERATING_MODE,
     DEFAULT_CWU_TARGET_TEMP,
     DEFAULT_CWU_MIN_TEMP,
     DEFAULT_CWU_CRITICAL_TEMP,
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    MODE_BROKEN_HEATER,
+    MODE_WINTER,
+    MODE_SUMMER,
+    OPERATING_MODES,
 )
 
 
@@ -136,7 +141,16 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data=full_config,
             )
 
+        mode_options = [
+            selector.SelectOptionDict(value=MODE_BROKEN_HEATER, label="Broken Heater (Fake heating detection)"),
+            selector.SelectOptionDict(value=MODE_WINTER, label="Winter (Tariff-optimized heating)"),
+            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (Not implemented yet)"),
+        ]
+
         data_schema = vol.Schema({
+            vol.Required(CONF_OPERATING_MODE, default=MODE_BROKEN_HEATER): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=mode_options, mode=selector.SelectSelectorMode.DROPDOWN)
+            ),
             vol.Required(CONF_CWU_TARGET_TEMP, default=DEFAULT_CWU_TARGET_TEMP): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=40, max=55, step=0.5, unit_of_measurement="°C")
             ),
@@ -187,7 +201,16 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
 
         data = self.config_entry.data
 
+        mode_options = [
+            selector.SelectOptionDict(value=MODE_BROKEN_HEATER, label="Broken Heater (Fake heating detection)"),
+            selector.SelectOptionDict(value=MODE_WINTER, label="Winter (Tariff-optimized heating)"),
+            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (Not implemented yet)"),
+        ]
+
         data_schema = vol.Schema({
+            vol.Required(CONF_OPERATING_MODE, default=data.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=mode_options, mode=selector.SelectSelectorMode.DROPDOWN)
+            ),
             vol.Required(CONF_CWU_TARGET_TEMP, default=data.get(CONF_CWU_TARGET_TEMP, DEFAULT_CWU_TARGET_TEMP)): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=40, max=55, step=0.5, unit_of_measurement="°C")
             ),

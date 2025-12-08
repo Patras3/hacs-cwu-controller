@@ -4,7 +4,15 @@ from typing import Final
 DOMAIN: Final = "cwu_controller"
 MANUFACTURER: Final = "CWU Controller"
 
+# Operating modes
+MODE_BROKEN_HEATER: Final = "broken_heater"
+MODE_WINTER: Final = "winter"
+MODE_SUMMER: Final = "summer"
+
+OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER]
+
 # Configuration keys
+CONF_OPERATING_MODE: Final = "operating_mode"
 CONF_CWU_TEMP_SENSOR: Final = "cwu_temp_sensor"
 CONF_SALON_TEMP_SENSOR: Final = "salon_temp_sensor"
 CONF_BEDROOM_TEMP_SENSOR: Final = "bedroom_temp_sensor"
@@ -80,3 +88,41 @@ CLIMATE_HEAT: Final = "heat"
 
 # Update interval
 UPDATE_INTERVAL: Final = 60  # seconds
+
+# G12w Tariff configuration (Energa 2025)
+# Cheap hours: 13:00-15:00, 22:00-06:00, weekends, and public holidays
+TARIFF_EXPENSIVE_RATE: Final = 1.16  # zł/kWh (0.62 energy + 0.54 distribution)
+TARIFF_CHEAP_RATE: Final = 0.72  # zł/kWh (0.57 energy + 0.15 distribution)
+
+# Cheap tariff time windows (weekdays only - weekends are always cheap)
+TARIFF_CHEAP_WINDOWS: Final = [
+    (13, 15),  # 13:00 - 15:00
+    (22, 24),  # 22:00 - 24:00
+    (0, 6),    # 00:00 - 06:00
+]
+
+# Polish public holidays 2025 (static for now)
+PUBLIC_HOLIDAYS_2025: Final = [
+    (1, 1),    # New Year
+    (1, 6),    # Epiphany
+    (4, 20),   # Easter Sunday
+    (4, 21),   # Easter Monday
+    (5, 1),    # Labour Day
+    (5, 3),    # Constitution Day
+    (6, 8),    # Pentecost
+    (6, 19),   # Corpus Christi
+    (8, 15),   # Assumption
+    (11, 1),   # All Saints
+    (11, 11),  # Independence Day
+    (12, 25),  # Christmas Day
+    (12, 26),  # Second Day of Christmas
+]
+
+# Winter mode specific settings
+WINTER_CWU_HEATING_WINDOWS: Final = [
+    (3, 6),    # 03:00 - 06:00 (cheap tariff)
+    (13, 15),  # 13:00 - 15:00 (cheap tariff)
+]
+WINTER_CWU_TARGET_OFFSET: Final = 5.0  # Additional degrees above configured target
+WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below target - this offset
+WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
