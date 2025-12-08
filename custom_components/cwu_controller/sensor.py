@@ -37,7 +37,9 @@ async def async_setup_entry(
         CWUEnergyTodaySensor(coordinator, entry),
         FloorEnergyTodaySensor(coordinator, entry),
         TotalEnergyTodaySensor(coordinator, entry),
-        EnergyCostTodaySensor(coordinator, entry),
+        # Cost sensors (separate for CWU and Floor)
+        CWUEnergyCostTodaySensor(coordinator, entry),
+        FloorEnergyCostTodaySensor(coordinator, entry),
         # Tariff sensor
         CurrentTariffRateSensor(coordinator, entry),
     ]
@@ -350,24 +352,24 @@ class TotalEnergyTodaySensor(CWUControllerBaseSensor):
         }
 
 
-class EnergyCostTodaySensor(CWUControllerBaseSensor):
-    """Sensor showing estimated energy cost today."""
+class CWUEnergyCostTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing estimated CWU energy cost today."""
 
     def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
         """Initialize sensor."""
-        super().__init__(coordinator, entry, "energy_cost_today", "Energy Cost Today")
+        super().__init__(coordinator, entry, "cwu_energy_cost_today", "CWU Energy Cost Today")
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "PLN"
-        self._attr_icon = "mdi:currency-usd"
+        self._attr_icon = "mdi:water-boiler"
         self._attr_suggested_display_precision = 2
 
     @property
     def native_value(self) -> float | None:
-        """Return estimated cost today in PLN."""
+        """Return estimated CWU cost today in PLN."""
         if self.coordinator.data is None:
             return None
-        return round(self.coordinator.data.get("cost_today_estimate", 0), 2)
+        return round(self.coordinator.data.get("cost_today_cwu_estimate", 0), 2)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -376,7 +378,38 @@ class EnergyCostTodaySensor(CWUControllerBaseSensor):
             return {}
         return {
             "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
-            "yesterday_cost": self.coordinator.data.get("cost_yesterday_estimate", 0),
+            "yesterday_cost": self.coordinator.data.get("cost_yesterday_cwu_estimate", 0),
+            "note": "Estimated based on average tariff rate",
+        }
+
+
+class FloorEnergyCostTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing estimated floor heating energy cost today."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "floor_energy_cost_today", "Floor Energy Cost Today")
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = "PLN"
+        self._attr_icon = "mdi:heating-coil"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return estimated floor heating cost today in PLN."""
+        if self.coordinator.data is None:
+            return None
+        return round(self.coordinator.data.get("cost_today_floor_estimate", 0), 2)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "yesterday_cost": self.coordinator.data.get("cost_yesterday_floor_estimate", 0),
             "note": "Estimated based on average tariff rate",
         }
 

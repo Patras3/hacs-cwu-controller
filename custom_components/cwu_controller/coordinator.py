@@ -761,8 +761,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "energy_yesterday_cwu_kwh": self._energy_cwu_yesterday / 1000,
             "energy_yesterday_floor_kwh": self._energy_floor_yesterday / 1000,
             "energy_yesterday_total_kwh": (self._energy_cwu_yesterday + self._energy_floor_yesterday) / 1000,
-            # Cost estimates
+            # Cost estimates (separate for CWU and Floor)
+            "cost_today_cwu_estimate": (self._energy_cwu_today / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
+            "cost_today_floor_estimate": (self._energy_floor_today / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
             "cost_today_estimate": ((self._energy_cwu_today + self._energy_floor_today) / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
+            "cost_yesterday_cwu_estimate": (self._energy_cwu_yesterday / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
+            "cost_yesterday_floor_estimate": (self._energy_floor_yesterday / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
             "cost_yesterday_estimate": ((self._energy_cwu_yesterday + self._energy_floor_yesterday) / 1000) * ((TARIFF_CHEAP_RATE + TARIFF_EXPENSIVE_RATE) / 2),
         }
 
