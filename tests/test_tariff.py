@@ -164,6 +164,26 @@ class TestWinterCWUHeatingWindow:
         dt = datetime(2025, 1, 13, 6, 0)
         assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
 
+    def test_evening_window_active(self, mock_coordinator):
+        """Test that evening window (22:00-24:00) is detected."""
+        dt = datetime(2025, 1, 13, 23, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is True
+
+    def test_boundary_start_evening(self, mock_coordinator):
+        """Test boundary at start of evening window."""
+        dt = datetime(2025, 1, 13, 22, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is True
+
+    def test_outside_window_before_evening(self, mock_coordinator):
+        """Test that time before evening window is outside."""
+        dt = datetime(2025, 1, 13, 21, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
+    def test_outside_window_after_afternoon_before_evening(self, mock_coordinator):
+        """Test that time between afternoon and evening windows is outside."""
+        dt = datetime(2025, 1, 13, 18, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
 
 class TestWinterCWUTargets:
     """Tests for winter mode CWU temperature targets."""

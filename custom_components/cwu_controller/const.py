@@ -114,6 +114,7 @@ TARIFF_CHEAP_WINDOWS: Final = [
 WINTER_CWU_HEATING_WINDOWS: Final = [
     (3, 6),    # 03:00 - 06:00 (cheap tariff)
     (13, 15),  # 13:00 - 15:00 (cheap tariff)
+    (22, 24),  # 22:00 - 24:00 (cheap tariff, after kids bath, before adults)
 ]
 WINTER_CWU_TARGET_OFFSET: Final = 5.0  # Additional degrees above configured target
 WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below target - this offset

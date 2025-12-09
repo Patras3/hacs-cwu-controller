@@ -23,6 +23,7 @@ Kontroler grzeje CWU **tylko** w tych oknach czasowych:
 |------|---------|------|
 | Poranne | **03:00 - 06:00** | 3 godziny przed końcem taniej taryfy nocnej |
 | Popołudniowe | **13:00 - 15:00** | Całe 2-godzinne okno taniej taryfy |
+| Wieczorne | **22:00 - 24:00** | Po kąpieli dzieci, przed kąpielą dorosłych |
 
 ### Dlaczego 03:00-06:00, a nie 00:00-06:00?
 
@@ -30,6 +31,13 @@ Grzanie zaczyna się o 03:00, bo:
 1. Woda nagrzana o północy wystygłaby do rana
 2. 3 godziny wystarczą na pełne nagrzanie zbiornika
 3. Woda jest najcieplejsza rano, gdy jest najbardziej potrzebna (prysznice)
+
+### Dlaczego 22:00-24:00?
+
+Okno wieczorne zostało dodane, bo:
+1. Do 22:00 dzieci są już wykąpane - woda mogła się schłodzić
+2. Dorośli kąpią się 2-4h później (około północy)
+3. Taryfa jest tania od 22:00, więc dogrzanie nic nie kosztuje ekstra
 
 ## Temperatury w trybie Winter (domyślne wartości)
 
@@ -49,7 +57,7 @@ Poniedziałek, workday sensor = ON
 00:00-03:00  │ Idle - czekamy na okno grzewcze
              │ CWU: 42°C (powyżej progu 40°C - OK)
              │
-03:00        │ ✅ START okna grzewczego
+03:00        │ ✅ START okna grzewczego (poranne)
              │ CWU: 41°C → Rozpoczynamy grzanie do 50°C
              │
 05:30        │ CWU osiąga 50°C → STOP grzania
@@ -59,18 +67,27 @@ Poniedziałek, workday sensor = ON
 06:00-13:00  │ Idle - droga taryfa
              │ CWU spada powoli: 50°C → 44°C
              │
-13:00        │ ✅ START okna grzewczego
+13:00        │ ✅ START okna grzewczego (popołudniowe)
              │ CWU: 44°C → Dogrzewamy do 50°C
              │
 14:15        │ CWU osiąga 50°C → STOP grzania
              │
 15:00        │ Koniec okna, koniec taniej taryfy
              │
-15:00-22:00  │ Idle - droga taryfa
+15:00-18:00  │ Idle - droga taryfa
+             │
+18:00-21:00  │ 🛁 Kąpiel dzieci
              │ CWU spada: 50°C → 43°C
              │
-22:00-24:00  │ Idle - tania taryfa, ale nie ma okna CWU
-             │ (Okno nocne zaczyna się o 03:00)
+22:00        │ ✅ START okna grzewczego (wieczorne)
+             │ CWU: 43°C → Dogrzewamy do 50°C
+             │ (dzieci wykąpane, dorośli za 2-4h)
+             │
+23:15        │ CWU osiąga 50°C → STOP grzania
+             │
+24:00        │ Koniec okna wieczornego
+             │ 🛁 Kąpiel dorosłych (00:00-02:00)
+             │ Woda ciepła i gotowa!
 ```
 
 ### Scenariusz 2: Weekend (lub święto)
@@ -79,7 +96,7 @@ Poniedziałek, workday sensor = ON
 Sobota, workday sensor = OFF → Cały dzień TANIA TARYFA
 
 W weekend kontroler działa tak samo jak w dni robocze:
-- Okna grzewcze: 03:00-06:00, 13:00-15:00
+- Okna grzewcze: 03:00-06:00, 13:00-15:00, 22:00-24:00
 - Ale CAŁA energia jest w taniej taryfie!
 
 Różnica: jeśli CWU spadnie poniżej 40°C o 10:00,
@@ -118,7 +135,7 @@ CWU spadło do 38°C (poniżej progu 40°C)
 │      │         do osiągnięcia 40°C                     │
 │      │                                                  │
 │      └── NIE → Czy jest okno grzewcze?                 │
-│                (03:00-06:00 lub 13:00-15:00)           │
+│                (03:00-06:00, 13:00-15:00, 22:00-24:00) │
 │                    │                                    │
 │                    ├── TAK → CWU < 50°C ?              │
 │                    │             │                      │
