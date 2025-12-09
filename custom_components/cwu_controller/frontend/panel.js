@@ -1,6 +1,7 @@
 /**
- * CWU Controller Panel JavaScript v4.0
+ * CWU Controller Panel JavaScript v4.1
  * Redesigned with compact state bar, mode selector, and integrated cycle timer
+ * v4.1: Added tariff breakdown display (cheap/expensive rates and energy)
  */
 
 // Configuration
@@ -482,6 +483,8 @@ function updateOperatingModeDisplay() {
     const mode = attrs.operating_mode || 'broken_heater';
     const isCheapTariff = attrs.is_cheap_tariff || false;
     const tariffRate = attrs.current_tariff_rate || 0;
+    const tariffCheapRate = attrs.tariff_cheap_rate || 0.72;
+    const tariffExpensiveRate = attrs.tariff_expensive_rate || 1.16;
     const isHeatingWindow = attrs.is_cwu_heating_window || false;
     const winterTarget = attrs.winter_cwu_target;
 
@@ -507,6 +510,16 @@ function updateOperatingModeDisplay() {
     const rateEl = document.getElementById('current-tariff-rate');
     if (rateEl) {
         rateEl.textContent = tariffRate.toFixed(2);
+    }
+
+    // Update configured tariff rates
+    const cheapRateEl = document.getElementById('tariff-cheap-rate');
+    const expensiveRateEl = document.getElementById('tariff-expensive-rate');
+    if (cheapRateEl) {
+        cheapRateEl.textContent = tariffCheapRate.toFixed(2);
+    }
+    if (expensiveRateEl) {
+        expensiveRateEl.textContent = tariffExpensiveRate.toFixed(2);
     }
 
     // Show/hide winter mode specific info
@@ -538,27 +551,55 @@ function updateOperatingModeDisplay() {
 function updateEnergyDisplay() {
     const attrs = currentData.attributes || {};
 
-    // Today
+    // Today - main totals
     const todayCwu = attrs.energy_today_cwu_kwh || 0;
     const todayFloor = attrs.energy_today_floor_kwh || 0;
     const todayTotal = attrs.energy_today_total_kwh || 0;
     const costToday = attrs.cost_today_estimate || 0;
 
+    // Today - tariff breakdown
+    const todayCwuCheap = attrs.energy_today_cwu_cheap_kwh || 0;
+    const todayCwuExpensive = attrs.energy_today_cwu_expensive_kwh || 0;
+    const todayFloorCheap = attrs.energy_today_floor_cheap_kwh || 0;
+    const todayFloorExpensive = attrs.energy_today_floor_expensive_kwh || 0;
+    const costTodayCwu = attrs.cost_today_cwu_estimate || 0;
+    const costTodayFloor = attrs.cost_today_floor_estimate || 0;
+
     document.getElementById('energy-today-cwu').textContent = `${todayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-today-cwu-cheap').textContent = `${todayCwuCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-today-cwu-expensive').textContent = `${todayCwuExpensive.toFixed(2)} kWh`;
     document.getElementById('energy-today-floor').textContent = `${todayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor-cheap').textContent = `${todayFloorCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor-expensive').textContent = `${todayFloorExpensive.toFixed(2)} kWh`;
     document.getElementById('energy-today-total').textContent = `${todayTotal.toFixed(2)} kWh`;
     document.getElementById('cost-today').textContent = `~${costToday.toFixed(2)} zł`;
+    document.getElementById('cost-today-cwu').textContent = `~${costTodayCwu.toFixed(2)} zł`;
+    document.getElementById('cost-today-floor').textContent = `~${costTodayFloor.toFixed(2)} zł`;
 
-    // Yesterday
+    // Yesterday - main totals
     const yesterdayCwu = attrs.energy_yesterday_cwu_kwh || 0;
     const yesterdayFloor = attrs.energy_yesterday_floor_kwh || 0;
     const yesterdayTotal = attrs.energy_yesterday_total_kwh || 0;
     const costYesterday = attrs.cost_yesterday_estimate || 0;
 
+    // Yesterday - tariff breakdown
+    const yesterdayCwuCheap = attrs.energy_yesterday_cwu_cheap_kwh || 0;
+    const yesterdayCwuExpensive = attrs.energy_yesterday_cwu_expensive_kwh || 0;
+    const yesterdayFloorCheap = attrs.energy_yesterday_floor_cheap_kwh || 0;
+    const yesterdayFloorExpensive = attrs.energy_yesterday_floor_expensive_kwh || 0;
+    const costYesterdayCwu = attrs.cost_yesterday_cwu_estimate || 0;
+    const costYesterdayFloor = attrs.cost_yesterday_floor_estimate || 0;
+
     document.getElementById('energy-yesterday-cwu').textContent = `${yesterdayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-cwu-cheap').textContent = `${yesterdayCwuCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-cwu-expensive').textContent = `${yesterdayCwuExpensive.toFixed(2)} kWh`;
     document.getElementById('energy-yesterday-floor').textContent = `${yesterdayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor-cheap').textContent = `${yesterdayFloorCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor-expensive').textContent = `${yesterdayFloorExpensive.toFixed(2)} kWh`;
     document.getElementById('energy-yesterday-total').textContent = `${yesterdayTotal.toFixed(2)} kWh`;
     document.getElementById('cost-yesterday').textContent = `~${costYesterday.toFixed(2)} zł`;
+    document.getElementById('cost-yesterday-cwu').textContent = `~${costYesterdayCwu.toFixed(2)} zł`;
+    document.getElementById('cost-yesterday-floor').textContent = `~${costYesterdayFloor.toFixed(2)} zł`;
 }
 
 /**

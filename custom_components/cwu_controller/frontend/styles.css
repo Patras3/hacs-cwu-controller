@@ -2546,6 +2546,39 @@ body {
     color: var(--text-primary);
 }
 
+.tariff-rates-config {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+}
+
+.tariff-rate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.tariff-rate .mdi {
+    font-size: 14px;
+}
+
+.tariff-rate.cheap .mdi {
+    color: var(--accent-green);
+}
+
+.tariff-rate.expensive .mdi {
+    color: var(--accent-orange);
+}
+
+.tariff-rate strong {
+    color: var(--text-primary);
+}
+
 /* Energy Consumption Card */
 .energy-card {
     grid-column: span 1;
@@ -2617,6 +2650,32 @@ body {
 
 .energy-row.cost .energy-value {
     color: var(--accent-green);
+}
+
+.energy-row.sub {
+    padding: 4px 0 4px 20px;
+    font-size: 12px;
+    border-bottom: none;
+}
+
+.energy-row.sub .energy-label {
+    font-size: 12px;
+}
+
+.energy-sub {
+    font-size: 12px;
+}
+
+.energy-sub .mdi {
+    font-size: 12px;
+}
+
+.energy-cheap {
+    color: var(--accent-green);
+}
+
+.energy-expensive {
+    color: var(--accent-orange);
 }
 
 .energy-divider {
