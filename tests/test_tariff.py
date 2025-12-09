@@ -190,3 +190,99 @@ class TestWinterCWUTargets:
         # Target capped at 55, threshold = 55 - 10 = 45
         threshold = mock_coordinator.get_winter_cwu_emergency_threshold()
         assert threshold == 45.0
+
+
+class TestWorkdaySensorIntegration:
+    """Tests for workday sensor integration for holiday detection."""
+
+    def test_workday_sensor_off_means_cheap_tariff(self, mock_coordinator, mock_hass):
+        """Test that workday sensor 'off' (holiday/weekend) returns cheap tariff."""
+        from unittest.mock import MagicMock
+        from custom_components.cwu_controller.const import CONF_WORKDAY_SENSOR
+
+        # Configure workday sensor
+        mock_coordinator.config[CONF_WORKDAY_SENSOR] = "binary_sensor.workday_sensor"
+
+        # Mock the sensor state as "off" (holiday/weekend)
+        mock_state = MagicMock()
+        mock_state.state = "off"
+        mock_hass.states.get.return_value = mock_state
+
+        # Weekday during expensive time should still be cheap because workday=off
+        dt = datetime(2025, 1, 13, 10, 0)  # Monday 10:00 (normally expensive)
+        result = mock_coordinator.is_cheap_tariff(dt)
+        assert result is True
+
+    def test_workday_sensor_on_checks_time_windows(self, mock_coordinator, mock_hass):
+        """Test that workday sensor 'on' (workday) checks time windows."""
+        from unittest.mock import MagicMock
+        from custom_components.cwu_controller.const import CONF_WORKDAY_SENSOR
+
+        # Configure workday sensor
+        mock_coordinator.config[CONF_WORKDAY_SENSOR] = "binary_sensor.workday_sensor"
+
+        # Mock the sensor state as "on" (workday)
+        mock_state = MagicMock()
+        mock_state.state = "on"
+        mock_hass.states.get.return_value = mock_state
+
+        # Weekday during expensive time with workday=on should be expensive
+        dt = datetime(2025, 1, 13, 10, 0)  # Monday 10:00
+        result = mock_coordinator.is_cheap_tariff(dt)
+        assert result is False
+
+        # But cheap window should still be cheap
+        dt_cheap = datetime(2025, 1, 13, 14, 0)  # Monday 14:00 (cheap window)
+        result_cheap = mock_coordinator.is_cheap_tariff(dt_cheap)
+        assert result_cheap is True
+
+    def test_workday_sensor_unavailable_fallback(self, mock_coordinator, mock_hass):
+        """Test fallback to static logic when workday sensor unavailable."""
+        from unittest.mock import MagicMock
+        from custom_components.cwu_controller.const import CONF_WORKDAY_SENSOR
+
+        # Configure workday sensor
+        mock_coordinator.config[CONF_WORKDAY_SENSOR] = "binary_sensor.workday_sensor"
+
+        # Mock the sensor state as unavailable
+        mock_state = MagicMock()
+        mock_state.state = "unavailable"
+        mock_hass.states.get.return_value = mock_state
+
+        # Should fallback to weekend check
+        dt_weekend = datetime(2025, 1, 4, 10, 0)  # Saturday
+        assert mock_coordinator.is_cheap_tariff(dt_weekend) is True
+
+        # Weekday without time window should be expensive
+        dt_weekday = datetime(2025, 1, 13, 10, 0)  # Monday 10:00
+        assert mock_coordinator.is_cheap_tariff(dt_weekday) is False
+
+    def test_no_workday_sensor_uses_static_holidays(self, mock_coordinator):
+        """Test that without workday sensor, static holidays are used."""
+        # Ensure no workday sensor configured
+        if "workday_sensor" in mock_coordinator.config:
+            del mock_coordinator.config["workday_sensor"]
+
+        # Jan 1 (New Year) should be cheap even on weekday hour
+        dt = datetime(2025, 1, 1, 10, 0)  # Wednesday 10:00
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_workday_sensor_configured_ignores_static_holidays(self, mock_coordinator, mock_hass):
+        """Test that with workday sensor, static holidays are not checked."""
+        from unittest.mock import MagicMock
+        from custom_components.cwu_controller.const import CONF_WORKDAY_SENSOR
+
+        # Configure workday sensor
+        mock_coordinator.config[CONF_WORKDAY_SENSOR] = "binary_sensor.workday_sensor"
+
+        # Mock the sensor state as "on" (workday - perhaps the workday sensor
+        # has different holiday config than our static list)
+        mock_state = MagicMock()
+        mock_state.state = "on"
+        mock_hass.states.get.return_value = mock_state
+
+        # Even on a static holiday, if workday sensor says "on", use time windows
+        dt = datetime(2025, 1, 1, 10, 0)  # New Year at 10:00
+        # Since sensor says workday=on, and 10:00 is not a cheap window, should be expensive
+        result = mock_coordinator.is_cheap_tariff(dt)
+        assert result is False

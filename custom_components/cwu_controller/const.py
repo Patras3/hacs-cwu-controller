@@ -25,6 +25,7 @@ CONF_PUMP_INPUT_TEMP: Final = "pump_input_temp"
 CONF_PUMP_OUTPUT_TEMP: Final = "pump_output_temp"
 CONF_CWU_INPUT_TEMP: Final = "cwu_input_temp"
 CONF_FLOOR_INPUT_TEMP: Final = "floor_input_temp"
+CONF_WORKDAY_SENSOR: Final = "workday_sensor"  # binary_sensor.workday_sensor
 
 # Temperature thresholds
 CONF_CWU_TARGET_TEMP: Final = "cwu_target_temp"

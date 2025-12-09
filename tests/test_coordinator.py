@@ -170,26 +170,40 @@ class TestFloorUrgencyCalculation:
 
 
 class TestEnergyTracking:
-    """Tests for energy consumption tracking."""
+    """Tests for energy consumption tracking with tariff separation."""
 
     def test_energy_today_property(self, mock_coordinator):
-        """Test energy_today property returns correct values."""
-        mock_coordinator._energy_cwu_today = 1500.0  # Wh
-        mock_coordinator._energy_floor_today = 2500.0  # Wh
+        """Test energy_today property returns correct values with tariff split."""
+        mock_coordinator._energy_cwu_cheap_today = 1000.0  # Wh
+        mock_coordinator._energy_cwu_expensive_today = 500.0  # Wh
+        mock_coordinator._energy_floor_cheap_today = 2000.0  # Wh
+        mock_coordinator._energy_floor_expensive_today = 500.0  # Wh
 
         energy = mock_coordinator.energy_today
-        assert energy["cwu"] == 1.5  # kWh
-        assert energy["floor"] == 2.5  # kWh
+        assert energy["cwu"] == 1.5  # kWh (1000 + 500 Wh)
+        assert energy["cwu_cheap"] == 1.0  # kWh
+        assert energy["cwu_expensive"] == 0.5  # kWh
+        assert energy["floor"] == 2.5  # kWh (2000 + 500 Wh)
+        assert energy["floor_cheap"] == 2.0  # kWh
+        assert energy["floor_expensive"] == 0.5  # kWh
         assert energy["total"] == 4.0  # kWh
+        assert energy["total_cheap"] == 3.0  # kWh
+        assert energy["total_expensive"] == 1.0  # kWh
 
     def test_energy_yesterday_property(self, mock_coordinator):
-        """Test energy_yesterday property returns correct values."""
-        mock_coordinator._energy_cwu_yesterday = 3000.0  # Wh
-        mock_coordinator._energy_floor_yesterday = 5000.0  # Wh
+        """Test energy_yesterday property returns correct values with tariff split."""
+        mock_coordinator._energy_cwu_cheap_yesterday = 2000.0  # Wh
+        mock_coordinator._energy_cwu_expensive_yesterday = 1000.0  # Wh
+        mock_coordinator._energy_floor_cheap_yesterday = 4000.0  # Wh
+        mock_coordinator._energy_floor_expensive_yesterday = 1000.0  # Wh
 
         energy = mock_coordinator.energy_yesterday
         assert energy["cwu"] == 3.0  # kWh
+        assert energy["cwu_cheap"] == 2.0  # kWh
+        assert energy["cwu_expensive"] == 1.0  # kWh
         assert energy["floor"] == 5.0  # kWh
+        assert energy["floor_cheap"] == 4.0  # kWh
+        assert energy["floor_expensive"] == 1.0  # kWh
         assert energy["total"] == 8.0  # kWh
 
     def test_energy_tracking_cwu_state(self, mock_coordinator):
@@ -197,42 +211,78 @@ class TestEnergyTracking:
         mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
         mock_coordinator._last_power_for_energy = 1000.0
-        mock_coordinator._energy_cwu_today = 0.0
-        mock_coordinator._energy_floor_today = 0.0
 
         mock_coordinator._update_energy_tracking(1000.0)
 
         # 1000W for ~10 minutes = ~166 Wh
-        assert mock_coordinator._energy_cwu_today > 0
-        assert mock_coordinator._energy_floor_today == 0
+        cwu_total = mock_coordinator._energy_cwu_cheap_today + mock_coordinator._energy_cwu_expensive_today
+        floor_total = mock_coordinator._energy_floor_cheap_today + mock_coordinator._energy_floor_expensive_today
+        assert cwu_total > 0
+        assert floor_total == 0
 
     def test_energy_tracking_floor_state(self, mock_coordinator):
         """Test energy tracking attributes to floor during floor heating."""
         mock_coordinator._current_state = STATE_HEATING_FLOOR
         mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
         mock_coordinator._last_power_for_energy = 1000.0
-        mock_coordinator._energy_cwu_today = 0.0
-        mock_coordinator._energy_floor_today = 0.0
 
         mock_coordinator._update_energy_tracking(1000.0)
 
         # Energy should go to floor
-        assert mock_coordinator._energy_cwu_today == 0
-        assert mock_coordinator._energy_floor_today > 0
+        cwu_total = mock_coordinator._energy_cwu_cheap_today + mock_coordinator._energy_cwu_expensive_today
+        floor_total = mock_coordinator._energy_floor_cheap_today + mock_coordinator._energy_floor_expensive_today
+        assert cwu_total == 0
+        assert floor_total > 0
 
     def test_energy_tracking_day_rollover(self, mock_coordinator):
         """Test energy tracking day rollover moves data to yesterday."""
-        mock_coordinator._energy_cwu_today = 5000.0
-        mock_coordinator._energy_floor_today = 3000.0
+        mock_coordinator._energy_cwu_cheap_today = 3000.0
+        mock_coordinator._energy_cwu_expensive_today = 2000.0
+        mock_coordinator._energy_floor_cheap_today = 2000.0
+        mock_coordinator._energy_floor_expensive_today = 1000.0
         mock_coordinator._last_energy_update = datetime.now() - timedelta(days=1)
         mock_coordinator._current_state = STATE_IDLE
 
         mock_coordinator._update_energy_tracking(100.0)
 
-        assert mock_coordinator._energy_cwu_yesterday == 5000.0
-        assert mock_coordinator._energy_floor_yesterday == 3000.0
-        assert mock_coordinator._energy_cwu_today == 0.0
-        assert mock_coordinator._energy_floor_today == 0.0
+        # Yesterday should have previous today's values
+        assert mock_coordinator._energy_cwu_cheap_yesterday == 3000.0
+        assert mock_coordinator._energy_cwu_expensive_yesterday == 2000.0
+        assert mock_coordinator._energy_floor_cheap_yesterday == 2000.0
+        assert mock_coordinator._energy_floor_expensive_yesterday == 1000.0
+        # Today should be reset
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_cwu_expensive_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_expensive_today == 0.0
+
+    def test_energy_tracking_cheap_tariff(self, mock_coordinator):
+        """Test energy goes to cheap bucket during cheap tariff."""
+        from unittest.mock import patch
+
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_power_for_energy = 1000.0
+
+        with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+            mock_coordinator._update_energy_tracking(1000.0)
+
+        assert mock_coordinator._energy_cwu_cheap_today > 0
+        assert mock_coordinator._energy_cwu_expensive_today == 0
+
+    def test_energy_tracking_expensive_tariff(self, mock_coordinator):
+        """Test energy goes to expensive bucket during expensive tariff."""
+        from unittest.mock import patch
+
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_power_for_energy = 1000.0
+
+        with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
+            mock_coordinator._update_energy_tracking(1000.0)
+
+        assert mock_coordinator._energy_cwu_cheap_today == 0
+        assert mock_coordinator._energy_cwu_expensive_today > 0
 
 
 class TestStateManagement:
