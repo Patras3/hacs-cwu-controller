@@ -92,6 +92,11 @@ UPDATE_INTERVAL: Final = 60  # seconds
 
 # G12w Tariff configuration (Energa 2025)
 # Cheap hours: 13:00-15:00, 22:00-06:00, weekends, and public holidays
+# Note: Rates can be updated via UI configuration
+CONF_TARIFF_EXPENSIVE_RATE: Final = "tariff_expensive_rate"
+CONF_TARIFF_CHEAP_RATE: Final = "tariff_cheap_rate"
+
+# Default tariff rates (as of January 2025)
 TARIFF_EXPENSIVE_RATE: Final = 1.16  # zł/kWh (0.62 energy + 0.54 distribution)
 TARIFF_CHEAP_RATE: Final = 0.72  # zł/kWh (0.57 energy + 0.15 distribution)
 
@@ -102,26 +107,8 @@ TARIFF_CHEAP_WINDOWS: Final = [
     (0, 6),    # 00:00 - 06:00
 ]
 
-# Polish public holidays 2025
-# Note: Easter-dependent holidays (Easter, Pentecost, Corpus Christi) change yearly
-# Update these dates annually or implement dynamic Easter calculation
-# Fixed holidays: Jan 1, Jan 6, May 1, May 3, Aug 15, Nov 1, Nov 11, Dec 25-26
-# Easter 2025: April 20 -> Pentecost: June 8, Corpus Christi: June 19
-PUBLIC_HOLIDAYS_2025: Final = [
-    (1, 1),    # New Year
-    (1, 6),    # Epiphany
-    (4, 20),   # Easter Sunday (2025)
-    (4, 21),   # Easter Monday (2025)
-    (5, 1),    # Labour Day
-    (5, 3),    # Constitution Day
-    (6, 8),    # Pentecost (2025, Easter + 49 days)
-    (6, 19),   # Corpus Christi (2025, Easter + 60 days)
-    (8, 15),   # Assumption
-    (11, 1),   # All Saints
-    (11, 11),  # Independence Day
-    (12, 25),  # Christmas Day
-    (12, 26),  # Second Day of Christmas
-]
+# Holiday detection - use workday sensor (binary_sensor.workday_sensor from python-holidays)
+# The workday sensor handles all Polish holidays dynamically including Easter-dependent ones
 
 # Winter mode specific settings
 WINTER_CWU_HEATING_WINDOWS: Final = [

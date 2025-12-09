@@ -29,12 +29,17 @@ from .const import (
     CONF_SALON_MIN_TEMP,
     CONF_BEDROOM_MIN_TEMP,
     CONF_OPERATING_MODE,
+    CONF_WORKDAY_SENSOR,
+    CONF_TARIFF_EXPENSIVE_RATE,
+    CONF_TARIFF_CHEAP_RATE,
     DEFAULT_CWU_TARGET_TEMP,
     DEFAULT_CWU_MIN_TEMP,
     DEFAULT_CWU_CRITICAL_TEMP,
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    TARIFF_EXPENSIVE_RATE,
+    TARIFF_CHEAP_RATE,
     MODE_BROKEN_HEATER,
     MODE_WINTER,
     MODE_SUMMER,
@@ -80,6 +85,7 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_PUMP_OUTPUT_TEMP: "sensor.temperatura_wyjscia_pompy_ciepla",
             CONF_CWU_INPUT_TEMP: "sensor.temperatura_wejscia_c_w_u",
             CONF_FLOOR_INPUT_TEMP: "sensor.temperatura_wejscia_ogrzewania_podlogowego",
+            CONF_WORKDAY_SENSOR: "binary_sensor.workday_sensor",
         }
 
         data_schema = vol.Schema({
@@ -103,6 +109,9 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Required(CONF_CLIMATE, default=defaults[CONF_CLIMATE]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="climate")
+            ),
+            vol.Required(CONF_WORKDAY_SENSOR, default=defaults[CONF_WORKDAY_SENSOR]): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
             ),
             vol.Optional(CONF_NOTIFY_SERVICE, default=defaults[CONF_NOTIFY_SERVICE]): selector.TextSelector(),
             vol.Optional(CONF_PUMP_INPUT_TEMP, default=defaults[CONF_PUMP_INPUT_TEMP]): selector.EntitySelector(
@@ -131,7 +140,7 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_thresholds(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Handle threshold configuration."""
+        """Handle threshold and tariff configuration."""
         if user_input is not None:
             # Combine entity config with thresholds
             full_config = {**self._entity_config, **user_input}
@@ -151,6 +160,7 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_OPERATING_MODE, default=MODE_BROKEN_HEATER): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=mode_options, mode=selector.SelectSelectorMode.DROPDOWN)
             ),
+            # Temperature thresholds
             vol.Required(CONF_CWU_TARGET_TEMP, default=DEFAULT_CWU_TARGET_TEMP): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=40, max=55, step=0.5, unit_of_measurement="°C")
             ),
@@ -168,6 +178,13 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Required(CONF_BEDROOM_MIN_TEMP, default=DEFAULT_BEDROOM_MIN_TEMP): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=16, max=22, step=0.5, unit_of_measurement="°C")
+            ),
+            # Tariff rates (G12w)
+            vol.Required(CONF_TARIFF_EXPENSIVE_RATE, default=TARIFF_EXPENSIVE_RATE): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
+            ),
+            vol.Required(CONF_TARIFF_CHEAP_RATE, default=TARIFF_CHEAP_RATE): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
             ),
         })
 
@@ -211,6 +228,7 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
             vol.Required(CONF_OPERATING_MODE, default=data.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=mode_options, mode=selector.SelectSelectorMode.DROPDOWN)
             ),
+            # Temperature thresholds
             vol.Required(CONF_CWU_TARGET_TEMP, default=data.get(CONF_CWU_TARGET_TEMP, DEFAULT_CWU_TARGET_TEMP)): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=40, max=55, step=0.5, unit_of_measurement="°C")
             ),
@@ -228,6 +246,13 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
             ),
             vol.Required(CONF_BEDROOM_MIN_TEMP, default=data.get(CONF_BEDROOM_MIN_TEMP, DEFAULT_BEDROOM_MIN_TEMP)): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=16, max=22, step=0.5, unit_of_measurement="°C")
+            ),
+            # Tariff rates (G12w) - update when prices change
+            vol.Required(CONF_TARIFF_EXPENSIVE_RATE, default=data.get(CONF_TARIFF_EXPENSIVE_RATE, TARIFF_EXPENSIVE_RATE)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
+            ),
+            vol.Required(CONF_TARIFF_CHEAP_RATE, default=data.get(CONF_TARIFF_CHEAP_RATE, TARIFF_CHEAP_RATE)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
             ),
         })
 

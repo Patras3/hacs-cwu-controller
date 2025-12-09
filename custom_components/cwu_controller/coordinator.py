@@ -57,10 +57,11 @@ from .const import (
     CONF_OPERATING_MODE,
     CONF_WORKDAY_SENSOR,
     # Tariff constants
+    CONF_TARIFF_EXPENSIVE_RATE,
+    CONF_TARIFF_CHEAP_RATE,
     TARIFF_EXPENSIVE_RATE,
     TARIFF_CHEAP_RATE,
     TARIFF_CHEAP_WINDOWS,
-    PUBLIC_HOLIDAYS_2025,
     # Winter mode settings
     WINTER_CWU_HEATING_WINDOWS,
     WINTER_CWU_TARGET_OFFSET,
@@ -194,17 +195,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "total_expensive": (self._energy_cwu_expensive_yesterday + self._energy_floor_expensive_yesterday) / 1000,
         }
 
+    def get_tariff_cheap_rate(self) -> float:
+        """Get configured cheap tariff rate (zł/kWh)."""
+        return self.config.get(CONF_TARIFF_CHEAP_RATE, TARIFF_CHEAP_RATE)
+
+    def get_tariff_expensive_rate(self) -> float:
+        """Get configured expensive tariff rate (zł/kWh)."""
+        return self.config.get(CONF_TARIFF_EXPENSIVE_RATE, TARIFF_EXPENSIVE_RATE)
+
     def is_cheap_tariff(self, dt: datetime | None = None) -> bool:
         """Check if current time is in cheap tariff window (G12w).
 
-        Uses workday sensor if configured (binary_sensor.workday_sensor from python-holidays).
+        Uses workday sensor (binary_sensor.workday_sensor from python-holidays).
         If workday sensor is "off", it means today is a weekend or holiday = cheap tariff.
-        Falls back to weekend check and static PUBLIC_HOLIDAYS_2025 if sensor not configured.
+        Requires workday sensor to be configured for holiday detection.
         """
         if dt is None:
             dt = datetime.now()
 
-        # Check workday sensor first (if configured)
+        # Check workday sensor (required for holiday detection)
         workday_sensor = self.config.get(CONF_WORKDAY_SENSOR)
         if workday_sensor:
             workday_state = self._get_entity_state(workday_sensor)
@@ -213,18 +222,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 if workday_state == "off":
                     # Not a workday = weekend or holiday = cheap all day
                     return True
-                # It's a workday - still need to check time windows below
-            # If sensor unavailable, fall back to static logic
+                # It's a workday - check time windows below
+            # If sensor unavailable, fall back to weekend check only
 
-        # Fallback: Weekends are always cheap
+        # Weekends are always cheap (fallback if workday sensor unavailable)
         if dt.weekday() >= 5:  # Saturday = 5, Sunday = 6
             return True
-
-        # Fallback: Check static public holidays (only if workday sensor not configured)
-        if not workday_sensor:
-            month_day = (dt.month, dt.day)
-            if month_day in PUBLIC_HOLIDAYS_2025:
-                return True
 
         # Check time windows (applies to workdays)
         current_hour = dt.hour
@@ -237,8 +240,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def get_current_tariff_rate(self, dt: datetime | None = None) -> float:
         """Get current electricity rate in zł/kWh."""
         if self.is_cheap_tariff(dt):
-            return TARIFF_CHEAP_RATE
-        return TARIFF_EXPENSIVE_RATE
+            return self.get_tariff_cheap_rate()
+        return self.get_tariff_expensive_rate()
 
     def is_winter_cwu_heating_window(self, dt: datetime | None = None) -> bool:
         """Check if current time is in winter mode CWU heating window."""
@@ -623,15 +626,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._last_daily_report_date = now
             return
 
-        # Calculate accurate costs based on tariff split
-        cwu_cost = (energy["cwu_cheap"] * TARIFF_CHEAP_RATE +
-                    energy["cwu_expensive"] * TARIFF_EXPENSIVE_RATE)
-        floor_cost = (energy["floor_cheap"] * TARIFF_CHEAP_RATE +
-                      energy["floor_expensive"] * TARIFF_EXPENSIVE_RATE)
+        # Calculate accurate costs based on tariff split (using configurable rates)
+        cheap_rate = self.get_tariff_cheap_rate()
+        expensive_rate = self.get_tariff_expensive_rate()
+
+        cwu_cost = (energy["cwu_cheap"] * cheap_rate +
+                    energy["cwu_expensive"] * expensive_rate)
+        floor_cost = (energy["floor_cheap"] * cheap_rate +
+                      energy["floor_expensive"] * expensive_rate)
         total_cost = cwu_cost + floor_cost
 
         # Calculate savings vs all-expensive rate
-        total_if_expensive = total_kwh * TARIFF_EXPENSIVE_RATE
+        total_if_expensive = total_kwh * expensive_rate
         savings = total_if_expensive - total_cost
 
         message = (
@@ -846,29 +852,32 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "energy_yesterday_total_expensive_kwh": self.energy_yesterday["total_expensive"],
             # Cost calculations (accurate based on actual tariff usage)
             "cost_today_cwu_estimate": (
-                self.energy_today["cwu_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_today["cwu_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_today["cwu_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_today["cwu_expensive"] * self.get_tariff_expensive_rate()
             ),
             "cost_today_floor_estimate": (
-                self.energy_today["floor_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_today["floor_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_today["floor_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_today["floor_expensive"] * self.get_tariff_expensive_rate()
             ),
             "cost_today_estimate": (
-                self.energy_today["total_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_today["total_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_today["total_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_today["total_expensive"] * self.get_tariff_expensive_rate()
             ),
             "cost_yesterday_cwu_estimate": (
-                self.energy_yesterday["cwu_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_yesterday["cwu_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_yesterday["cwu_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_yesterday["cwu_expensive"] * self.get_tariff_expensive_rate()
             ),
             "cost_yesterday_floor_estimate": (
-                self.energy_yesterday["floor_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_yesterday["floor_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_yesterday["floor_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_yesterday["floor_expensive"] * self.get_tariff_expensive_rate()
             ),
             "cost_yesterday_estimate": (
-                self.energy_yesterday["total_cheap"] * TARIFF_CHEAP_RATE +
-                self.energy_yesterday["total_expensive"] * TARIFF_EXPENSIVE_RATE
+                self.energy_yesterday["total_cheap"] * self.get_tariff_cheap_rate() +
+                self.energy_yesterday["total_expensive"] * self.get_tariff_expensive_rate()
             ),
+            # Tariff rates (for sensors)
+            "tariff_cheap_rate": self.get_tariff_cheap_rate(),
+            "tariff_expensive_rate": self.get_tariff_expensive_rate(),
         }
 
         if self._fake_heating_detected_at:
