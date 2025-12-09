@@ -101,16 +101,20 @@ TARIFF_CHEAP_WINDOWS: Final = [
     (0, 6),    # 00:00 - 06:00
 ]
 
-# Polish public holidays 2025 (static for now)
+# Polish public holidays 2025
+# Note: Easter-dependent holidays (Easter, Pentecost, Corpus Christi) change yearly
+# Update these dates annually or implement dynamic Easter calculation
+# Fixed holidays: Jan 1, Jan 6, May 1, May 3, Aug 15, Nov 1, Nov 11, Dec 25-26
+# Easter 2025: April 20 -> Pentecost: June 8, Corpus Christi: June 19
 PUBLIC_HOLIDAYS_2025: Final = [
     (1, 1),    # New Year
     (1, 6),    # Epiphany
-    (4, 20),   # Easter Sunday
-    (4, 21),   # Easter Monday
+    (4, 20),   # Easter Sunday (2025)
+    (4, 21),   # Easter Monday (2025)
     (5, 1),    # Labour Day
     (5, 3),    # Constitution Day
-    (6, 8),    # Pentecost
-    (6, 19),   # Corpus Christi
+    (6, 8),    # Pentecost (2025, Easter + 49 days)
+    (6, 19),   # Corpus Christi (2025, Easter + 60 days)
     (8, 15),   # Assumption
     (11, 1),   # All Saints
     (11, 11),  # Independence Day

@@ -1,0 +1,192 @@
+"""Tests for G12w tariff calculations."""
+from __future__ import annotations
+
+from datetime import datetime
+from unittest.mock import patch
+import pytest
+
+from custom_components.cwu_controller.const import (
+    TARIFF_CHEAP_RATE,
+    TARIFF_EXPENSIVE_RATE,
+    PUBLIC_HOLIDAYS_2025,
+)
+
+
+class TestIsCheapTariff:
+    """Tests for is_cheap_tariff method."""
+
+    def test_weekday_cheap_window_morning(self, mock_coordinator):
+        """Test cheap tariff during 00:00-06:00 window on weekday."""
+        # Monday 03:00 (Jan 13, 2025 is a regular Monday)
+        dt = datetime(2025, 1, 13, 3, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_weekday_cheap_window_afternoon(self, mock_coordinator):
+        """Test cheap tariff during 13:00-15:00 window on weekday."""
+        # Monday 14:00
+        dt = datetime(2025, 1, 13, 14, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_weekday_cheap_window_night(self, mock_coordinator):
+        """Test cheap tariff during 22:00-24:00 window on weekday."""
+        # Monday 23:00
+        dt = datetime(2025, 1, 13, 23, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_weekday_expensive_morning(self, mock_coordinator):
+        """Test expensive tariff during morning on weekday."""
+        # Monday 08:00
+        dt = datetime(2025, 1, 13, 8, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is False
+
+    def test_weekday_expensive_afternoon(self, mock_coordinator):
+        """Test expensive tariff during afternoon on weekday."""
+        # Monday 16:00
+        dt = datetime(2025, 1, 13, 16, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is False
+
+    def test_weekend_saturday_always_cheap(self, mock_coordinator):
+        """Test that Saturday is always cheap tariff."""
+        # Saturday 10:00 (normally expensive on weekday)
+        dt = datetime(2025, 1, 4, 10, 0)  # Saturday
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_weekend_sunday_always_cheap(self, mock_coordinator):
+        """Test that Sunday is always cheap tariff."""
+        # Sunday 18:00 (normally expensive on weekday)
+        dt = datetime(2025, 1, 5, 18, 0)  # Sunday
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_public_holiday_always_cheap(self, mock_coordinator):
+        """Test that public holidays are always cheap tariff."""
+        # New Year's Day at 10:00 (Wednesday - normally expensive)
+        dt = datetime(2025, 1, 1, 10, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_christmas_always_cheap(self, mock_coordinator):
+        """Test that Christmas is always cheap tariff."""
+        # Christmas Day at 18:00
+        dt = datetime(2025, 12, 25, 18, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_boundary_start_of_cheap_window(self, mock_coordinator):
+        """Test boundary at start of cheap window."""
+        # Monday 13:00 exactly (Jan 13, 2025)
+        dt = datetime(2025, 1, 13, 13, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_boundary_end_of_cheap_window(self, mock_coordinator):
+        """Test boundary at end of cheap window."""
+        # Monday 15:00 exactly (end of 13-15 window)
+        dt = datetime(2025, 1, 13, 15, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is False
+
+    def test_boundary_start_of_night_window(self, mock_coordinator):
+        """Test boundary at start of night window."""
+        # Monday 22:00 exactly
+        dt = datetime(2025, 1, 13, 22, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is True
+
+    def test_boundary_end_of_morning_window(self, mock_coordinator):
+        """Test boundary at end of morning window."""
+        # Monday 06:00 exactly (end of 00-06 window)
+        dt = datetime(2025, 1, 13, 6, 0)
+        assert mock_coordinator.is_cheap_tariff(dt) is False
+
+
+class TestGetCurrentTariffRate:
+    """Tests for get_current_tariff_rate method."""
+
+    def test_cheap_rate_during_cheap_window(self, mock_coordinator):
+        """Test that cheap rate is returned during cheap tariff window."""
+        dt = datetime(2025, 1, 13, 3, 0)  # Monday 03:00
+        rate = mock_coordinator.get_current_tariff_rate(dt)
+        assert rate == TARIFF_CHEAP_RATE
+        assert rate == 0.72
+
+    def test_expensive_rate_during_expensive_window(self, mock_coordinator):
+        """Test that expensive rate is returned during expensive tariff window."""
+        dt = datetime(2025, 1, 13, 10, 0)  # Monday 10:00
+        rate = mock_coordinator.get_current_tariff_rate(dt)
+        assert rate == TARIFF_EXPENSIVE_RATE
+        assert rate == 1.16
+
+    def test_cheap_rate_on_weekend(self, mock_coordinator):
+        """Test that cheap rate is returned on weekend."""
+        dt = datetime(2025, 1, 4, 10, 0)  # Saturday 10:00
+        rate = mock_coordinator.get_current_tariff_rate(dt)
+        assert rate == TARIFF_CHEAP_RATE
+
+    def test_cheap_rate_on_holiday(self, mock_coordinator):
+        """Test that cheap rate is returned on public holiday."""
+        dt = datetime(2025, 5, 1, 12, 0)  # Labour Day 12:00
+        rate = mock_coordinator.get_current_tariff_rate(dt)
+        assert rate == TARIFF_CHEAP_RATE
+
+
+class TestWinterCWUHeatingWindow:
+    """Tests for winter mode CWU heating window."""
+
+    def test_morning_window_active(self, mock_coordinator):
+        """Test that morning window (03:00-06:00) is detected."""
+        dt = datetime(2025, 1, 13, 4, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is True
+
+    def test_afternoon_window_active(self, mock_coordinator):
+        """Test that afternoon window (13:00-15:00) is detected."""
+        dt = datetime(2025, 1, 13, 14, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is True
+
+    def test_outside_window_morning(self, mock_coordinator):
+        """Test that time before morning window is outside."""
+        dt = datetime(2025, 1, 13, 2, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
+    def test_outside_window_after_morning(self, mock_coordinator):
+        """Test that time after morning window is outside."""
+        dt = datetime(2025, 1, 13, 7, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
+    def test_outside_window_between(self, mock_coordinator):
+        """Test that time between windows is outside."""
+        dt = datetime(2025, 1, 13, 10, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
+    def test_boundary_start_morning(self, mock_coordinator):
+        """Test boundary at start of morning window."""
+        dt = datetime(2025, 1, 13, 3, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is True
+
+    def test_boundary_end_morning(self, mock_coordinator):
+        """Test boundary at end of morning window."""
+        dt = datetime(2025, 1, 13, 6, 0)
+        assert mock_coordinator.is_winter_cwu_heating_window(dt) is False
+
+
+class TestWinterCWUTargets:
+    """Tests for winter mode CWU temperature targets."""
+
+    def test_winter_cwu_target_default(self, mock_coordinator):
+        """Test winter CWU target with default config."""
+        # Default target is 45, winter adds 5, max 55
+        target = mock_coordinator.get_winter_cwu_target()
+        assert target == 50.0
+
+    def test_winter_cwu_target_capped_at_max(self, mock_coordinator):
+        """Test winter CWU target is capped at 55C."""
+        mock_coordinator.config["cwu_target_temp"] = 52.0
+        target = mock_coordinator.get_winter_cwu_target()
+        assert target == 55.0  # Capped at max
+
+    def test_winter_cwu_emergency_threshold(self, mock_coordinator):
+        """Test winter CWU emergency threshold calculation."""
+        # Target 50, emergency offset 10, so threshold = 40
+        threshold = mock_coordinator.get_winter_cwu_emergency_threshold()
+        assert threshold == 40.0
+
+    def test_winter_cwu_emergency_with_high_target(self, mock_coordinator):
+        """Test winter CWU emergency threshold with high target."""
+        mock_coordinator.config["cwu_target_temp"] = 52.0
+        # Target capped at 55, threshold = 55 - 10 = 45
+        threshold = mock_coordinator.get_winter_cwu_emergency_threshold()
+        assert threshold == 45.0
