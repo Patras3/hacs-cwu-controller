@@ -1,7 +1,8 @@
 /**
- * CWU Controller Panel JavaScript v4.1
+ * CWU Controller Panel JavaScript v4.2
  * Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.1: Added tariff breakdown display (cheap/expensive rates and energy)
+ * v4.2: Added token expiration handling with auto-refresh and user-friendly error banner
  */
 
 // Configuration
@@ -131,10 +132,37 @@ async function init() {
     console.log('CWU Controller Panel initialized');
 }
 
+// Token management
+let cachedToken = null;
+let tokenRefreshAttempts = 0;
+const MAX_TOKEN_REFRESH_ATTEMPTS = 3;
+
 /**
- * Get authentication token
+ * Get authentication token with caching and refresh support
  */
 function getToken() {
+    // Try to get fresh token from HA
+    const freshToken = getFreshToken();
+    if (freshToken) {
+        cachedToken = freshToken;
+        tokenRefreshAttempts = 0;
+        return freshToken;
+    }
+
+    // Return cached token if available
+    if (cachedToken) {
+        return cachedToken;
+    }
+
+    // Fallback to URL params or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('token') || localStorage.getItem('ha_token') || '';
+}
+
+/**
+ * Get fresh token from Home Assistant
+ */
+function getFreshToken() {
     try {
         if (window.parent && window.parent.hassConnection) {
             return window.parent.hassConnection.options.auth.accessToken;
@@ -150,14 +178,75 @@ function getToken() {
         }
     } catch (e) {}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('token') || localStorage.getItem('ha_token') || '';
+    return null;
 }
 
 /**
- * Fetch entity state
+ * Handle authentication error (403)
  */
-async function fetchState(entityId) {
+function handleAuthError() {
+    tokenRefreshAttempts++;
+    cachedToken = null; // Clear cached token
+
+    if (tokenRefreshAttempts >= MAX_TOKEN_REFRESH_ATTEMPTS) {
+        showAuthErrorBanner();
+        return false;
+    }
+
+    // Try to get a fresh token
+    const newToken = getFreshToken();
+    if (newToken) {
+        cachedToken = newToken;
+        console.log('Token refreshed successfully');
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Show authentication error banner
+ */
+function showAuthErrorBanner() {
+    // Check if banner already exists
+    if (document.getElementById('auth-error-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'auth-error-banner';
+    banner.className = 'alert alert-danger animated';
+    banner.innerHTML = `
+        <span class="alert-icon mdi mdi-shield-alert"></span>
+        <div>
+            <strong>Session Expired</strong>
+            <p>Your authentication token has expired. Please refresh the page to continue.</p>
+        </div>
+        <button class="btn btn-sm" onclick="location.reload()">
+            <span class="mdi mdi-refresh"></span> Refresh Page
+        </button>
+    `;
+    banner.style.display = 'flex';
+
+    // Insert after header
+    const header = document.querySelector('.header');
+    if (header && header.nextSibling) {
+        header.parentNode.insertBefore(banner, header.nextSibling);
+    } else {
+        document.querySelector('.container').prepend(banner);
+    }
+
+    // Stop update timers
+    if (updateTimer) clearInterval(updateTimer);
+    if (chartUpdateTimer) clearInterval(chartUpdateTimer);
+
+    // Update connection state
+    document.getElementById('connection-state').textContent = 'Auth Error';
+    document.getElementById('connection-state').style.color = '#fc8181';
+}
+
+/**
+ * Fetch entity state with auth error handling
+ */
+async function fetchState(entityId, retryOnAuth = true) {
     try {
         const response = await fetch(`/api/states/${entityId}`, {
             headers: {
@@ -165,6 +254,17 @@ async function fetchState(entityId) {
                 'Content-Type': 'application/json',
             },
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) fetching ${entityId}`);
+            if (retryOnAuth && handleAuthError()) {
+                // Retry with refreshed token
+                return await fetchState(entityId, false);
+            }
+            return null;
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     } catch (error) {
@@ -174,9 +274,9 @@ async function fetchState(entityId) {
 }
 
 /**
- * Fetch history data
+ * Fetch history data with auth error handling
  */
-async function fetchHistory(entityId, hoursBack = 6) {
+async function fetchHistory(entityId, hoursBack = 6, retryOnAuth = true) {
     try {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - hoursBack * 60 * 60 * 1000);
@@ -188,6 +288,16 @@ async function fetchHistory(entityId, hoursBack = 6) {
                 'Content-Type': 'application/json',
             },
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) fetching history for ${entityId}`);
+            if (retryOnAuth && handleAuthError()) {
+                return await fetchHistory(entityId, hoursBack, false);
+            }
+            return [];
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return data[0] || [];
@@ -268,9 +378,9 @@ async function calculateSessionEnergy(sessionStartTime) {
 }
 
 /**
- * Call Home Assistant service
+ * Call Home Assistant service with auth error handling
  */
-async function callService(domain, service, data = {}) {
+async function callService(domain, service, data = {}, retryOnAuth = true) {
     try {
         const response = await fetch(`/api/services/${domain}/${service}`, {
             method: 'POST',
@@ -280,6 +390,17 @@ async function callService(domain, service, data = {}) {
             },
             body: JSON.stringify(data),
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) calling ${domain}.${service}`);
+            if (retryOnAuth && handleAuthError()) {
+                return await callService(domain, service, data, false);
+            }
+            showNotification('Session expired. Please refresh the page.', 'error');
+            return false;
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         showNotification('Action executed successfully', 'success');
         setTimeout(refreshData, 1000);
