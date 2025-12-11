@@ -1,4 +1,4 @@
-/* CWU Controller Panel Styles v2.0 */
+/* CWU Controller Panel Styles v2.1 - Added safe_mode state styling */
 :root {
     --bg-primary: #0f0f1a;
     --bg-secondary: #1a1a2e;
@@ -1121,6 +1121,7 @@ body {
 .timeline-item.floor::before { background: var(--accent-orange); }
 .timeline-item.pause::before { background: var(--text-muted); }
 .timeline-item.emergency::before { background: var(--accent-red); animation: emergency-dot 1s infinite; }
+.timeline-item.safe_mode::before { background: var(--accent-yellow); box-shadow: 0 0 10px rgba(246, 224, 94, 0.5); }
 
 @keyframes emergency-dot {
     0%, 100% { box-shadow: 0 0 10px rgba(252, 129, 129, 0.5); }
@@ -1392,6 +1393,12 @@ body {
     border-color: var(--accent-red);
     color: var(--accent-red);
     animation: emergency-pulse 1s infinite;
+}
+
+.timeline-item.safe_mode .timeline-marker {
+    background: rgba(246, 224, 94, 0.15);
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
 }
 
 .timeline-content {
@@ -1968,6 +1975,10 @@ body {
     border-left-color: var(--accent-red);
 }
 
+.timeline-item-full.safe_mode {
+    border-left-color: var(--accent-yellow);
+}
+
 .timeline-details {
     display: flex;
     flex-direction: column;
@@ -2445,6 +2456,15 @@ body {
     color: var(--accent-red);
 }
 
+.state-compact.state-safe-mode {
+    border-color: rgba(246, 224, 94, 0.4);
+    background: rgba(246, 224, 94, 0.1);
+}
+
+.state-compact.state-safe-mode .state-icon-sm {
+    color: var(--accent-yellow);
+}
+
 /* Responsive mode control */
 @media (max-width: 900px) {
     .mode-control-row {
@@ -2471,5 +2491,228 @@ body {
     .heating-indicators {
         width: 100%;
         justify-content: center;
+    }
+}
+
+/* Operating Mode & Tariff Card */
+.mode-tariff-card {
+    grid-column: span 1;
+}
+
+.mode-tariff-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mode-selector-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mode-selector-section label {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.mode-select {
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.mode-select:hover {
+    border-color: var(--accent-cyan);
+}
+
+.mode-select:focus {
+    outline: none;
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.2);
+}
+
+.mode-select option {
+    background: var(--bg-card-solid);
+    color: var(--text-primary);
+}
+
+.tariff-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tariff-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.tariff-row .mdi {
+    font-size: 18px;
+    color: var(--accent-cyan);
+}
+
+.tariff-row strong {
+    color: var(--text-primary);
+}
+
+.tariff-rates-config {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+}
+
+.tariff-rate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.tariff-rate .mdi {
+    font-size: 14px;
+}
+
+.tariff-rate.cheap .mdi {
+    color: var(--accent-green);
+}
+
+.tariff-rate.expensive .mdi {
+    color: var(--accent-orange);
+}
+
+.tariff-rate strong {
+    color: var(--text-primary);
+}
+
+/* Energy Consumption Card */
+.energy-card {
+    grid-column: span 1;
+}
+
+.energy-content {
+    display: flex;
+    gap: 20px;
+}
+
+.energy-period {
+    flex: 1;
+}
+
+.energy-period h4 {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.energy-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.energy-row:last-child {
+    border-bottom: none;
+}
+
+.energy-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+}
+
+.energy-label .mdi {
+    font-size: 16px;
+}
+
+.energy-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.energy-row.total {
+    background: var(--glass-bg);
+    margin: 8px -12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border-bottom: none;
+}
+
+.energy-row.total .energy-label {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.energy-row.total .energy-value {
+    color: var(--accent-cyan);
+    font-size: 16px;
+}
+
+.energy-row.cost .energy-value {
+    color: var(--accent-green);
+}
+
+.energy-row.sub {
+    padding: 4px 0 4px 20px;
+    font-size: 12px;
+    border-bottom: none;
+}
+
+.energy-row.sub .energy-label {
+    font-size: 12px;
+}
+
+.energy-sub {
+    font-size: 12px;
+}
+
+.energy-sub .mdi {
+    font-size: 12px;
+}
+
+.energy-cheap {
+    color: var(--accent-green);
+}
+
+.energy-expensive {
+    color: var(--accent-orange);
+}
+
+.energy-divider {
+    width: 1px;
+    background: var(--border-color);
+    margin: 0 10px;
+}
+
+/* Responsive for mode/energy cards */
+@media (max-width: 768px) {
+    .energy-content {
+        flex-direction: column;
+    }
+
+    .energy-divider {
+        width: 100%;
+        height: 1px;
+        margin: 10px 0;
     }
 }

@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=4.0.0">
+    <link rel="stylesheet" href="styles.css?v=5.2.0">
 </head>
 <body>
     <div class="container">
@@ -94,6 +94,154 @@
                         </div>
                         <div class="indicator" id="floor-indicator" title="Floor Heating">
                             <span class="mdi mdi-heating-coil"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operating Mode & Tariff Card -->
+            <div class="card glass-effect mode-tariff-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-cog"></span>
+                        Operating Mode
+                    </span>
+                    <span class="badge" id="tariff-status">--</span>
+                </div>
+                <div class="mode-tariff-content">
+                    <div class="mode-selector-section">
+                        <label for="operating-mode-select">Mode:</label>
+                        <select id="operating-mode-select" class="mode-select" onchange="changeOperatingMode(this.value)">
+                            <option value="broken_heater">Broken Heater</option>
+                            <option value="winter">Winter</option>
+                            <option value="summer">Summer (N/A)</option>
+                        </select>
+                    </div>
+                    <div class="tariff-info">
+                        <div class="tariff-row">
+                            <span class="mdi mdi-currency-usd"></span>
+                            <span>Current rate: <strong id="current-tariff-rate">--</strong> zł/kWh</span>
+                        </div>
+                        <div class="tariff-rates-config">
+                            <div class="tariff-rate cheap">
+                                <span class="mdi mdi-leaf"></span>
+                                <span>Cheap: <strong id="tariff-cheap-rate">--</strong> zł</span>
+                            </div>
+                            <div class="tariff-rate expensive">
+                                <span class="mdi mdi-fire"></span>
+                                <span>Peak: <strong id="tariff-expensive-rate">--</strong> zł</span>
+                            </div>
+                        </div>
+                        <div class="tariff-row" id="heating-window-row" style="display: none;">
+                            <span class="mdi mdi-clock-check"></span>
+                            <span id="heating-window-status">CWU heating window active</span>
+                        </div>
+                        <div class="tariff-row" id="winter-target-row" style="display: none;">
+                            <span class="mdi mdi-target"></span>
+                            <span>Winter target: <strong id="winter-cwu-target">--</strong>°C</span>
+                        </div>
+                        <div class="tariff-row" id="winter-emergency-row" style="display: none;">
+                            <span class="mdi mdi-alert-circle-outline"></span>
+                            <span>Emergency below: <strong id="winter-emergency-threshold">--</strong>°C</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Energy Consumption Card -->
+            <div class="card glass-effect energy-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-lightning-bolt"></span>
+                        Energy Consumption
+                    </span>
+                </div>
+                <div class="energy-content">
+                    <div class="energy-period">
+                        <h4>Today</h4>
+                        <div class="energy-row">
+                            <span class="energy-label"><span class="mdi mdi-water-boiler"></span> CWU:</span>
+                            <span class="energy-value" id="energy-today-cwu">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-leaf"></span> Cheap:</span>
+                            <span class="energy-value energy-cheap" id="energy-today-cwu-cheap">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-fire"></span> Peak:</span>
+                            <span class="energy-value energy-expensive" id="energy-today-cwu-expensive">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row">
+                            <span class="energy-label"><span class="mdi mdi-heating-coil"></span> Floor:</span>
+                            <span class="energy-value" id="energy-today-floor">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-leaf"></span> Cheap:</span>
+                            <span class="energy-value energy-cheap" id="energy-today-floor-cheap">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-fire"></span> Peak:</span>
+                            <span class="energy-value energy-expensive" id="energy-today-floor-expensive">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row total">
+                            <span class="energy-label">Total:</span>
+                            <span class="energy-value" id="energy-today-total">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row cost">
+                            <span class="energy-label">Est. cost:</span>
+                            <span class="energy-value" id="cost-today">~0.00 zł</span>
+                        </div>
+                        <div class="energy-row cost sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-water-boiler"></span> CWU:</span>
+                            <span class="energy-value" id="cost-today-cwu">~0.00 zł</span>
+                        </div>
+                        <div class="energy-row cost sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-heating-coil"></span> Floor:</span>
+                            <span class="energy-value" id="cost-today-floor">~0.00 zł</span>
+                        </div>
+                    </div>
+                    <div class="energy-divider"></div>
+                    <div class="energy-period">
+                        <h4>Yesterday</h4>
+                        <div class="energy-row">
+                            <span class="energy-label"><span class="mdi mdi-water-boiler"></span> CWU:</span>
+                            <span class="energy-value" id="energy-yesterday-cwu">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-leaf"></span> Cheap:</span>
+                            <span class="energy-value energy-cheap" id="energy-yesterday-cwu-cheap">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-fire"></span> Peak:</span>
+                            <span class="energy-value energy-expensive" id="energy-yesterday-cwu-expensive">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row">
+                            <span class="energy-label"><span class="mdi mdi-heating-coil"></span> Floor:</span>
+                            <span class="energy-value" id="energy-yesterday-floor">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-leaf"></span> Cheap:</span>
+                            <span class="energy-value energy-cheap" id="energy-yesterday-floor-cheap">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-fire"></span> Peak:</span>
+                            <span class="energy-value energy-expensive" id="energy-yesterday-floor-expensive">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row total">
+                            <span class="energy-label">Total:</span>
+                            <span class="energy-value" id="energy-yesterday-total">0.00 kWh</span>
+                        </div>
+                        <div class="energy-row cost">
+                            <span class="energy-label">Est. cost:</span>
+                            <span class="energy-value" id="cost-yesterday">~0.00 zł</span>
+                        </div>
+                        <div class="energy-row cost sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-water-boiler"></span> CWU:</span>
+                            <span class="energy-value" id="cost-yesterday-cwu">~0.00 zł</span>
+                        </div>
+                        <div class="energy-row cost sub">
+                            <span class="energy-label energy-sub"><span class="mdi mdi-heating-coil"></span> Floor:</span>
+                            <span class="energy-value" id="cost-yesterday-floor">~0.00 zł</span>
                         </div>
                     </div>
                 </div>
@@ -550,7 +698,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>CWU Controller v2.1.0 | Last update: <span id="last-update">--</span></p>
+            <p>CWU Controller v3.2.0 | Last update: <span id="last-update">--</span></p>
         </footer>
     </div>
 
@@ -635,6 +783,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=4.0.1"></script>
+    <script src="panel.js?v=4.4.0"></script>
 </body>
 </html>

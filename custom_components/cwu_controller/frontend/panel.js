@@ -1,6 +1,10 @@
 /**
- * CWU Controller Panel JavaScript v4.0
+ * CWU Controller Panel JavaScript v4.4
  * Redesigned with compact state bar, mode selector, and integrated cycle timer
+ * v4.1: Added tariff breakdown display (cheap/expensive rates and energy)
+ * v4.2: Added token expiration handling with auto-refresh and user-friendly error banner
+ * v4.3: Added safe_mode state support for sensor unavailability/disabled scenarios
+ * v4.4: Added winter mode emergency threshold display
  */
 
 // Configuration
@@ -55,6 +59,7 @@ const STATE_ICONS = {
     'emergency_floor': 'mdi-home-alert',
     'fake_heating_detected': 'mdi-alert-circle',
     'fake_heating_restarting': 'mdi-refresh-circle',
+    'safe_mode': 'mdi-shield-check',
 };
 
 const STATE_CLASSES = {
@@ -65,6 +70,7 @@ const STATE_CLASSES = {
     'fake_heating_detected': 'state-emergency',
     'fake_heating_restarting': 'state-heating-cwu',
     'pause': 'state-pause',
+    'safe_mode': 'state-safe-mode',
 };
 
 const STATE_DESCRIPTIONS = {
@@ -76,6 +82,7 @@ const STATE_DESCRIPTIONS = {
     'emergency_floor': 'Emergency! Room temperature critically low (<19°C)',
     'fake_heating_detected': 'Fake heating detected - waiting before restart',
     'fake_heating_restarting': 'Restarting CWU heating after fake heating recovery',
+    'safe_mode': 'Safe mode - heat pump controls both CWU and floor (sensor unavailable or disabled)',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -112,7 +119,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v3.0 initializing...');
+    console.log('CWU Controller Panel v4.4 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
@@ -130,10 +137,37 @@ async function init() {
     console.log('CWU Controller Panel initialized');
 }
 
+// Token management
+let cachedToken = null;
+let tokenRefreshAttempts = 0;
+const MAX_TOKEN_REFRESH_ATTEMPTS = 3;
+
 /**
- * Get authentication token
+ * Get authentication token with caching and refresh support
  */
 function getToken() {
+    // Try to get fresh token from HA
+    const freshToken = getFreshToken();
+    if (freshToken) {
+        cachedToken = freshToken;
+        tokenRefreshAttempts = 0;
+        return freshToken;
+    }
+
+    // Return cached token if available
+    if (cachedToken) {
+        return cachedToken;
+    }
+
+    // Fallback to URL params or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('token') || localStorage.getItem('ha_token') || '';
+}
+
+/**
+ * Get fresh token from Home Assistant
+ */
+function getFreshToken() {
     try {
         if (window.parent && window.parent.hassConnection) {
             return window.parent.hassConnection.options.auth.accessToken;
@@ -149,14 +183,75 @@ function getToken() {
         }
     } catch (e) {}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('token') || localStorage.getItem('ha_token') || '';
+    return null;
 }
 
 /**
- * Fetch entity state
+ * Handle authentication error (403)
  */
-async function fetchState(entityId) {
+function handleAuthError() {
+    tokenRefreshAttempts++;
+    cachedToken = null; // Clear cached token
+
+    if (tokenRefreshAttempts >= MAX_TOKEN_REFRESH_ATTEMPTS) {
+        showAuthErrorBanner();
+        return false;
+    }
+
+    // Try to get a fresh token
+    const newToken = getFreshToken();
+    if (newToken) {
+        cachedToken = newToken;
+        console.log('Token refreshed successfully');
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Show authentication error banner
+ */
+function showAuthErrorBanner() {
+    // Check if banner already exists
+    if (document.getElementById('auth-error-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'auth-error-banner';
+    banner.className = 'alert alert-danger animated';
+    banner.innerHTML = `
+        <span class="alert-icon mdi mdi-shield-alert"></span>
+        <div>
+            <strong>Session Expired</strong>
+            <p>Your authentication token has expired. Please refresh the page to continue.</p>
+        </div>
+        <button class="btn btn-sm" onclick="location.reload()">
+            <span class="mdi mdi-refresh"></span> Refresh Page
+        </button>
+    `;
+    banner.style.display = 'flex';
+
+    // Insert after header
+    const header = document.querySelector('.header');
+    if (header && header.nextSibling) {
+        header.parentNode.insertBefore(banner, header.nextSibling);
+    } else {
+        document.querySelector('.container').prepend(banner);
+    }
+
+    // Stop update timers
+    if (updateTimer) clearInterval(updateTimer);
+    if (chartUpdateTimer) clearInterval(chartUpdateTimer);
+
+    // Update connection state
+    document.getElementById('connection-state').textContent = 'Auth Error';
+    document.getElementById('connection-state').style.color = '#fc8181';
+}
+
+/**
+ * Fetch entity state with auth error handling
+ */
+async function fetchState(entityId, retryOnAuth = true) {
     try {
         const response = await fetch(`/api/states/${entityId}`, {
             headers: {
@@ -164,6 +259,17 @@ async function fetchState(entityId) {
                 'Content-Type': 'application/json',
             },
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) fetching ${entityId}`);
+            if (retryOnAuth && handleAuthError()) {
+                // Retry with refreshed token
+                return await fetchState(entityId, false);
+            }
+            return null;
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.json();
     } catch (error) {
@@ -173,9 +279,9 @@ async function fetchState(entityId) {
 }
 
 /**
- * Fetch history data
+ * Fetch history data with auth error handling
  */
-async function fetchHistory(entityId, hoursBack = 6) {
+async function fetchHistory(entityId, hoursBack = 6, retryOnAuth = true) {
     try {
         const endTime = new Date();
         const startTime = new Date(endTime.getTime() - hoursBack * 60 * 60 * 1000);
@@ -187,6 +293,16 @@ async function fetchHistory(entityId, hoursBack = 6) {
                 'Content-Type': 'application/json',
             },
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) fetching history for ${entityId}`);
+            if (retryOnAuth && handleAuthError()) {
+                return await fetchHistory(entityId, hoursBack, false);
+            }
+            return [];
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         return data[0] || [];
@@ -267,9 +383,9 @@ async function calculateSessionEnergy(sessionStartTime) {
 }
 
 /**
- * Call Home Assistant service
+ * Call Home Assistant service with auth error handling
  */
-async function callService(domain, service, data = {}) {
+async function callService(domain, service, data = {}, retryOnAuth = true) {
     try {
         const response = await fetch(`/api/services/${domain}/${service}`, {
             method: 'POST',
@@ -279,6 +395,17 @@ async function callService(domain, service, data = {}) {
             },
             body: JSON.stringify(data),
         });
+
+        // Handle 401/403 auth errors
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`Auth error (${response.status}) calling ${domain}.${service}`);
+            if (retryOnAuth && handleAuthError()) {
+                return await callService(domain, service, data, false);
+            }
+            showNotification('Session expired. Please refresh the page.', 'error');
+            return false;
+        }
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         showNotification('Action executed successfully', 'success');
         setTimeout(refreshData, 1000);
@@ -449,6 +576,8 @@ async function updateUI() {
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
+    updateOperatingModeDisplay();
+    updateEnergyDisplay();
     await updateCwuSessionCard();
 
     updateTemperature('temp-cwu', currentData.cwuTemp || attrs.cwu_temp, currentData.cwuTargetTemp || 45, currentData.cwuMinTemp || 35);
@@ -470,6 +599,152 @@ async function updateUI() {
 
     updateActionHistory(attrs.action_history || []);
     updateStateHistory(attrs.state_history || []);
+}
+
+/**
+ * Update operating mode display
+ */
+function updateOperatingModeDisplay() {
+    const attrs = currentData.attributes || {};
+    const mode = attrs.operating_mode || 'broken_heater';
+    const isCheapTariff = attrs.is_cheap_tariff || false;
+    const tariffRate = attrs.current_tariff_rate || 0;
+    const tariffCheapRate = attrs.tariff_cheap_rate || 0.72;
+    const tariffExpensiveRate = attrs.tariff_expensive_rate || 1.16;
+    const isHeatingWindow = attrs.is_cwu_heating_window || false;
+    const winterTarget = attrs.winter_cwu_target;
+    const winterEmergencyThreshold = attrs.winter_cwu_emergency_threshold;
+
+    // Update mode selector
+    const modeSelect = document.getElementById('operating-mode-select');
+    if (modeSelect && modeSelect.value !== mode) {
+        modeSelect.value = mode;
+    }
+
+    // Update tariff status badge
+    const tariffStatus = document.getElementById('tariff-status');
+    if (tariffStatus) {
+        if (isCheapTariff) {
+            tariffStatus.textContent = 'Cheap Tariff';
+            tariffStatus.className = 'badge badge-success';
+        } else {
+            tariffStatus.textContent = 'Expensive Tariff';
+            tariffStatus.className = 'badge badge-warning';
+        }
+    }
+
+    // Update tariff rate
+    const rateEl = document.getElementById('current-tariff-rate');
+    if (rateEl) {
+        rateEl.textContent = tariffRate.toFixed(2);
+    }
+
+    // Update configured tariff rates
+    const cheapRateEl = document.getElementById('tariff-cheap-rate');
+    const expensiveRateEl = document.getElementById('tariff-expensive-rate');
+    if (cheapRateEl) {
+        cheapRateEl.textContent = tariffCheapRate.toFixed(2);
+    }
+    if (expensiveRateEl) {
+        expensiveRateEl.textContent = tariffExpensiveRate.toFixed(2);
+    }
+
+    // Show/hide winter mode specific info
+    const heatingWindowRow = document.getElementById('heating-window-row');
+    const winterTargetRow = document.getElementById('winter-target-row');
+    const winterEmergencyRow = document.getElementById('winter-emergency-row');
+
+    if (mode === 'winter') {
+        if (heatingWindowRow) {
+            heatingWindowRow.style.display = 'flex';
+            const statusEl = document.getElementById('heating-window-status');
+            if (statusEl) {
+                statusEl.textContent = isHeatingWindow ? 'CWU heating window active' : 'Outside heating window';
+                statusEl.style.color = isHeatingWindow ? '#68d391' : '#a0aec0';
+            }
+        }
+        if (winterTargetRow && winterTarget) {
+            winterTargetRow.style.display = 'flex';
+            document.getElementById('winter-cwu-target').textContent = winterTarget.toFixed(1);
+        }
+        if (winterEmergencyRow && winterEmergencyThreshold) {
+            winterEmergencyRow.style.display = 'flex';
+            document.getElementById('winter-emergency-threshold').textContent = winterEmergencyThreshold.toFixed(1);
+        }
+    } else {
+        if (heatingWindowRow) heatingWindowRow.style.display = 'none';
+        if (winterTargetRow) winterTargetRow.style.display = 'none';
+        if (winterEmergencyRow) winterEmergencyRow.style.display = 'none';
+    }
+}
+
+/**
+ * Update energy consumption display
+ */
+function updateEnergyDisplay() {
+    const attrs = currentData.attributes || {};
+
+    // Today - main totals
+    const todayCwu = attrs.energy_today_cwu_kwh || 0;
+    const todayFloor = attrs.energy_today_floor_kwh || 0;
+    const todayTotal = attrs.energy_today_total_kwh || 0;
+    const costToday = attrs.cost_today_estimate || 0;
+
+    // Today - tariff breakdown
+    const todayCwuCheap = attrs.energy_today_cwu_cheap_kwh || 0;
+    const todayCwuExpensive = attrs.energy_today_cwu_expensive_kwh || 0;
+    const todayFloorCheap = attrs.energy_today_floor_cheap_kwh || 0;
+    const todayFloorExpensive = attrs.energy_today_floor_expensive_kwh || 0;
+    const costTodayCwu = attrs.cost_today_cwu_estimate || 0;
+    const costTodayFloor = attrs.cost_today_floor_estimate || 0;
+
+    document.getElementById('energy-today-cwu').textContent = `${todayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-today-cwu-cheap').textContent = `${todayCwuCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-today-cwu-expensive').textContent = `${todayCwuExpensive.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor').textContent = `${todayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor-cheap').textContent = `${todayFloorCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-today-floor-expensive').textContent = `${todayFloorExpensive.toFixed(2)} kWh`;
+    document.getElementById('energy-today-total').textContent = `${todayTotal.toFixed(2)} kWh`;
+    document.getElementById('cost-today').textContent = `~${costToday.toFixed(2)} zł`;
+    document.getElementById('cost-today-cwu').textContent = `~${costTodayCwu.toFixed(2)} zł`;
+    document.getElementById('cost-today-floor').textContent = `~${costTodayFloor.toFixed(2)} zł`;
+
+    // Yesterday - main totals
+    const yesterdayCwu = attrs.energy_yesterday_cwu_kwh || 0;
+    const yesterdayFloor = attrs.energy_yesterday_floor_kwh || 0;
+    const yesterdayTotal = attrs.energy_yesterday_total_kwh || 0;
+    const costYesterday = attrs.cost_yesterday_estimate || 0;
+
+    // Yesterday - tariff breakdown
+    const yesterdayCwuCheap = attrs.energy_yesterday_cwu_cheap_kwh || 0;
+    const yesterdayCwuExpensive = attrs.energy_yesterday_cwu_expensive_kwh || 0;
+    const yesterdayFloorCheap = attrs.energy_yesterday_floor_cheap_kwh || 0;
+    const yesterdayFloorExpensive = attrs.energy_yesterday_floor_expensive_kwh || 0;
+    const costYesterdayCwu = attrs.cost_yesterday_cwu_estimate || 0;
+    const costYesterdayFloor = attrs.cost_yesterday_floor_estimate || 0;
+
+    document.getElementById('energy-yesterday-cwu').textContent = `${yesterdayCwu.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-cwu-cheap').textContent = `${yesterdayCwuCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-cwu-expensive').textContent = `${yesterdayCwuExpensive.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor').textContent = `${yesterdayFloor.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor-cheap').textContent = `${yesterdayFloorCheap.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-floor-expensive').textContent = `${yesterdayFloorExpensive.toFixed(2)} kWh`;
+    document.getElementById('energy-yesterday-total').textContent = `${yesterdayTotal.toFixed(2)} kWh`;
+    document.getElementById('cost-yesterday').textContent = `~${costYesterday.toFixed(2)} zł`;
+    document.getElementById('cost-yesterday-cwu').textContent = `~${costYesterdayCwu.toFixed(2)} zł`;
+    document.getElementById('cost-yesterday-floor').textContent = `~${costYesterdayFloor.toFixed(2)} zł`;
+}
+
+/**
+ * Change operating mode via HA service
+ */
+async function changeOperatingMode(mode) {
+    if (!mode) return;
+
+    const success = await callService('cwu_controller', 'set_mode', { mode: mode });
+    if (success) {
+        showNotification(`Operating mode changed to: ${mode.replace('_', ' ')}`, 'success');
+    }
 }
 
 // Last energy calculation time (to avoid too many API calls)
@@ -937,7 +1212,8 @@ function updateStateHistory(history) {
         const stateClass = item.to_state.includes('cwu') ? 'cwu' :
                           item.to_state.includes('floor') ? 'floor' :
                           item.to_state.includes('pause') ? 'pause' :
-                          item.to_state.includes('emergency') ? 'emergency' : '';
+                          item.to_state.includes('emergency') ? 'emergency' :
+                          item.to_state.includes('safe_mode') ? 'safe_mode' : '';
         const icon = STATE_ICONS[item.to_state] || 'mdi-circle';
 
         return `
@@ -1310,7 +1586,8 @@ function openHistoryModal(type) {
                 const stateClass = item.to_state.includes('cwu') ? 'cwu' :
                                   item.to_state.includes('floor') ? 'floor' :
                                   item.to_state.includes('pause') ? 'pause' :
-                                  item.to_state.includes('emergency') ? 'emergency' : '';
+                                  item.to_state.includes('emergency') ? 'emergency' :
+                                  item.to_state.includes('safe_mode') ? 'safe_mode' : '';
                 const icon = STATE_ICONS[item.to_state] || 'mdi-circle';
                 return `
                     <div class="timeline-item-full ${stateClass}">

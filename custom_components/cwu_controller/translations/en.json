@@ -2,16 +2,17 @@
   "config": {
     "step": {
       "user": {
-        "title": "CWU Controller Setup - Entities",
-        "description": "Configure the entities for CWU Controller. All entities with default values are pre-filled based on your typical setup.",
+        "title": "CWU Controller - Entity Selection",
+        "description": "Configure the entities for CWU Controller. Select your heat pump, thermometers, and other devices.",
         "data": {
-          "cwu_temp_sensor": "CWU Temperature Sensor",
+          "cwu_temp_sensor": "Hot Water (CWU) Temperature Sensor",
           "salon_temp_sensor": "Living Room Temperature Sensor",
           "bedroom_temp_sensor": "Bedroom Temperature Sensor (optional)",
           "kids_room_temp_sensor": "Kids Room Temperature Sensor (optional)",
-          "power_sensor": "Heating Power Consumption Sensor",
+          "power_sensor": "Heat Pump Power Consumption Sensor",
           "water_heater": "Water Heater Entity",
           "climate": "Floor Heating Climate Entity",
+          "workday_sensor": "Workday Sensor (for holiday detection)",
           "notify_service": "Notification Service (e.g., notify.mobile_app_phone)",
           "pump_input_temp": "Heat Pump Input Temperature (optional)",
           "pump_output_temp": "Heat Pump Output Temperature (optional)",
@@ -20,15 +21,18 @@
         }
       },
       "thresholds": {
-        "title": "CWU Controller Setup - Temperature Thresholds",
-        "description": "Set the temperature thresholds for automatic control.",
+        "title": "CWU Controller - Settings",
+        "description": "Configure operating mode, temperature thresholds, and electricity tariff rates.",
         "data": {
+          "operating_mode": "Operating Mode",
           "cwu_target_temp": "CWU Target Temperature",
           "cwu_min_temp": "CWU Minimum Acceptable Temperature",
           "cwu_critical_temp": "CWU Critical Temperature (triggers emergency)",
           "salon_target_temp": "Living Room Target Temperature",
           "salon_min_temp": "Living Room Minimum Temperature",
-          "bedroom_min_temp": "Bedroom Minimum Temperature"
+          "bedroom_min_temp": "Bedroom Minimum Temperature",
+          "tariff_expensive_rate": "Expensive Tariff Rate (G12w peak)",
+          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)"
         }
       }
     },
@@ -43,14 +47,17 @@
     "step": {
       "init": {
         "title": "CWU Controller Options",
-        "description": "Adjust temperature thresholds",
+        "description": "Adjust temperature thresholds and electricity tariff rates. Update tariff rates when your electricity prices change.",
         "data": {
+          "operating_mode": "Operating Mode",
           "cwu_target_temp": "CWU Target Temperature",
           "cwu_min_temp": "CWU Minimum Acceptable Temperature",
           "cwu_critical_temp": "CWU Critical Temperature",
           "salon_target_temp": "Living Room Target Temperature",
           "salon_min_temp": "Living Room Minimum Temperature",
-          "bedroom_min_temp": "Bedroom Minimum Temperature"
+          "bedroom_min_temp": "Bedroom Minimum Temperature",
+          "tariff_expensive_rate": "Expensive Tariff Rate (G12w peak)",
+          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)"
         }
       }
     }
@@ -71,6 +78,24 @@
       },
       "cwu_heating_time": {
         "name": "CWU Heating Time"
+      },
+      "energy_today_cwu": {
+        "name": "CWU Energy Today"
+      },
+      "energy_today_floor": {
+        "name": "Floor Energy Today"
+      },
+      "energy_today_total": {
+        "name": "Total Energy Today"
+      },
+      "cost_today_cwu": {
+        "name": "CWU Cost Today"
+      },
+      "cost_today_floor": {
+        "name": "Floor Cost Today"
+      },
+      "current_tariff_rate": {
+        "name": "Current Tariff Rate"
       }
     },
     "switch": {
@@ -90,6 +115,9 @@
       },
       "manual_override": {
         "name": "Manual Override"
+      },
+      "cheap_tariff": {
+        "name": "Cheap Tariff Active"
       }
     },
     "button": {

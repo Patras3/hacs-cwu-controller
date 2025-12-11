@@ -4,7 +4,15 @@ from typing import Final
 DOMAIN: Final = "cwu_controller"
 MANUFACTURER: Final = "CWU Controller"
 
+# Operating modes
+MODE_BROKEN_HEATER: Final = "broken_heater"
+MODE_WINTER: Final = "winter"
+MODE_SUMMER: Final = "summer"
+
+OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER]
+
 # Configuration keys
+CONF_OPERATING_MODE: Final = "operating_mode"
 CONF_CWU_TEMP_SENSOR: Final = "cwu_temp_sensor"
 CONF_SALON_TEMP_SENSOR: Final = "salon_temp_sensor"
 CONF_BEDROOM_TEMP_SENSOR: Final = "bedroom_temp_sensor"
@@ -17,6 +25,7 @@ CONF_PUMP_INPUT_TEMP: Final = "pump_input_temp"
 CONF_PUMP_OUTPUT_TEMP: Final = "pump_output_temp"
 CONF_CWU_INPUT_TEMP: Final = "cwu_input_temp"
 CONF_FLOOR_INPUT_TEMP: Final = "floor_input_temp"
+CONF_WORKDAY_SENSOR: Final = "workday_sensor"  # binary_sensor.workday_sensor
 
 # Temperature thresholds
 CONF_CWU_TARGET_TEMP: Final = "cwu_target_temp"
@@ -60,6 +69,7 @@ STATE_EMERGENCY_CWU: Final = "emergency_cwu"
 STATE_EMERGENCY_FLOOR: Final = "emergency_floor"
 STATE_FAKE_HEATING_DETECTED: Final = "fake_heating_detected"
 STATE_FAKE_HEATING_RESTARTING: Final = "fake_heating_restarting"
+STATE_SAFE_MODE: Final = "safe_mode"  # Sensors unavailable - heat pump controls everything
 
 # Urgency levels
 URGENCY_NONE: Final = 0
@@ -78,5 +88,40 @@ CLIMATE_OFF: Final = "off"
 CLIMATE_AUTO: Final = "auto"
 CLIMATE_HEAT: Final = "heat"
 
+# Safety: sensor unavailability timeout (minutes)
+CWU_SENSOR_UNAVAILABLE_TIMEOUT: Final = 60  # Enter safe mode if CWU temp unavailable for this long
+
 # Update interval
 UPDATE_INTERVAL: Final = 60  # seconds
+
+# G12w Tariff configuration (Energa 2025)
+# Cheap hours: 13:00-15:00, 22:00-06:00, weekends, and public holidays
+# Note: Rates can be updated via UI configuration
+CONF_TARIFF_EXPENSIVE_RATE: Final = "tariff_expensive_rate"
+CONF_TARIFF_CHEAP_RATE: Final = "tariff_cheap_rate"
+
+# Default tariff rates (as of January 2025)
+TARIFF_EXPENSIVE_RATE: Final = 1.16  # zł/kWh (0.62 energy + 0.54 distribution)
+TARIFF_CHEAP_RATE: Final = 0.72  # zł/kWh (0.57 energy + 0.15 distribution)
+
+# Cheap tariff time windows (weekdays only - weekends are always cheap)
+TARIFF_CHEAP_WINDOWS: Final = [
+    (13, 15),  # 13:00 - 15:00
+    (22, 24),  # 22:00 - 24:00
+    (0, 6),    # 00:00 - 06:00
+]
+
+# Holiday detection - use workday sensor (binary_sensor.workday_sensor from python-holidays)
+# The workday sensor handles all Polish holidays dynamically including Easter-dependent ones
+
+# Winter mode specific settings
+WINTER_CWU_HEATING_WINDOWS: Final = [
+    (3, 6),    # 03:00 - 06:00 (cheap tariff)
+    (13, 15),  # 13:00 - 15:00 (cheap tariff)
+    (22, 24),  # 22:00 - 24:00 (cheap tariff, after kids bath, before adults)
+]
+WINTER_CWU_TARGET_OFFSET: Final = 5.0  # Additional degrees above configured target
+WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below target - this offset
+WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
+WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progress (3h)
+WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
