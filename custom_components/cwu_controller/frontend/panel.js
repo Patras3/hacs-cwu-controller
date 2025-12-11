@@ -1,8 +1,10 @@
 /**
- * CWU Controller Panel JavaScript v4.2
+ * CWU Controller Panel JavaScript v4.4
  * Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.1: Added tariff breakdown display (cheap/expensive rates and energy)
  * v4.2: Added token expiration handling with auto-refresh and user-friendly error banner
+ * v4.3: Added safe_mode state support for sensor unavailability/disabled scenarios
+ * v4.4: Added winter mode emergency threshold display
  */
 
 // Configuration
@@ -57,6 +59,7 @@ const STATE_ICONS = {
     'emergency_floor': 'mdi-home-alert',
     'fake_heating_detected': 'mdi-alert-circle',
     'fake_heating_restarting': 'mdi-refresh-circle',
+    'safe_mode': 'mdi-shield-check',
 };
 
 const STATE_CLASSES = {
@@ -67,6 +70,7 @@ const STATE_CLASSES = {
     'fake_heating_detected': 'state-emergency',
     'fake_heating_restarting': 'state-heating-cwu',
     'pause': 'state-pause',
+    'safe_mode': 'state-safe-mode',
 };
 
 const STATE_DESCRIPTIONS = {
@@ -78,6 +82,7 @@ const STATE_DESCRIPTIONS = {
     'emergency_floor': 'Emergency! Room temperature critically low (<19°C)',
     'fake_heating_detected': 'Fake heating detected - waiting before restart',
     'fake_heating_restarting': 'Restarting CWU heating after fake heating recovery',
+    'safe_mode': 'Safe mode - heat pump controls both CWU and floor (sensor unavailable or disabled)',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -114,7 +119,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v3.0 initializing...');
+    console.log('CWU Controller Panel v4.4 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
@@ -608,6 +613,7 @@ function updateOperatingModeDisplay() {
     const tariffExpensiveRate = attrs.tariff_expensive_rate || 1.16;
     const isHeatingWindow = attrs.is_cwu_heating_window || false;
     const winterTarget = attrs.winter_cwu_target;
+    const winterEmergencyThreshold = attrs.winter_cwu_emergency_threshold;
 
     // Update mode selector
     const modeSelect = document.getElementById('operating-mode-select');
@@ -646,6 +652,7 @@ function updateOperatingModeDisplay() {
     // Show/hide winter mode specific info
     const heatingWindowRow = document.getElementById('heating-window-row');
     const winterTargetRow = document.getElementById('winter-target-row');
+    const winterEmergencyRow = document.getElementById('winter-emergency-row');
 
     if (mode === 'winter') {
         if (heatingWindowRow) {
@@ -660,9 +667,14 @@ function updateOperatingModeDisplay() {
             winterTargetRow.style.display = 'flex';
             document.getElementById('winter-cwu-target').textContent = winterTarget.toFixed(1);
         }
+        if (winterEmergencyRow && winterEmergencyThreshold) {
+            winterEmergencyRow.style.display = 'flex';
+            document.getElementById('winter-emergency-threshold').textContent = winterEmergencyThreshold.toFixed(1);
+        }
     } else {
         if (heatingWindowRow) heatingWindowRow.style.display = 'none';
         if (winterTargetRow) winterTargetRow.style.display = 'none';
+        if (winterEmergencyRow) winterEmergencyRow.style.display = 'none';
     }
 }
 
@@ -1200,7 +1212,8 @@ function updateStateHistory(history) {
         const stateClass = item.to_state.includes('cwu') ? 'cwu' :
                           item.to_state.includes('floor') ? 'floor' :
                           item.to_state.includes('pause') ? 'pause' :
-                          item.to_state.includes('emergency') ? 'emergency' : '';
+                          item.to_state.includes('emergency') ? 'emergency' :
+                          item.to_state.includes('safe_mode') ? 'safe_mode' : '';
         const icon = STATE_ICONS[item.to_state] || 'mdi-circle';
 
         return `
@@ -1573,7 +1586,8 @@ function openHistoryModal(type) {
                 const stateClass = item.to_state.includes('cwu') ? 'cwu' :
                                   item.to_state.includes('floor') ? 'floor' :
                                   item.to_state.includes('pause') ? 'pause' :
-                                  item.to_state.includes('emergency') ? 'emergency' : '';
+                                  item.to_state.includes('emergency') ? 'emergency' :
+                                  item.to_state.includes('safe_mode') ? 'safe_mode' : '';
                 const icon = STATE_ICONS[item.to_state] || 'mdi-circle';
                 return `
                     <div class="timeline-item-full ${stateClass}">

@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=5.1.0">
+    <link rel="stylesheet" href="styles.css?v=5.2.0">
 </head>
 <body>
     <div class="container">
@@ -139,6 +139,10 @@
                         <div class="tariff-row" id="winter-target-row" style="display: none;">
                             <span class="mdi mdi-target"></span>
                             <span>Winter target: <strong id="winter-cwu-target">--</strong>°C</span>
+                        </div>
+                        <div class="tariff-row" id="winter-emergency-row" style="display: none;">
+                            <span class="mdi mdi-alert-circle-outline"></span>
+                            <span>Emergency below: <strong id="winter-emergency-threshold">--</strong>°C</span>
                         </div>
                     </div>
                 </div>
@@ -779,6 +783,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=4.2.0"></script>
+    <script src="panel.js?v=4.4.0"></script>
 </body>
 </html>

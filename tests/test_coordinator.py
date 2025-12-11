@@ -383,3 +383,66 @@ class TestCWUCycleManagement:
         """Test pause is complete when no pause started."""
         mock_coordinator._pause_start = None
         assert mock_coordinator._is_pause_complete() is True
+
+
+class TestWinterModeNoProgress:
+    """Tests for winter mode CWU no-progress safety check."""
+
+    def test_no_progress_check_no_heating_start(self, mock_coordinator):
+        """Test no progress check returns False when no heating started."""
+        mock_coordinator._cwu_heating_start = None
+        assert mock_coordinator._check_winter_cwu_no_progress(40.0) is False
+
+    def test_no_progress_check_no_session_start_temp(self, mock_coordinator):
+        """Test no progress check returns False when no session start temp."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = None
+        assert mock_coordinator._check_winter_cwu_no_progress(40.0) is False
+
+    def test_no_progress_check_none_current_temp(self, mock_coordinator):
+        """Test no progress check returns False when current temp is None."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 38.0
+        assert mock_coordinator._check_winter_cwu_no_progress(None) is False
+
+    def test_no_progress_check_within_timeout(self, mock_coordinator):
+        """Test no progress check returns False within timeout period."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=2)
+        mock_coordinator._cwu_session_start_temp = 38.0
+        # Even with no temp increase, should return False (not enough time)
+        assert mock_coordinator._check_winter_cwu_no_progress(38.0) is False
+
+    def test_no_progress_detected_temp_decreased(self, mock_coordinator):
+        """Test no progress detected when temp decreased after timeout."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 40.0
+        # Temp went down
+        assert mock_coordinator._check_winter_cwu_no_progress(38.0) is True
+
+    def test_no_progress_detected_temp_same(self, mock_coordinator):
+        """Test no progress detected when temp unchanged after timeout."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 40.0
+        # Temp same
+        assert mock_coordinator._check_winter_cwu_no_progress(40.0) is True
+
+    def test_no_progress_detected_minimal_increase(self, mock_coordinator):
+        """Test no progress detected when temp increase is below threshold."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 40.0
+        # Temp increased by 0.5, but threshold is 1.0
+        assert mock_coordinator._check_winter_cwu_no_progress(40.5) is True
+
+    def test_progress_ok_above_threshold(self, mock_coordinator):
+        """Test progress OK when temp increased above threshold."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 40.0
+        # Temp increased by 2.0, threshold is 1.0
+        assert mock_coordinator._check_winter_cwu_no_progress(42.0) is False
+
+    def test_progress_ok_exactly_threshold(self, mock_coordinator):
+        """Test progress OK when temp increased exactly at threshold."""
+        mock_coordinator._cwu_heating_start = datetime.now() - timedelta(hours=4)
+        mock_coordinator._cwu_session_start_temp = 40.0
+        # Temp increased by exactly 1.0
+        assert mock_coordinator._check_winter_cwu_no_progress(41.0) is False

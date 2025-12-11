@@ -69,6 +69,7 @@ STATE_EMERGENCY_CWU: Final = "emergency_cwu"
 STATE_EMERGENCY_FLOOR: Final = "emergency_floor"
 STATE_FAKE_HEATING_DETECTED: Final = "fake_heating_detected"
 STATE_FAKE_HEATING_RESTARTING: Final = "fake_heating_restarting"
+STATE_SAFE_MODE: Final = "safe_mode"  # Sensors unavailable - heat pump controls everything
 
 # Urgency levels
 URGENCY_NONE: Final = 0
@@ -86,6 +87,9 @@ WH_MODE_PERFORMANCE: Final = "performance"
 CLIMATE_OFF: Final = "off"
 CLIMATE_AUTO: Final = "auto"
 CLIMATE_HEAT: Final = "heat"
+
+# Safety: sensor unavailability timeout (minutes)
+CWU_SENSOR_UNAVAILABLE_TIMEOUT: Final = 60  # Enter safe mode if CWU temp unavailable for this long
 
 # Update interval
 UPDATE_INTERVAL: Final = 60  # seconds
@@ -119,3 +123,5 @@ WINTER_CWU_HEATING_WINDOWS: Final = [
 WINTER_CWU_TARGET_OFFSET: Final = 5.0  # Additional degrees above configured target
 WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below target - this offset
 WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
+WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progress (3h)
+WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
