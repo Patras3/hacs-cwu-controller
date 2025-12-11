@@ -1,10 +1,8 @@
 /**
- * CWU Controller Panel JavaScript v4.4
- * Redesigned with compact state bar, mode selector, and integrated cycle timer
- * v4.1: Added tariff breakdown display (cheap/expensive rates and energy)
- * v4.2: Added token expiration handling with auto-refresh and user-friendly error banner
- * v4.3: Added safe_mode state support for sensor unavailability/disabled scenarios
- * v4.4: Added winter mode emergency threshold display
+ * CWU Controller Panel JavaScript v6.0
+ * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
+ * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
+ * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
  */
 
 // Configuration
@@ -119,7 +117,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v4.4 initializing...');
+    console.log('CWU Controller Panel v6.0 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
