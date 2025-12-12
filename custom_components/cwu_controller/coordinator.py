@@ -9,7 +9,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.helpers.storage import Store
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EVENT_HOMEASSISTANT_STOP
 from homeassistant.components.water_heater import SERVICE_SET_OPERATION_MODE
 from homeassistant.components.climate import SERVICE_TURN_ON, SERVICE_TURN_OFF
 
@@ -74,6 +75,11 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Storage configuration
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{DOMAIN}_energy_data"
+ENERGY_SAVE_INTERVAL = 300  # Save every 5 minutes
 
 
 class CWUControllerCoordinator(DataUpdateCoordinator):
@@ -143,6 +149,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._last_power_for_energy: float = 0.0
         self._last_daily_report_date: datetime | None = None
 
+        # Persistence - data will be loaded async after init
+        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._last_energy_save: datetime | None = None
+        self._energy_data_loaded: bool = False
+
+        # Register shutdown handler to save data
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_save_on_shutdown)
+
     @property
     def current_state(self) -> str:
         """Return current controller state."""
@@ -201,6 +215,110 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "total_cheap": (self._energy_cwu_cheap_yesterday + self._energy_floor_cheap_yesterday) / 1000,
             "total_expensive": (self._energy_cwu_expensive_yesterday + self._energy_floor_expensive_yesterday) / 1000,
         }
+
+    async def async_load_energy_data(self) -> None:
+        """Load persisted energy data from storage."""
+        try:
+            data = await self._store.async_load()
+            if data is None:
+                _LOGGER.info("No stored energy data found, starting fresh")
+                self._energy_data_loaded = True
+                return
+
+            # Get stored date to check for day rollover
+            stored_date_str = data.get("date")
+            today = datetime.now().date()
+
+            if stored_date_str:
+                stored_date = datetime.fromisoformat(stored_date_str).date()
+
+                if stored_date == today:
+                    # Same day - restore today's values
+                    self._energy_cwu_cheap_today = data.get("cwu_cheap_today", 0.0)
+                    self._energy_cwu_expensive_today = data.get("cwu_expensive_today", 0.0)
+                    self._energy_floor_cheap_today = data.get("floor_cheap_today", 0.0)
+                    self._energy_floor_expensive_today = data.get("floor_expensive_today", 0.0)
+                    self._energy_cwu_cheap_yesterday = data.get("cwu_cheap_yesterday", 0.0)
+                    self._energy_cwu_expensive_yesterday = data.get("cwu_expensive_yesterday", 0.0)
+                    self._energy_floor_cheap_yesterday = data.get("floor_cheap_yesterday", 0.0)
+                    self._energy_floor_expensive_yesterday = data.get("floor_expensive_yesterday", 0.0)
+                    _LOGGER.info(
+                        "Loaded energy data for today: CWU %.2f kWh, Floor %.2f kWh",
+                        self.energy_today["cwu"],
+                        self.energy_today["floor"]
+                    )
+                elif stored_date == today - timedelta(days=1):
+                    # Stored data is from yesterday - move to yesterday, reset today
+                    self._energy_cwu_cheap_yesterday = data.get("cwu_cheap_today", 0.0)
+                    self._energy_cwu_expensive_yesterday = data.get("cwu_expensive_today", 0.0)
+                    self._energy_floor_cheap_yesterday = data.get("floor_cheap_today", 0.0)
+                    self._energy_floor_expensive_yesterday = data.get("floor_expensive_today", 0.0)
+                    # Today starts fresh
+                    self._energy_cwu_cheap_today = 0.0
+                    self._energy_cwu_expensive_today = 0.0
+                    self._energy_floor_cheap_today = 0.0
+                    self._energy_floor_expensive_today = 0.0
+                    _LOGGER.info(
+                        "Day changed since last save. Yesterday: CWU %.2f kWh, Floor %.2f kWh",
+                        self.energy_yesterday["cwu"],
+                        self.energy_yesterday["floor"]
+                    )
+                else:
+                    # Data is older than yesterday - reset everything
+                    _LOGGER.info("Stored energy data is too old (%s), starting fresh", stored_date)
+
+            # Restore daily report date if available
+            report_date_str = data.get("last_daily_report_date")
+            if report_date_str:
+                self._last_daily_report_date = datetime.fromisoformat(report_date_str)
+
+            self._energy_data_loaded = True
+
+        except Exception as e:
+            _LOGGER.error("Failed to load energy data: %s", e)
+            self._energy_data_loaded = True  # Mark as loaded to prevent blocking
+
+    async def async_save_energy_data(self) -> None:
+        """Save energy data to persistent storage."""
+        try:
+            data = {
+                "date": datetime.now().date().isoformat(),
+                "cwu_cheap_today": self._energy_cwu_cheap_today,
+                "cwu_expensive_today": self._energy_cwu_expensive_today,
+                "floor_cheap_today": self._energy_floor_cheap_today,
+                "floor_expensive_today": self._energy_floor_expensive_today,
+                "cwu_cheap_yesterday": self._energy_cwu_cheap_yesterday,
+                "cwu_expensive_yesterday": self._energy_cwu_expensive_yesterday,
+                "floor_cheap_yesterday": self._energy_floor_cheap_yesterday,
+                "floor_expensive_yesterday": self._energy_floor_expensive_yesterday,
+                "last_daily_report_date": self._last_daily_report_date.isoformat() if self._last_daily_report_date else None,
+            }
+            await self._store.async_save(data)
+            self._last_energy_save = datetime.now()
+            _LOGGER.debug(
+                "Energy data saved: CWU %.2f kWh, Floor %.2f kWh",
+                self.energy_today["cwu"],
+                self.energy_today["floor"]
+            )
+        except Exception as e:
+            _LOGGER.error("Failed to save energy data: %s", e)
+
+    async def _async_save_on_shutdown(self, event) -> None:
+        """Save energy data when Home Assistant is stopping."""
+        _LOGGER.info("Home Assistant stopping - saving energy data...")
+        await self.async_save_energy_data()
+
+    async def _maybe_save_energy_data(self) -> None:
+        """Save energy data if enough time has passed since last save."""
+        now = datetime.now()
+        if self._last_energy_save is None:
+            # First save after startup
+            await self.async_save_energy_data()
+            return
+
+        seconds_since_save = (now - self._last_energy_save).total_seconds()
+        if seconds_since_save >= ENERGY_SAVE_INTERVAL:
+            await self.async_save_energy_data()
 
     def get_tariff_cheap_rate(self) -> float:
         """Get configured cheap tariff rate (zł/kWh)."""
@@ -601,6 +719,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     cwu_yesterday,
                     floor_yesterday
                 )
+                # Force immediate save after day rollover
+                self._last_energy_save = None
 
         if power is None or self._last_energy_update is None:
             self._last_energy_update = now
@@ -825,6 +945,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Update energy tracking
         self._update_energy_tracking(power)
+
+        # Periodically save energy data (every 5 minutes)
+        await self._maybe_save_energy_data()
 
         # Check for daily report
         await self._check_and_send_daily_report()
