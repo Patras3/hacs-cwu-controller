@@ -32,12 +32,14 @@ from .const import (
     CONF_WORKDAY_SENSOR,
     CONF_TARIFF_EXPENSIVE_RATE,
     CONF_TARIFF_CHEAP_RATE,
+    CONF_ENERGY_SENSOR,
     DEFAULT_CWU_TARGET_TEMP,
     DEFAULT_CWU_MIN_TEMP,
     DEFAULT_CWU_CRITICAL_TEMP,
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    DEFAULT_ENERGY_SENSOR,
     TARIFF_EXPENSIVE_RATE,
     TARIFF_CHEAP_RATE,
     MODE_BROKEN_HEATER,
@@ -78,6 +80,7 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_BEDROOM_TEMP_SENSOR: "sensor.temperatura_govee_sypialnia",
             CONF_KIDS_ROOM_TEMP_SENSOR: "sensor.temperatura_govee_dzieciecy",
             CONF_POWER_SENSOR: "sensor.ogrzewanie_total_system_power",
+            CONF_ENERGY_SENSOR: DEFAULT_ENERGY_SENSOR,
             CONF_WATER_HEATER: "water_heater.pompa_ciepla_io_13873843_2",
             CONF_CLIMATE: "climate.pompa_ciepla_dom",
             CONF_NOTIFY_SERVICE: "notify.mobile_app_patryk_s22_ultra",
@@ -103,6 +106,9 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Required(CONF_POWER_SENSOR, default=defaults[CONF_POWER_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="power")
+            ),
+            vol.Optional(CONF_ENERGY_SENSOR, default=defaults[CONF_ENERGY_SENSOR]): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="energy")
             ),
             vol.Required(CONF_WATER_HEATER, default=defaults[CONF_WATER_HEATER]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="water_heater")

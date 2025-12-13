@@ -72,6 +72,10 @@ from .const import (
     WINTER_CWU_MAX_TEMP,
     WINTER_CWU_NO_PROGRESS_TIMEOUT,
     WINTER_CWU_MIN_TEMP_INCREASE,
+    # Energy tracking
+    CONF_ENERGY_SENSOR,
+    DEFAULT_ENERGY_SENSOR,
+    ENERGY_TRACKING_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -136,17 +140,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Operating mode
         self._operating_mode: str = config.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)
 
-        # Energy tracking (Wh accumulated) - split by tariff type
+        # Energy tracking (kWh accumulated) - split by tariff type
+        # Today's accumulated energy
         self._energy_cwu_cheap_today: float = 0.0
         self._energy_cwu_expensive_today: float = 0.0
         self._energy_floor_cheap_today: float = 0.0
         self._energy_floor_expensive_today: float = 0.0
+        # Yesterday's accumulated energy
         self._energy_cwu_cheap_yesterday: float = 0.0
         self._energy_cwu_expensive_yesterday: float = 0.0
         self._energy_floor_cheap_yesterday: float = 0.0
         self._energy_floor_expensive_yesterday: float = 0.0
-        self._last_energy_update: datetime | None = None
-        self._last_power_for_energy: float = 0.0
+
+        # Energy meter tracking state (for delta calculation)
+        self._last_meter_reading: float | None = None  # Last energy meter value (kWh)
+        self._last_meter_time: datetime | None = None  # When we took the last reading
+        self._last_meter_state: str | None = None  # Controller state at last reading
+        self._last_meter_tariff_cheap: bool | None = None  # Was it cheap tariff at last reading
+        self._meter_tracking_date: datetime | None = None  # Date of current tracking period
+
         self._last_daily_report_date: datetime | None = None
 
         # Persistence - data will be loaded async after init
@@ -188,15 +200,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         cwu_total = self._energy_cwu_cheap_today + self._energy_cwu_expensive_today
         floor_total = self._energy_floor_cheap_today + self._energy_floor_expensive_today
         return {
-            "cwu": cwu_total / 1000,
-            "cwu_cheap": self._energy_cwu_cheap_today / 1000,
-            "cwu_expensive": self._energy_cwu_expensive_today / 1000,
-            "floor": floor_total / 1000,
-            "floor_cheap": self._energy_floor_cheap_today / 1000,
-            "floor_expensive": self._energy_floor_expensive_today / 1000,
-            "total": (cwu_total + floor_total) / 1000,
-            "total_cheap": (self._energy_cwu_cheap_today + self._energy_floor_cheap_today) / 1000,
-            "total_expensive": (self._energy_cwu_expensive_today + self._energy_floor_expensive_today) / 1000,
+            "cwu": cwu_total,
+            "cwu_cheap": self._energy_cwu_cheap_today,
+            "cwu_expensive": self._energy_cwu_expensive_today,
+            "floor": floor_total,
+            "floor_cheap": self._energy_floor_cheap_today,
+            "floor_expensive": self._energy_floor_expensive_today,
+            "total": cwu_total + floor_total,
+            "total_cheap": self._energy_cwu_cheap_today + self._energy_floor_cheap_today,
+            "total_expensive": self._energy_cwu_expensive_today + self._energy_floor_expensive_today,
         }
 
     @property
@@ -205,19 +217,26 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         cwu_total = self._energy_cwu_cheap_yesterday + self._energy_cwu_expensive_yesterday
         floor_total = self._energy_floor_cheap_yesterday + self._energy_floor_expensive_yesterday
         return {
-            "cwu": cwu_total / 1000,
-            "cwu_cheap": self._energy_cwu_cheap_yesterday / 1000,
-            "cwu_expensive": self._energy_cwu_expensive_yesterday / 1000,
-            "floor": floor_total / 1000,
-            "floor_cheap": self._energy_floor_cheap_yesterday / 1000,
-            "floor_expensive": self._energy_floor_expensive_yesterday / 1000,
-            "total": (cwu_total + floor_total) / 1000,
-            "total_cheap": (self._energy_cwu_cheap_yesterday + self._energy_floor_cheap_yesterday) / 1000,
-            "total_expensive": (self._energy_cwu_expensive_yesterday + self._energy_floor_expensive_yesterday) / 1000,
+            "cwu": cwu_total,
+            "cwu_cheap": self._energy_cwu_cheap_yesterday,
+            "cwu_expensive": self._energy_cwu_expensive_yesterday,
+            "floor": floor_total,
+            "floor_cheap": self._energy_floor_cheap_yesterday,
+            "floor_expensive": self._energy_floor_expensive_yesterday,
+            "total": cwu_total + floor_total,
+            "total_cheap": self._energy_cwu_cheap_yesterday + self._energy_floor_cheap_yesterday,
+            "total_expensive": self._energy_cwu_expensive_yesterday + self._energy_floor_expensive_yesterday,
         }
 
     async def async_load_energy_data(self) -> None:
-        """Load persisted energy data from storage."""
+        """Load persisted energy data from storage.
+
+        Handles multiple scenarios:
+        1. Same day restart: restore all values including meter tracking state
+        2. Day changed since last save: move today's data to yesterday, reset today
+        3. Data older than yesterday: start completely fresh
+        4. Handle gap energy on restart based on state continuity
+        """
         try:
             data = await self._store.async_load()
             if data is None:
@@ -267,6 +286,27 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     # Data is older than yesterday - reset everything
                     _LOGGER.info("Stored energy data is too old (%s), starting fresh", stored_date)
 
+            # Restore meter tracking state for gap energy calculation on restart
+            # This allows us to attribute energy consumed during shutdown
+            last_meter = data.get("last_meter_reading")
+            if last_meter is not None:
+                self._last_meter_reading = last_meter
+            last_meter_time_str = data.get("last_meter_time")
+            if last_meter_time_str:
+                self._last_meter_time = datetime.fromisoformat(last_meter_time_str)
+            self._last_meter_state = data.get("last_meter_state")
+            self._last_meter_tariff_cheap = data.get("last_meter_tariff_cheap")
+            meter_date_str = data.get("meter_tracking_date")
+            if meter_date_str:
+                self._meter_tracking_date = datetime.fromisoformat(meter_date_str)
+
+            _LOGGER.debug(
+                "Loaded meter tracking state: reading=%.3f, state=%s, cheap=%s",
+                self._last_meter_reading or 0,
+                self._last_meter_state,
+                self._last_meter_tariff_cheap
+            )
+
             # Restore daily report date if available
             report_date_str = data.get("last_daily_report_date")
             if report_date_str:
@@ -279,26 +319,43 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._energy_data_loaded = True  # Mark as loaded to prevent blocking
 
     async def async_save_energy_data(self) -> None:
-        """Save energy data to persistent storage."""
+        """Save energy data to persistent storage.
+
+        Saves:
+        - Accumulated energy by type and tariff
+        - Meter tracking state for restart gap calculation
+        - Daily report date
+        """
         try:
             data = {
+                # Date for day rollover detection
                 "date": datetime.now().date().isoformat(),
+                # Today's accumulated energy (kWh)
                 "cwu_cheap_today": self._energy_cwu_cheap_today,
                 "cwu_expensive_today": self._energy_cwu_expensive_today,
                 "floor_cheap_today": self._energy_floor_cheap_today,
                 "floor_expensive_today": self._energy_floor_expensive_today,
+                # Yesterday's accumulated energy (kWh)
                 "cwu_cheap_yesterday": self._energy_cwu_cheap_yesterday,
                 "cwu_expensive_yesterday": self._energy_cwu_expensive_yesterday,
                 "floor_cheap_yesterday": self._energy_floor_cheap_yesterday,
                 "floor_expensive_yesterday": self._energy_floor_expensive_yesterday,
+                # Meter tracking state for restart gap calculation
+                "last_meter_reading": self._last_meter_reading,
+                "last_meter_time": self._last_meter_time.isoformat() if self._last_meter_time else None,
+                "last_meter_state": self._last_meter_state,
+                "last_meter_tariff_cheap": self._last_meter_tariff_cheap,
+                "meter_tracking_date": self._meter_tracking_date.isoformat() if self._meter_tracking_date else None,
+                # Daily report tracking
                 "last_daily_report_date": self._last_daily_report_date.isoformat() if self._last_daily_report_date else None,
             }
             await self._store.async_save(data)
             self._last_energy_save = datetime.now()
             _LOGGER.debug(
-                "Energy data saved: CWU %.2f kWh, Floor %.2f kWh",
+                "Energy data saved: CWU %.3f kWh, Floor %.3f kWh, Meter %.3f kWh",
                 self.energy_today["cwu"],
-                self.energy_today["floor"]
+                self.energy_today["floor"],
+                self._last_meter_reading or 0
             )
         except Exception as e:
             _LOGGER.error("Failed to save energy data: %s", e)
@@ -690,67 +747,231 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._cleanup_old_history()
             _LOGGER.info("CWU Controller state: %s -> %s", self._previous_state, new_state)
 
+    def _get_energy_meter_value(self) -> float | None:
+        """Get current value from energy meter sensor (kWh)."""
+        energy_sensor = self.config.get(CONF_ENERGY_SENSOR, DEFAULT_ENERGY_SENSOR)
+        return self._get_sensor_value(energy_sensor)
+
+    def _is_heating_state(self, state: str | None) -> bool:
+        """Check if given state is an active heating state."""
+        if state is None:
+            return False
+        return state in (
+            STATE_HEATING_CWU, STATE_EMERGENCY_CWU,
+            STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING,
+            STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR,
+            STATE_SAFE_MODE  # Safe mode also heats
+        )
+
+    def _is_cwu_state(self, state: str | None) -> bool:
+        """Check if given state is a CWU heating state."""
+        if state is None:
+            return False
+        return state in (
+            STATE_HEATING_CWU, STATE_EMERGENCY_CWU,
+            STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING
+        )
+
+    def _is_floor_state(self, state: str | None) -> bool:
+        """Check if given state is a floor heating state."""
+        if state is None:
+            return False
+        return state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR)
+
+    def _attribute_energy(self, kwh: float, state: str, is_cheap: bool) -> None:
+        """Attribute energy consumption to the appropriate counter.
+
+        Args:
+            kwh: Energy in kWh to attribute
+            state: Controller state that consumed this energy
+            is_cheap: Whether this was during cheap tariff
+        """
+        if kwh <= 0:
+            return
+
+        if self._is_cwu_state(state):
+            if is_cheap:
+                self._energy_cwu_cheap_today += kwh
+            else:
+                self._energy_cwu_expensive_today += kwh
+            _LOGGER.debug(
+                "Attributed %.4f kWh to CWU (%s tariff)",
+                kwh, "cheap" if is_cheap else "expensive"
+            )
+        elif self._is_floor_state(state):
+            if is_cheap:
+                self._energy_floor_cheap_today += kwh
+            else:
+                self._energy_floor_expensive_today += kwh
+            _LOGGER.debug(
+                "Attributed %.4f kWh to Floor (%s tariff)",
+                kwh, "cheap" if is_cheap else "expensive"
+            )
+        elif state == STATE_SAFE_MODE:
+            # Safe mode - split 50/50 between CWU and floor (both are on)
+            half_kwh = kwh / 2
+            if is_cheap:
+                self._energy_cwu_cheap_today += half_kwh
+                self._energy_floor_cheap_today += half_kwh
+            else:
+                self._energy_cwu_expensive_today += half_kwh
+                self._energy_floor_expensive_today += half_kwh
+            _LOGGER.debug(
+                "Attributed %.4f kWh to Safe Mode (50/50 split, %s tariff)",
+                kwh, "cheap" if is_cheap else "expensive"
+            )
+
+    def _handle_day_rollover(self, now: datetime) -> bool:
+        """Handle day rollover for energy tracking.
+
+        Returns True if day rollover occurred.
+        """
+        if self._meter_tracking_date is None:
+            self._meter_tracking_date = now
+            return False
+
+        if now.date() != self._meter_tracking_date.date():
+            # New day - move today's stats to yesterday and reset
+            self._energy_cwu_cheap_yesterday = self._energy_cwu_cheap_today
+            self._energy_cwu_expensive_yesterday = self._energy_cwu_expensive_today
+            self._energy_floor_cheap_yesterday = self._energy_floor_cheap_today
+            self._energy_floor_expensive_yesterday = self._energy_floor_expensive_today
+            self._energy_cwu_cheap_today = 0.0
+            self._energy_cwu_expensive_today = 0.0
+            self._energy_floor_cheap_today = 0.0
+            self._energy_floor_expensive_today = 0.0
+
+            _LOGGER.info(
+                "Energy tracking day rollover - Yesterday CWU: %.2f kWh, Floor: %.2f kWh",
+                self.energy_yesterday["cwu"],
+                self.energy_yesterday["floor"]
+            )
+            # Force immediate save after day rollover
+            self._last_energy_save = None
+            self._meter_tracking_date = now
+            return True
+
+        return False
+
     def _update_energy_tracking(self, power: float | None) -> None:
-        """Update energy consumption tracking with tariff separation.
+        """Update energy consumption tracking using energy meter delta.
+
+        Uses the total energy meter sensor to calculate actual consumption.
+        This is more accurate than integrating power readings because:
+        1. Energy meter is already integrated by the device
+        2. No accumulation of rounding errors
+        3. Works even if some updates are missed
 
         Tracks energy separately for:
-        - CWU cheap/expensive
-        - Floor cheap/expensive
+        - CWU cheap/expensive tariff
+        - Floor cheap/expensive tariff
+
+        Handles:
+        - Day rollover (midnight)
+        - State changes (only attribute when state is consistent)
+        - Restart gaps (attribute if state matches)
+        - Meter resets/anomalies (detect and skip)
         """
         now = datetime.now()
 
-        # Check for day rollover (midnight)
-        if self._last_energy_update is not None:
-            if now.date() != self._last_energy_update.date():
-                # New day - move today's stats to yesterday and reset
-                self._energy_cwu_cheap_yesterday = self._energy_cwu_cheap_today
-                self._energy_cwu_expensive_yesterday = self._energy_cwu_expensive_today
-                self._energy_floor_cheap_yesterday = self._energy_floor_cheap_today
-                self._energy_floor_expensive_yesterday = self._energy_floor_expensive_today
-                self._energy_cwu_cheap_today = 0.0
-                self._energy_cwu_expensive_today = 0.0
-                self._energy_floor_cheap_today = 0.0
-                self._energy_floor_expensive_today = 0.0
+        # Handle day rollover
+        self._handle_day_rollover(now)
 
-                cwu_yesterday = (self._energy_cwu_cheap_yesterday + self._energy_cwu_expensive_yesterday) / 1000
-                floor_yesterday = (self._energy_floor_cheap_yesterday + self._energy_floor_expensive_yesterday) / 1000
-                _LOGGER.info(
-                    "Energy tracking day rollover - Yesterday CWU: %.2f kWh, Floor: %.2f kWh",
-                    cwu_yesterday,
-                    floor_yesterday
-                )
-                # Force immediate save after day rollover
-                self._last_energy_save = None
-
-        if power is None or self._last_energy_update is None:
-            self._last_energy_update = now
-            self._last_power_for_energy = power or 0.0
+        # Get current energy meter reading
+        current_meter = self._get_energy_meter_value()
+        if current_meter is None:
+            _LOGGER.debug("Energy meter unavailable, skipping tracking")
             return
-
-        # Calculate Wh consumed since last update
-        hours_elapsed = (now - self._last_energy_update).total_seconds() / 3600
-        avg_power = (power + self._last_power_for_energy) / 2
-        wh_consumed = avg_power * hours_elapsed
 
         # Determine current tariff
         is_cheap = self.is_cheap_tariff(now)
+        current_state = self._current_state
 
-        # Attribute to CWU or Floor based on current state and tariff
-        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU,
-                                   STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING):
-            if is_cheap:
-                self._energy_cwu_cheap_today += wh_consumed
-            else:
-                self._energy_cwu_expensive_today += wh_consumed
-        elif self._current_state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR):
-            if is_cheap:
-                self._energy_floor_cheap_today += wh_consumed
-            else:
-                self._energy_floor_expensive_today += wh_consumed
-        # PAUSE and IDLE states don't accumulate significant energy
+        # First reading ever - just store and return
+        if self._last_meter_reading is None:
+            self._last_meter_reading = current_meter
+            self._last_meter_time = now
+            self._last_meter_state = current_state
+            self._last_meter_tariff_cheap = is_cheap
+            _LOGGER.info(
+                "Energy meter tracking initialized: %.3f kWh, state=%s",
+                current_meter, current_state
+            )
+            return
 
-        self._last_energy_update = now
-        self._last_power_for_energy = power
+        # Calculate delta since last reading
+        delta_kwh = current_meter - self._last_meter_reading
+
+        # Sanity checks
+        if delta_kwh < 0:
+            # Meter went backwards - possible reset or sensor error
+            _LOGGER.warning(
+                "Energy meter went backwards (%.3f -> %.3f), resetting tracking",
+                self._last_meter_reading, current_meter
+            )
+            self._last_meter_reading = current_meter
+            self._last_meter_time = now
+            self._last_meter_state = current_state
+            self._last_meter_tariff_cheap = is_cheap
+            return
+
+        if delta_kwh > 10.0:  # More than 10 kWh in one interval is suspicious
+            time_diff = (now - self._last_meter_time).total_seconds() / 3600 if self._last_meter_time else 0
+            _LOGGER.warning(
+                "Unusually large energy delta: %.3f kWh in %.2f hours. "
+                "This might indicate a meter issue or long gap. Skipping attribution.",
+                delta_kwh, time_diff
+            )
+            self._last_meter_reading = current_meter
+            self._last_meter_time = now
+            self._last_meter_state = current_state
+            self._last_meter_tariff_cheap = is_cheap
+            return
+
+        # Attribute energy based on state consistency
+        if delta_kwh > 0:
+            # Check if state is consistent (same as last reading)
+            if self._is_heating_state(current_state):
+                if current_state == self._last_meter_state:
+                    # State is consistent - attribute all delta to this state
+                    # Use current tariff for attribution (more accurate than averaging)
+                    self._attribute_energy(delta_kwh, current_state, is_cheap)
+                elif self._last_meter_state is None:
+                    # First attribution after startup - use current state
+                    self._attribute_energy(delta_kwh, current_state, is_cheap)
+                else:
+                    # State changed since last reading
+                    # We could try to split, but for simplicity we attribute to current state
+                    # since most energy is typically consumed at the end of heating
+                    _LOGGER.debug(
+                        "State changed (%s -> %s) during tracking interval, "
+                        "attributing %.4f kWh to current state",
+                        self._last_meter_state, current_state, delta_kwh
+                    )
+                    self._attribute_energy(delta_kwh, current_state, is_cheap)
+            else:
+                # Not in heating state - check if we were heating before
+                if self._is_heating_state(self._last_meter_state):
+                    # Just stopped heating - attribute remaining delta to previous state
+                    # Use previous tariff since energy was consumed then
+                    prev_cheap = self._last_meter_tariff_cheap if self._last_meter_tariff_cheap is not None else is_cheap
+                    _LOGGER.debug(
+                        "Heating stopped, attributing final %.4f kWh to %s",
+                        delta_kwh, self._last_meter_state
+                    )
+                    self._attribute_energy(delta_kwh, self._last_meter_state, prev_cheap)
+                else:
+                    # Idle delta - this is standby power, don't attribute to heating
+                    _LOGGER.debug(
+                        "Idle energy delta: %.4f kWh (standby power, not attributed)",
+                        delta_kwh
+                    )
+
+        # Update tracking state
+        self._last_meter_reading = current_meter
+        self._last_meter_time = now
+        self._last_meter_state = current_state
+        self._last_meter_tariff_cheap = is_cheap
 
     async def _check_and_send_daily_report(self) -> None:
         """Check if it's time to send daily report and send it."""

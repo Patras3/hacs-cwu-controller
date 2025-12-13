@@ -144,6 +144,8 @@ from custom_components.cwu_controller.const import (
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    CONF_ENERGY_SENSOR,
+    DEFAULT_ENERGY_SENSOR,
 )
 
 
