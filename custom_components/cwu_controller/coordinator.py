@@ -76,6 +76,7 @@ from .const import (
     CONF_ENERGY_SENSOR,
     DEFAULT_ENERGY_SENSOR,
     ENERGY_TRACKING_INTERVAL,
+    ENERGY_DELTA_ANOMALY_THRESHOLD,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -853,7 +854,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         return False
 
-    def _update_energy_tracking(self, power: float | None) -> None:
+    def _update_energy_tracking(self) -> None:
         """Update energy consumption tracking using energy meter delta.
 
         Uses the total energy meter sensor to calculate actual consumption.
@@ -871,7 +872,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         - State changes (only attribute when state is consistent)
         - Restart gaps (attribute if state matches)
         - Meter resets/anomalies (detect and skip)
+
+        Called every UPDATE_INTERVAL (60 seconds) by the coordinator.
         """
+        # Safety check: don't track energy until persisted data is loaded
+        # This prevents double-counting if _async_update_data runs before load completes
+        if not self._energy_data_loaded:
+            _LOGGER.debug("Energy tracking skipped - waiting for persisted data to load")
+            return
+
         now = datetime.now()
 
         # Handle day rollover
@@ -915,12 +924,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._last_meter_tariff_cheap = is_cheap
             return
 
-        if delta_kwh > 10.0:  # More than 10 kWh in one interval is suspicious
+        if delta_kwh > ENERGY_DELTA_ANOMALY_THRESHOLD:
             time_diff = (now - self._last_meter_time).total_seconds() / 3600 if self._last_meter_time else 0
             _LOGGER.warning(
-                "Unusually large energy delta: %.3f kWh in %.2f hours. "
+                "Unusually large energy delta: %.3f kWh in %.2f hours (threshold: %.1f kWh). "
                 "This might indicate a meter issue or long gap. Skipping attribution.",
-                delta_kwh, time_diff
+                delta_kwh, time_diff, ENERGY_DELTA_ANOMALY_THRESHOLD
             )
             self._last_meter_reading = current_meter
             self._last_meter_time = now
@@ -1165,7 +1174,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             fake_heating = self._detect_fake_heating(power, wh_state)
 
         # Update energy tracking
-        self._update_energy_tracking(power)
+        self._update_energy_tracking()
 
         # Periodically save energy data (every 5 minutes)
         await self._maybe_save_energy_data()
