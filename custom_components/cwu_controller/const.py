@@ -27,6 +27,14 @@ CONF_CWU_INPUT_TEMP: Final = "cwu_input_temp"
 CONF_FLOOR_INPUT_TEMP: Final = "floor_input_temp"
 CONF_WORKDAY_SENSOR: Final = "workday_sensor"  # binary_sensor.workday_sensor
 
+# Energy meter sensor for accurate energy tracking
+CONF_ENERGY_SENSOR: Final = "energy_sensor"
+DEFAULT_ENERGY_SENSOR: Final = "sensor.ogrzewanie_total_active_energy"
+
+# Energy tracking intervals and thresholds
+ENERGY_TRACKING_INTERVAL: Final = 60  # seconds - how often to check energy meter
+ENERGY_DELTA_ANOMALY_THRESHOLD: Final = 10.0  # kWh - skip deltas larger than this (likely meter issue)
+
 # Temperature thresholds
 CONF_CWU_TARGET_TEMP: Final = "cwu_target_temp"
 CONF_CWU_MIN_TEMP: Final = "cwu_min_temp"

@@ -95,15 +95,36 @@ mock_update_coordinator = MagicMock()
 mock_update_coordinator.DataUpdateCoordinator = MockDataUpdateCoordinator
 mock_update_coordinator.CoordinatorEntity = type("CoordinatorEntity", (), {"__init__": lambda self, coord: None})
 
+# Create mock Store class for persistence
+class MockStore:
+    """Mock Store for testing persistence."""
+    def __init__(self, hass, version, key):
+        self.hass = hass
+        self.version = version
+        self.key = key
+        self._data = None
+
+    async def async_load(self):
+        return self._data
+
+    async def async_save(self, data):
+        self._data = data
+
+
+mock_storage = MagicMock()
+mock_storage.Store = MockStore
+
 # Set all mocks
 sys.modules["homeassistant"] = MagicMock()
 sys.modules["homeassistant.core"] = MagicMock()
 sys.modules["homeassistant.config_entries"] = MagicMock()
 sys.modules["homeassistant.const"] = mock_ha_const
+sys.modules["homeassistant.const"].EVENT_HOMEASSISTANT_STOP = "homeassistant_stop"
 sys.modules["homeassistant.helpers"] = MagicMock()
 sys.modules["homeassistant.helpers.update_coordinator"] = mock_update_coordinator
 sys.modules["homeassistant.helpers.entity_platform"] = MagicMock()
 sys.modules["homeassistant.helpers.event"] = MagicMock()
+sys.modules["homeassistant.helpers.storage"] = mock_storage
 sys.modules["homeassistant.components"] = MagicMock()
 sys.modules["homeassistant.components.frontend"] = MagicMock()
 sys.modules["homeassistant.components.http"] = MagicMock()
@@ -123,6 +144,8 @@ from custom_components.cwu_controller.const import (
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    CONF_ENERGY_SENSOR,
+    DEFAULT_ENERGY_SENSOR,
 )
 
 
@@ -133,6 +156,8 @@ def mock_hass():
     hass.states = MagicMock()
     hass.services = MagicMock()
     hass.services.async_call = AsyncMock()
+    hass.bus = MagicMock()
+    hass.bus.async_listen_once = MagicMock(return_value=lambda: None)
     return hass
 
 

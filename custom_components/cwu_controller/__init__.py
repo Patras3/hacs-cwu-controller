@@ -44,6 +44,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up CWU Controller from a config entry."""
     coordinator = CWUControllerCoordinator(hass, dict(entry.data))
 
+    # Load persisted energy data before first refresh
+    await coordinator.async_load_energy_data()
+
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
@@ -74,6 +77,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Save energy data before unloading
+    coordinator: CWUControllerCoordinator = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator:
+        _LOGGER.info("Saving energy data before unloading CWU Controller...")
+        await coordinator.async_save_energy_data()
+
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 

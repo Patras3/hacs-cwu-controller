@@ -170,20 +170,20 @@ class TestFloorUrgencyCalculation:
 
 
 class TestEnergyTracking:
-    """Tests for energy consumption tracking with tariff separation."""
+    """Tests for energy consumption tracking with meter delta and tariff separation."""
 
     def test_energy_today_property(self, mock_coordinator):
-        """Test energy_today property returns correct values with tariff split."""
-        mock_coordinator._energy_cwu_cheap_today = 1000.0  # Wh
-        mock_coordinator._energy_cwu_expensive_today = 500.0  # Wh
-        mock_coordinator._energy_floor_cheap_today = 2000.0  # Wh
-        mock_coordinator._energy_floor_expensive_today = 500.0  # Wh
+        """Test energy_today property returns correct values in kWh."""
+        mock_coordinator._energy_cwu_cheap_today = 1.0  # kWh
+        mock_coordinator._energy_cwu_expensive_today = 0.5  # kWh
+        mock_coordinator._energy_floor_cheap_today = 2.0  # kWh
+        mock_coordinator._energy_floor_expensive_today = 0.5  # kWh
 
         energy = mock_coordinator.energy_today
-        assert energy["cwu"] == 1.5  # kWh (1000 + 500 Wh)
+        assert energy["cwu"] == 1.5  # kWh
         assert energy["cwu_cheap"] == 1.0  # kWh
         assert energy["cwu_expensive"] == 0.5  # kWh
-        assert energy["floor"] == 2.5  # kWh (2000 + 500 Wh)
+        assert energy["floor"] == 2.5  # kWh
         assert energy["floor_cheap"] == 2.0  # kWh
         assert energy["floor_expensive"] == 0.5  # kWh
         assert energy["total"] == 4.0  # kWh
@@ -191,11 +191,11 @@ class TestEnergyTracking:
         assert energy["total_expensive"] == 1.0  # kWh
 
     def test_energy_yesterday_property(self, mock_coordinator):
-        """Test energy_yesterday property returns correct values with tariff split."""
-        mock_coordinator._energy_cwu_cheap_yesterday = 2000.0  # Wh
-        mock_coordinator._energy_cwu_expensive_yesterday = 1000.0  # Wh
-        mock_coordinator._energy_floor_cheap_yesterday = 4000.0  # Wh
-        mock_coordinator._energy_floor_expensive_yesterday = 1000.0  # Wh
+        """Test energy_yesterday property returns correct values in kWh."""
+        mock_coordinator._energy_cwu_cheap_yesterday = 2.0  # kWh
+        mock_coordinator._energy_cwu_expensive_yesterday = 1.0  # kWh
+        mock_coordinator._energy_floor_cheap_yesterday = 4.0  # kWh
+        mock_coordinator._energy_floor_expensive_yesterday = 1.0  # kWh
 
         energy = mock_coordinator.energy_yesterday
         assert energy["cwu"] == 3.0  # kWh
@@ -206,50 +206,85 @@ class TestEnergyTracking:
         assert energy["floor_expensive"] == 1.0  # kWh
         assert energy["total"] == 8.0  # kWh
 
+    def test_energy_tracking_initialization(self, mock_coordinator):
+        """Test first energy meter reading initializes tracking."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = None
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # First reading should just initialize
+        assert mock_coordinator._last_meter_reading == 100.0
+        assert mock_coordinator._last_meter_state == STATE_HEATING_CWU
+        assert mock_coordinator._last_meter_tariff_cheap is True
+        # No energy should be attributed on first reading
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+
     def test_energy_tracking_cwu_state(self, mock_coordinator):
         """Test energy tracking attributes to CWU during CWU heating."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
         mock_coordinator._current_state = STATE_HEATING_CWU
-        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._last_power_for_energy = 1000.0
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
 
-        mock_coordinator._update_energy_tracking(1000.0)
+        # Meter increased by 0.5 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
 
-        # 1000W for ~10 minutes = ~166 Wh
-        cwu_total = mock_coordinator._energy_cwu_cheap_today + mock_coordinator._energy_cwu_expensive_today
-        floor_total = mock_coordinator._energy_floor_cheap_today + mock_coordinator._energy_floor_expensive_today
-        assert cwu_total > 0
-        assert floor_total == 0
+        # 0.5 kWh should go to CWU
+        assert mock_coordinator._energy_cwu_cheap_today == 0.5
+        assert mock_coordinator._energy_cwu_expensive_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_expensive_today == 0.0
 
     def test_energy_tracking_floor_state(self, mock_coordinator):
         """Test energy tracking attributes to floor during floor heating."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
         mock_coordinator._current_state = STATE_HEATING_FLOOR
-        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._last_power_for_energy = 1000.0
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_FLOOR
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
 
-        mock_coordinator._update_energy_tracking(1000.0)
+        # Meter increased by 0.3 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.3):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
 
-        # Energy should go to floor
-        cwu_total = mock_coordinator._energy_cwu_cheap_today + mock_coordinator._energy_cwu_expensive_today
-        floor_total = mock_coordinator._energy_floor_cheap_today + mock_coordinator._energy_floor_expensive_today
-        assert cwu_total == 0
-        assert floor_total > 0
+        # 0.3 kWh should go to Floor
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == pytest.approx(0.3)
 
     def test_energy_tracking_day_rollover(self, mock_coordinator):
         """Test energy tracking day rollover moves data to yesterday."""
-        mock_coordinator._energy_cwu_cheap_today = 3000.0
-        mock_coordinator._energy_cwu_expensive_today = 2000.0
-        mock_coordinator._energy_floor_cheap_today = 2000.0
-        mock_coordinator._energy_floor_expensive_today = 1000.0
-        mock_coordinator._last_energy_update = datetime.now() - timedelta(days=1)
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._energy_cwu_cheap_today = 3.0  # kWh
+        mock_coordinator._energy_cwu_expensive_today = 2.0
+        mock_coordinator._energy_floor_cheap_today = 2.0
+        mock_coordinator._energy_floor_expensive_today = 1.0
+        mock_coordinator._meter_tracking_date = datetime.now() - timedelta(days=1)
         mock_coordinator._current_state = STATE_IDLE
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_state = STATE_IDLE
 
-        mock_coordinator._update_energy_tracking(100.0)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
 
         # Yesterday should have previous today's values
-        assert mock_coordinator._energy_cwu_cheap_yesterday == 3000.0
-        assert mock_coordinator._energy_cwu_expensive_yesterday == 2000.0
-        assert mock_coordinator._energy_floor_cheap_yesterday == 2000.0
-        assert mock_coordinator._energy_floor_expensive_yesterday == 1000.0
+        assert mock_coordinator._energy_cwu_cheap_yesterday == 3.0
+        assert mock_coordinator._energy_cwu_expensive_yesterday == 2.0
+        assert mock_coordinator._energy_floor_cheap_yesterday == 2.0
+        assert mock_coordinator._energy_floor_expensive_yesterday == 1.0
         # Today should be reset
         assert mock_coordinator._energy_cwu_cheap_today == 0.0
         assert mock_coordinator._energy_cwu_expensive_today == 0.0
@@ -258,31 +293,183 @@ class TestEnergyTracking:
 
     def test_energy_tracking_cheap_tariff(self, mock_coordinator):
         """Test energy goes to cheap bucket during cheap tariff."""
-        from unittest.mock import patch
-
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
         mock_coordinator._current_state = STATE_HEATING_CWU
-        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._last_power_for_energy = 1000.0
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
 
-        with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-            mock_coordinator._update_energy_tracking(1000.0)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
 
-        assert mock_coordinator._energy_cwu_cheap_today > 0
-        assert mock_coordinator._energy_cwu_expensive_today == 0
+        assert mock_coordinator._energy_cwu_cheap_today == 0.5
+        assert mock_coordinator._energy_cwu_expensive_today == 0.0
 
     def test_energy_tracking_expensive_tariff(self, mock_coordinator):
         """Test energy goes to expensive bucket during expensive tariff."""
-        from unittest.mock import patch
-
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
         mock_coordinator._current_state = STATE_HEATING_CWU
-        mock_coordinator._last_energy_update = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._last_power_for_energy = 1000.0
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_tariff_cheap = False
+        mock_coordinator._meter_tracking_date = datetime.now()
 
-        with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
-            mock_coordinator._update_energy_tracking(1000.0)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
+                mock_coordinator._update_energy_tracking()
 
-        assert mock_coordinator._energy_cwu_cheap_today == 0
-        assert mock_coordinator._energy_cwu_expensive_today > 0
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_cwu_expensive_today == 0.5
+
+    def test_energy_tracking_state_changed(self, mock_coordinator):
+        """Test energy attribution when state changes during interval."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_FLOOR  # Was floor, now CWU
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # Energy should go to current state (CWU)
+        assert mock_coordinator._energy_cwu_cheap_today == 0.5
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+
+    def test_energy_tracking_heating_stopped(self, mock_coordinator):
+        """Test energy attribution when heating just stopped."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_IDLE  # Now idle
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU  # Was heating CWU
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.2):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # Energy should go to previous state (CWU) since we just stopped
+        assert mock_coordinator._energy_cwu_cheap_today == pytest.approx(0.2)
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+
+    def test_energy_tracking_idle_standby(self, mock_coordinator):
+        """Test standby energy is not attributed to heating."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_IDLE
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_IDLE  # Was also idle
+        mock_coordinator._last_meter_tariff_cheap = True
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.05):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # Standby energy should not be attributed
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+
+    def test_energy_tracking_meter_backwards(self, mock_coordinator):
+        """Test handling of meter going backwards (reset/error)."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        # Meter went backwards
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=50.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # No energy attributed, tracking reset
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._last_meter_reading == 50.0
+
+    def test_energy_tracking_large_delta_skipped(self, mock_coordinator):
+        """Test unusually large delta is skipped (anomaly detection)."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._last_meter_time = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._last_meter_state = STATE_HEATING_CWU
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        # 15 kWh in one interval is suspicious
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=115.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # Large delta should be skipped
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._last_meter_reading == 115.0
+
+    def test_energy_tracking_meter_unavailable(self, mock_coordinator):
+        """Test handling of unavailable meter sensor."""
+        mock_coordinator._energy_data_loaded = True  # Enable energy tracking
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=None):
+            mock_coordinator._update_energy_tracking()
+
+        # Nothing should change
+        assert mock_coordinator._last_meter_reading == 100.0
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+
+    def test_energy_tracking_skipped_before_data_loaded(self, mock_coordinator):
+        """Test energy tracking is skipped until persisted data is loaded."""
+        mock_coordinator._energy_data_loaded = False
+        mock_coordinator._current_state = STATE_HEATING_CWU
+        mock_coordinator._last_meter_reading = 100.0
+        mock_coordinator._meter_tracking_date = datetime.now()
+
+        # Even with valid meter reading, tracking should be skipped
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                mock_coordinator._update_energy_tracking()
+
+        # Nothing should change - tracking was skipped
+        assert mock_coordinator._last_meter_reading == 100.0
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+
+    def test_is_heating_state_helper(self, mock_coordinator):
+        """Test _is_heating_state helper method."""
+        assert mock_coordinator._is_heating_state(STATE_HEATING_CWU) is True
+        assert mock_coordinator._is_heating_state(STATE_HEATING_FLOOR) is True
+        assert mock_coordinator._is_heating_state(STATE_EMERGENCY_CWU) is True
+        assert mock_coordinator._is_heating_state(STATE_EMERGENCY_FLOOR) is True
+        assert mock_coordinator._is_heating_state(STATE_IDLE) is False
+        assert mock_coordinator._is_heating_state(STATE_PAUSE) is False
+        assert mock_coordinator._is_heating_state(None) is False
+
+    def test_is_cwu_state_helper(self, mock_coordinator):
+        """Test _is_cwu_state helper method."""
+        assert mock_coordinator._is_cwu_state(STATE_HEATING_CWU) is True
+        assert mock_coordinator._is_cwu_state(STATE_EMERGENCY_CWU) is True
+        assert mock_coordinator._is_cwu_state(STATE_HEATING_FLOOR) is False
+        assert mock_coordinator._is_cwu_state(STATE_IDLE) is False
+        assert mock_coordinator._is_cwu_state(None) is False
+
+    def test_is_floor_state_helper(self, mock_coordinator):
+        """Test _is_floor_state helper method."""
+        assert mock_coordinator._is_floor_state(STATE_HEATING_FLOOR) is True
+        assert mock_coordinator._is_floor_state(STATE_EMERGENCY_FLOOR) is True
+        assert mock_coordinator._is_floor_state(STATE_HEATING_CWU) is False
+        assert mock_coordinator._is_floor_state(STATE_IDLE) is False
+        assert mock_coordinator._is_floor_state(None) is False
 
 
 class TestStateManagement:
@@ -446,3 +633,195 @@ class TestWinterModeNoProgress:
         mock_coordinator._cwu_session_start_temp = 40.0
         # Temp increased by exactly 1.0
         assert mock_coordinator._check_winter_cwu_no_progress(41.0) is False
+
+
+class TestEnergyPersistence:
+    """Tests for energy data persistence (load/save)."""
+
+    @pytest.mark.asyncio
+    async def test_load_no_stored_data(self, mock_coordinator):
+        """Test load when no stored data exists."""
+        mock_coordinator._store._data = None
+
+        await mock_coordinator.async_load_energy_data()
+
+        assert mock_coordinator._energy_data_loaded is True
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+
+    @pytest.mark.asyncio
+    async def test_load_same_day_restores_data(self, mock_coordinator):
+        """Test load restores data when stored from same day."""
+        today = datetime.now().date().isoformat()
+        mock_coordinator._store._data = {
+            "date": today,
+            "cwu_cheap_today": 2.5,
+            "cwu_expensive_today": 1.0,
+            "floor_cheap_today": 3.0,
+            "floor_expensive_today": 0.5,
+            "cwu_cheap_yesterday": 4.0,
+            "cwu_expensive_yesterday": 2.0,
+            "floor_cheap_yesterday": 5.0,
+            "floor_expensive_yesterday": 1.0,
+            "last_meter_reading": 150.0,
+            "last_meter_state": STATE_HEATING_CWU,
+            "last_meter_tariff_cheap": True,
+        }
+
+        await mock_coordinator.async_load_energy_data()
+
+        assert mock_coordinator._energy_data_loaded is True
+        assert mock_coordinator._energy_cwu_cheap_today == 2.5
+        assert mock_coordinator._energy_cwu_expensive_today == 1.0
+        assert mock_coordinator._energy_floor_cheap_today == 3.0
+        assert mock_coordinator._energy_floor_expensive_today == 0.5
+        assert mock_coordinator._energy_cwu_cheap_yesterday == 4.0
+        assert mock_coordinator._energy_floor_cheap_yesterday == 5.0
+        assert mock_coordinator._last_meter_reading == 150.0
+        assert mock_coordinator._last_meter_state == STATE_HEATING_CWU
+
+    @pytest.mark.asyncio
+    async def test_load_yesterday_data_moves_to_yesterday(self, mock_coordinator):
+        """Test load from yesterday moves today's data to yesterday."""
+        yesterday = (datetime.now() - timedelta(days=1)).date().isoformat()
+        mock_coordinator._store._data = {
+            "date": yesterday,
+            "cwu_cheap_today": 5.0,
+            "cwu_expensive_today": 2.0,
+            "floor_cheap_today": 6.0,
+            "floor_expensive_today": 1.5,
+        }
+
+        await mock_coordinator.async_load_energy_data()
+
+        assert mock_coordinator._energy_data_loaded is True
+        # Yesterday's "today" should become today's "yesterday"
+        assert mock_coordinator._energy_cwu_cheap_yesterday == 5.0
+        assert mock_coordinator._energy_cwu_expensive_yesterday == 2.0
+        assert mock_coordinator._energy_floor_cheap_yesterday == 6.0
+        assert mock_coordinator._energy_floor_expensive_yesterday == 1.5
+        # Today should be reset
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_cwu_expensive_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_expensive_today == 0.0
+
+    @pytest.mark.asyncio
+    async def test_load_old_data_starts_fresh(self, mock_coordinator):
+        """Test load from older than yesterday starts fresh."""
+        old_date = (datetime.now() - timedelta(days=3)).date().isoformat()
+        mock_coordinator._store._data = {
+            "date": old_date,
+            "cwu_cheap_today": 10.0,
+            "cwu_expensive_today": 5.0,
+            "floor_cheap_today": 12.0,
+            "floor_expensive_today": 3.0,
+        }
+
+        await mock_coordinator.async_load_energy_data()
+
+        assert mock_coordinator._energy_data_loaded is True
+        # Old data should be ignored - all values should be default (0)
+        assert mock_coordinator._energy_cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_cwu_expensive_today == 0.0
+        assert mock_coordinator._energy_floor_cheap_today == 0.0
+        assert mock_coordinator._energy_floor_expensive_today == 0.0
+        assert mock_coordinator._energy_cwu_cheap_yesterday == 0.0
+        assert mock_coordinator._energy_floor_cheap_yesterday == 0.0
+
+    @pytest.mark.asyncio
+    async def test_save_stores_all_data(self, mock_coordinator):
+        """Test save stores all energy tracking data."""
+        mock_coordinator._energy_cwu_cheap_today = 3.5
+        mock_coordinator._energy_cwu_expensive_today = 1.5
+        mock_coordinator._energy_floor_cheap_today = 4.0
+        mock_coordinator._energy_floor_expensive_today = 0.8
+        mock_coordinator._energy_cwu_cheap_yesterday = 5.0
+        mock_coordinator._energy_cwu_expensive_yesterday = 2.0
+        mock_coordinator._energy_floor_cheap_yesterday = 6.0
+        mock_coordinator._energy_floor_expensive_yesterday = 1.2
+        mock_coordinator._last_meter_reading = 200.0
+        mock_coordinator._last_meter_time = datetime.now()
+        mock_coordinator._last_meter_state = STATE_HEATING_FLOOR
+        mock_coordinator._last_meter_tariff_cheap = False
+
+        await mock_coordinator.async_save_energy_data()
+
+        saved = mock_coordinator._store._data
+        assert saved is not None
+        assert saved["cwu_cheap_today"] == 3.5
+        assert saved["cwu_expensive_today"] == 1.5
+        assert saved["floor_cheap_today"] == 4.0
+        assert saved["floor_expensive_today"] == 0.8
+        assert saved["cwu_cheap_yesterday"] == 5.0
+        assert saved["floor_cheap_yesterday"] == 6.0
+        assert saved["last_meter_reading"] == 200.0
+        assert saved["last_meter_state"] == STATE_HEATING_FLOOR
+        assert saved["last_meter_tariff_cheap"] is False
+        assert "date" in saved
+
+    @pytest.mark.asyncio
+    async def test_save_updates_last_save_time(self, mock_coordinator):
+        """Test save updates the last save timestamp."""
+        assert mock_coordinator._last_energy_save is None
+
+        await mock_coordinator.async_save_energy_data()
+
+        assert mock_coordinator._last_energy_save is not None
+
+    @pytest.mark.asyncio
+    async def test_maybe_save_first_call_saves(self, mock_coordinator):
+        """Test _maybe_save_energy_data saves on first call."""
+        mock_coordinator._last_energy_save = None
+
+        await mock_coordinator._maybe_save_energy_data()
+
+        # Should have saved
+        assert mock_coordinator._last_energy_save is not None
+        assert mock_coordinator._store._data is not None
+
+    @pytest.mark.asyncio
+    async def test_maybe_save_skips_if_recent(self, mock_coordinator):
+        """Test _maybe_save_energy_data skips if saved recently."""
+        mock_coordinator._last_energy_save = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._store._data = None  # Clear to check if save was called
+
+        await mock_coordinator._maybe_save_energy_data()
+
+        # Should not have saved (only 60s elapsed, threshold is 300s)
+        assert mock_coordinator._store._data is None
+
+    @pytest.mark.asyncio
+    async def test_maybe_save_saves_after_interval(self, mock_coordinator):
+        """Test _maybe_save_energy_data saves after ENERGY_SAVE_INTERVAL."""
+        mock_coordinator._last_energy_save = datetime.now() - timedelta(seconds=400)
+
+        await mock_coordinator._maybe_save_energy_data()
+
+        # Should have saved (400s > 300s threshold)
+        assert mock_coordinator._store._data is not None
+
+    @pytest.mark.asyncio
+    async def test_load_restores_meter_tracking_state(self, mock_coordinator):
+        """Test load restores meter tracking state for gap calculation."""
+        today = datetime.now().date().isoformat()
+        meter_time = (datetime.now() - timedelta(minutes=30)).isoformat()
+        mock_coordinator._store._data = {
+            "date": today,
+            "cwu_cheap_today": 1.0,
+            "cwu_expensive_today": 0.0,
+            "floor_cheap_today": 0.0,
+            "floor_expensive_today": 0.0,
+            "last_meter_reading": 175.5,
+            "last_meter_time": meter_time,
+            "last_meter_state": STATE_HEATING_CWU,
+            "last_meter_tariff_cheap": True,
+            "meter_tracking_date": datetime.now().isoformat(),
+        }
+
+        await mock_coordinator.async_load_energy_data()
+
+        assert mock_coordinator._last_meter_reading == 175.5
+        assert mock_coordinator._last_meter_time is not None
+        assert mock_coordinator._last_meter_state == STATE_HEATING_CWU
+        assert mock_coordinator._last_meter_tariff_cheap is True
