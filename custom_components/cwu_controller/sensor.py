@@ -118,15 +118,32 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             # Winter mode specific
             "winter_cwu_target": data.get("winter_cwu_target"),
             "winter_cwu_emergency_threshold": data.get("winter_cwu_emergency_threshold"),
-            # Energy tracking
+            # Energy tracking - totals
             "energy_today_cwu_kwh": data.get("energy_today_cwu_kwh"),
             "energy_today_floor_kwh": data.get("energy_today_floor_kwh"),
             "energy_today_total_kwh": data.get("energy_today_total_kwh"),
             "energy_yesterday_cwu_kwh": data.get("energy_yesterday_cwu_kwh"),
             "energy_yesterday_floor_kwh": data.get("energy_yesterday_floor_kwh"),
             "energy_yesterday_total_kwh": data.get("energy_yesterday_total_kwh"),
+            # Energy tracking - tariff breakdown (cheap/expensive)
+            "energy_today_cwu_cheap_kwh": data.get("energy_today_cwu_cheap_kwh"),
+            "energy_today_cwu_expensive_kwh": data.get("energy_today_cwu_expensive_kwh"),
+            "energy_today_floor_cheap_kwh": data.get("energy_today_floor_cheap_kwh"),
+            "energy_today_floor_expensive_kwh": data.get("energy_today_floor_expensive_kwh"),
+            "energy_yesterday_cwu_cheap_kwh": data.get("energy_yesterday_cwu_cheap_kwh"),
+            "energy_yesterday_cwu_expensive_kwh": data.get("energy_yesterday_cwu_expensive_kwh"),
+            "energy_yesterday_floor_cheap_kwh": data.get("energy_yesterday_floor_cheap_kwh"),
+            "energy_yesterday_floor_expensive_kwh": data.get("energy_yesterday_floor_expensive_kwh"),
+            # Cost estimates - total and breakdown
             "cost_today_estimate": data.get("cost_today_estimate"),
+            "cost_today_cwu_estimate": data.get("cost_today_cwu_estimate"),
+            "cost_today_floor_estimate": data.get("cost_today_floor_estimate"),
             "cost_yesterday_estimate": data.get("cost_yesterday_estimate"),
+            "cost_yesterday_cwu_estimate": data.get("cost_yesterday_cwu_estimate"),
+            "cost_yesterday_floor_estimate": data.get("cost_yesterday_floor_estimate"),
+            # Tariff rates
+            "tariff_cheap_rate": data.get("tariff_cheap_rate"),
+            "tariff_expensive_rate": data.get("tariff_expensive_rate"),
         }
 
 
