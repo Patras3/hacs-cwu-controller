@@ -106,58 +106,126 @@ Godzina 13:30, wartość = +2.0 kWh
 
 ## Algorytm decyzyjny
 
-### Podstawowy algorytm grzania z PV
+### Filozofia: Sloty czasowe z priorytetami
+
+**Problem z prostym podejściem "tania taryfa = grzej":**
+W weekendy i święta cały dzień jest tania taryfa. Prosty algorytm zacząłby grzać o północy,
+ale to nieoptymalne - lepiej poczekać na PV które da DARMOWĄ energię (a nie tylko tanią).
+
+**Rozwiązanie: System slotów czasowych**
+
+| Slot | Godziny | Priorytet | Opis |
+|------|---------|-----------|------|
+| **PV dzienny** | 08:00 - 18:00 | 🥇 Najwyższy | Czekamy na darmową energię z PV |
+| **Taryfowy wieczorny** | 18:00 - 24:00 | 🥈 Średni | Fallback jeśli PV nie wystarczyło |
+| **Taryfowy nocny** | 00:00 - 08:00 | 🥉 Niski | Tylko gdy woda zimna (< 40°C) |
+
+### Główny algorytm z uwzględnieniem slotów
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           SUMMER MODE - GŁÓWNY ALGORYTM                      │
+│                    SUMMER MODE - ALGORYTM ZE SLOTAMI                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  1. CWU < CRITICAL_TEMP (35°C)?                                             │
-│     └── TAK → GRZEJ NATYCHMIAST (emergency_cwu)                             │
-│              (niezależnie od wszystkiego - bezpieczeństwo)                  │
+│  1. EMERGENCY CHECK (zawsze pierwszy)                                        │
+│     CWU < CRITICAL_TEMP (35°C)?                                             │
+│     └── TAK → GRZEJ NATYCHMIAST (niezależnie od slotu)                      │
 │                                                                              │
-│  2. CWU >= TARGET_TEMP (50°C)?                                              │
-│     └── TAK → STOP/IDLE (woda nagrzana)                                     │
+│  2. TARGET CHECK                                                             │
+│     CWU >= TARGET_TEMP (50°C)?                                              │
+│     └── TAK → IDLE (woda nagrzana, nic nie rób)                             │
 │                                                                              │
-│  3. Czy jest produkcja PV?                                                  │
-│     (inverter_moc_czynna > 500W)                                            │
+│  3. OKREŚL AKTUALNY SLOT                                                     │
 │     │                                                                        │
-│     ├── TAK → Sprawdź algorytm bilansowania (sekcja 4)                      │
+│     ├── 08:00 - 18:00 → SLOT_PV                                             │
+│     │   └── Priorytet: PV > taryfa (ale taryfa jako backup)                 │
 │     │                                                                        │
-│     └── NIE → Czy jest okno taniej taryfy?                                  │
-│               (13:00-15:00, 22:00-06:00, weekendy)                           │
-│               │                                                              │
-│               ├── TAK → CWU < TARGET? → GRZEJ                               │
-│               │                                                              │
-│               └── NIE → IDLE (czekaj na PV lub tanie okno)                  │
+│     ├── 18:00 - 24:00 → SLOT_EVENING                                        │
+│     │   └── PV (jeśli jeszcze jest) > taryfa                                │
+│     │                                                                        │
+│     └── 00:00 - 08:00 → SLOT_NIGHT                                          │
+│         └── Tylko taryfa, ale ostrożnie (próg 40°C, nie target)             │
 │                                                                              │
-│  4. ALGORYTM BILANSOWANIA GODZINOWEGO (gdy jest PV)                         │
+│  4. LOGIKA SLOT_PV (08:00 - 18:00)                                          │
 │     │                                                                        │
-│     │  Aktualna minuta >= 30?                                               │
-│     │  │                                                                     │
-│     │  ├── TAK (XX:30-XX:59) → STRATEGIA "DRUGA POŁOWA"                     │
-│     │  │   │                                                                 │
-│     │  │   │  bilans_netto >= (moc_grzalki × 0.5h × próg)                   │
-│     │  │   │  czyli >= 1.65 kWh dla grzałki 3.3kW i progu 50%               │
-│     │  │   │  │                                                              │
-│     │  │   │  ├── TAK → GRZEJ (mamy zapas na pozostałe ~30 min)            │
-│     │  │   │  │                                                              │
-│     │  │   │  └── NIE → Czy produkcja PV > moc grzałki?                     │
-│     │  │   │            │                                                    │
-│     │  │   │            ├── TAK → GRZEJ (produkcja pokrywa zużycie)         │
-│     │  │   │            │                                                    │
-│     │  │   │            └── NIE → IDLE (za mało, czekaj)                    │
-│     │  │                                                                     │
-│     │  └── NIE (XX:00-XX:29) → STRATEGIA "PIERWSZA POŁOWA"                  │
-│     │      │                                                                 │
-│     │      │  Czy produkcja PV > moc grzałki?                               │
-│     │      │  (inverter_moc_czynna > 3300W)                                 │
-│     │      │  │                                                              │
-│     │      │  ├── TAK → GRZEJ (nadwyżka idzie na grzanie)                   │
-│     │      │  │                                                              │
-│     │      │  └── NIE → IDLE (budujemy bilans na drugą połowę)              │
+│     │  Czy jest produkcja PV wystarczająca?                                 │
+│     │  └── TAK → GRZEJ Z PV (algorytm bilansowania)                         │
 │     │                                                                        │
+│     │  Czy minął DEADLINE (16:00) i CWU < EVENING_THRESHOLD (42°C)?         │
+│     │  └── TAK → GRZEJ Z TARYFY (PV nie dało rady, musimy przed wieczorem)  │
+│     │                                                                        │
+│     │  W pozostałych przypadkach:                                            │
+│     │  └── IDLE (czekamy na lepsze warunki PV)                              │
+│     │                                                                        │
+│  5. LOGIKA SLOT_EVENING (18:00 - 24:00)                                     │
+│     │                                                                        │
+│     │  Czy jest produkcja PV wystarczająca?                                 │
+│     │  └── TAK → GRZEJ Z PV (wykorzystaj resztkę)                           │
+│     │                                                                        │
+│     │  Czy jest tania taryfa (22:00-24:00 lub weekend)?                     │
+│     │  └── TAK i CWU < target → GRZEJ Z TARYFY                              │
+│     │                                                                        │
+│     │  W pozostałych przypadkach:                                            │
+│     │  └── IDLE (czekamy na 22:00 lub następny dzień)                       │
+│     │                                                                        │
+│  6. LOGIKA SLOT_NIGHT (00:00 - 08:00)                                       │
+│     │                                                                        │
+│     │  Czy CWU < NIGHT_THRESHOLD (40°C)?                                    │
+│     │  └── TAK i tania taryfa → GRZEJ DO NIGHT_TARGET (42°C)                │
+│     │      (nie do 50°C! tylko bufor żeby nie spaść do critical)            │
+│     │                                                                        │
+│     │  Czy CWU >= 40°C?                                                     │
+│     │  └── TAK → IDLE (woda wystarczająco ciepła, czekaj na PV)             │
+│     │                                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Parametry slotów (konfigurowalne)
+
+| Parametr | Domyślna | Opis |
+|----------|----------|------|
+| `summer_pv_slot_start` | 08:00 | Początek slotu PV (kiedy foto może zacząć) |
+| `summer_pv_slot_end` | 18:00 | Koniec slotu PV (zachód słońca latem) |
+| `summer_pv_deadline` | 16:00 | Deadline - po tej godzinie fallback na taryfę jeśli potrzeba |
+| `summer_evening_threshold` | 42°C | Poniżej tej temp włączamy fallback przed wieczorem |
+| `summer_night_threshold` | 40°C | Poniżej tej temp grzejemy w nocy |
+| `summer_night_target` | 42°C | Do jakiej temp grzać w nocy (tylko bufor) |
+
+### Algorytm bilansowania godzinowego (dla slotu PV)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ALGORYTM BILANSOWANIA (w slocie PV)                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Aktualna minuta >= 30?                                                     │
+│  │                                                                           │
+│  ├── TAK (XX:30-XX:59) → STRATEGIA "DRUGA POŁOWA"                           │
+│  │   │                                                                       │
+│  │   │  bilans_netto >= (moc_grzalki × 0.5h × próg)                         │
+│  │   │  czyli >= 1.65 kWh dla grzałki 3.3kW i progu 50%                     │
+│  │   │  │                                                                    │
+│  │   │  ├── TAK → GRZEJ (mamy zapas na pozostałe ~30 min)                   │
+│  │   │  │                                                                    │
+│  │   │  └── NIE → Czy produkcja PV > moc grzałki?                           │
+│  │   │            │                                                          │
+│  │   │            ├── TAK → GRZEJ (produkcja pokrywa zużycie)               │
+│  │   │            │                                                          │
+│  │   │            └── NIE → IDLE (za mało, czekaj)                          │
+│  │                                                                           │
+│  └── NIE (XX:00-XX:29) → STRATEGIA "PIERWSZA POŁOWA"                        │
+│      │                                                                       │
+│      │  Czy produkcja PV > moc grzałki?                                     │
+│      │  (inverter_moc_czynna > 3300W)                                       │
+│      │  │                                                                    │
+│      │  ├── TAK → GRZEJ (nadwyżka idzie na grzanie)                         │
+│      │  │                                                                    │
+│      │  └── NIE → Czy bilans >= 1.0 kWh?                                    │
+│      │            │                                                          │
+│      │            ├── TAK → GRZEJ (mamy zapas)                               │
+│      │            │                                                          │
+│      │            └── NIE → IDLE (budujemy bilans)                          │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -246,12 +314,29 @@ SUMMER_CWU_TARGET_TEMP: Final = 50.0  # °C - docelowa temperatura
 SUMMER_CWU_NO_PROGRESS_TIMEOUT: Final = 60  # minut - timeout bez postępu (krótszy niż winter)
 SUMMER_CWU_MIN_TEMP_INCREASE: Final = 2.0  # °C - oczekiwany wzrost temp
 
+# Sloty czasowe (godziny)
+SUMMER_PV_SLOT_START: Final = 8   # 08:00 - początek slotu PV
+SUMMER_PV_SLOT_END: Final = 18    # 18:00 - koniec slotu PV
+SUMMER_PV_DEADLINE: Final = 16    # 16:00 - po tej godzinie fallback na taryfę
+
+# Progi temperaturowe dla slotów
+SUMMER_EVENING_THRESHOLD: Final = 42.0  # °C - poniżej tej temp fallback po deadline
+SUMMER_NIGHT_THRESHOLD: Final = 40.0    # °C - poniżej tej temp grzejemy w nocy
+SUMMER_NIGHT_TARGET: Final = 42.0       # °C - do jakiej temp grzać w nocy (tylko bufor)
+
 # Sensory PV (konfigurowalne)
 CONF_PV_BALANCE_SENSOR: Final = "pv_balance_sensor"
 CONF_PV_PRODUCTION_SENSOR: Final = "pv_production_sensor"
 CONF_GRID_POWER_SENSOR: Final = "grid_power_sensor"
 CONF_SUMMER_HEATER_POWER: Final = "summer_heater_power"
 CONF_SUMMER_BALANCE_THRESHOLD: Final = "summer_balance_threshold"
+
+# Sloty czasowe (konfigurowalne)
+CONF_SUMMER_PV_SLOT_START: Final = "summer_pv_slot_start"
+CONF_SUMMER_PV_SLOT_END: Final = "summer_pv_slot_end"
+CONF_SUMMER_PV_DEADLINE: Final = "summer_pv_deadline"
+CONF_SUMMER_NIGHT_THRESHOLD: Final = "summer_night_threshold"
+CONF_SUMMER_NIGHT_TARGET: Final = "summer_night_target"
 
 # Domyślne nazwy sensorów
 DEFAULT_PV_BALANCE_SENSOR: Final = "sensor.energia_bilans_netto"
@@ -376,27 +461,71 @@ def _should_heat_from_pv(self, cwu_temp: float | None) -> tuple[bool, str]:
 
         return False, f"Second half: Insufficient ({pv_balance:.2f} kWh < {threshold:.2f} kWh, PV {pv_production}W)"
 
+def _get_summer_slot(self, hour: int) -> str:
+    """Determine current time slot for summer mode."""
+    pv_start = self.config.get(CONF_SUMMER_PV_SLOT_START, SUMMER_PV_SLOT_START)
+    pv_end = self.config.get(CONF_SUMMER_PV_SLOT_END, SUMMER_PV_SLOT_END)
+
+    if pv_start <= hour < pv_end:
+        return "SLOT_PV"
+    elif pv_end <= hour < 24:
+        return "SLOT_EVENING"
+    else:  # 0 <= hour < pv_start
+        return "SLOT_NIGHT"
+
 def _should_heat_from_tariff(self, cwu_temp: float | None) -> tuple[bool, str]:
     """Determine if we should heat CWU from cheap tariff (fallback).
 
-    Used when PV is not available or insufficient.
+    Implements slot-based logic:
+    - SLOT_NIGHT (00:00-08:00): Only heat if CWU < night_threshold (40°C)
+      Target is night_target (42°C), not full target - just safety buffer
+    - SLOT_PV (08:00-18:00): Only heat after deadline (16:00) if CWU < evening_threshold
+    - SLOT_EVENING (18:00-24:00): Heat if cheap tariff and CWU < target
     """
     if cwu_temp is None:
         return False, "CWU temp unavailable"
 
+    now = datetime.now()
+    hour = now.hour
+    slot = self._get_summer_slot(hour)
     target = self.config.get("cwu_target_temp", SUMMER_CWU_TARGET_TEMP)
+
+    # Already at target - no heating needed
     if cwu_temp >= target:
         return False, f"CWU at target ({cwu_temp}°C >= {target}°C)"
 
-    min_temp = self.config.get("cwu_min_temp", SUMMER_CWU_MIN_TEMP)
+    # Get slot-specific thresholds
+    night_threshold = self.config.get(CONF_SUMMER_NIGHT_THRESHOLD, SUMMER_NIGHT_THRESHOLD)
+    night_target = self.config.get(CONF_SUMMER_NIGHT_TARGET, SUMMER_NIGHT_TARGET)
+    evening_threshold = self.config.get("summer_evening_threshold", SUMMER_EVENING_THRESHOLD)
+    deadline = self.config.get(CONF_SUMMER_PV_DEADLINE, SUMMER_PV_DEADLINE)
 
-    # Sprawdź czy jest tania taryfa
-    if self.is_cheap_tariff():
-        # W taniej taryfie grzejemy jeśli CWU < target
-        if cwu_temp < target:
-            return True, f"Cheap tariff: CWU needs heating ({cwu_temp}°C < {target}°C)"
+    # SLOT_NIGHT: Very conservative - only heat if really cold
+    if slot == "SLOT_NIGHT":
+        if cwu_temp < night_threshold:
+            if self.is_cheap_tariff():
+                # Return special target (night_target, not full target)
+                return True, f"Night slot: CWU cold ({cwu_temp}°C < {night_threshold}°C), heating to {night_target}°C"
+            return False, f"Night slot: CWU cold but expensive tariff"
+        return False, f"Night slot: CWU OK ({cwu_temp}°C >= {night_threshold}°C), waiting for PV"
 
-    return False, f"Expensive tariff, waiting (CWU: {cwu_temp}°C)"
+    # SLOT_PV: Only fallback after deadline
+    if slot == "SLOT_PV":
+        if hour >= deadline and cwu_temp < evening_threshold:
+            if self.is_cheap_tariff():
+                return True, f"PV slot deadline passed: CWU needs heating ({cwu_temp}°C < {evening_threshold}°C)"
+            # Even in expensive tariff, if really needed
+            if cwu_temp < night_threshold:
+                return True, f"PV slot deadline: CWU too cold ({cwu_temp}°C), emergency tariff heating"
+        return False, f"PV slot: Waiting for PV (hour {hour}, deadline {deadline})"
+
+    # SLOT_EVENING: Standard fallback to cheap tariff
+    if slot == "SLOT_EVENING":
+        if self.is_cheap_tariff():
+            return True, f"Evening slot: Cheap tariff, CWU needs heating ({cwu_temp}°C < {target}°C)"
+        return False, f"Evening slot: Expensive tariff, waiting for 22:00"
+
+    return False, f"Unknown slot: {slot}"
 
 def _check_summer_cwu_no_progress(self, current_temp: float | None) -> bool:
     """Check if summer mode CWU heating has made no progress after timeout.
@@ -708,37 +837,144 @@ Piątek, Lipiec, zmienne zachmurzenie
         │ Pozostały czas (14:45-15:00) PV idzie do sieci
 ```
 
-### Scenariusz 3: Weekend (cały dzień tania taryfa)
+### Scenariusz 3: Weekend - NOWA LOGIKA (PV ma priorytet)
 
 ```
-Sobota, Sierpień, zmienne warunki
+Sobota, Sierpień, słonecznie
 
+SLOT_NIGHT (00:00 - 08:00) - tania taryfa, ale czekamy na PV
+─────────────────────────────────────────────────────────────
 00:00   │ Tania taryfa (weekend!)
-        │ CWU: 44°C
+        │ CWU: 44°C (> 40°C próg nocny)
         │ PV: 0W (noc)
-        │ → CWU < target → GRZEJ (tarifa tania)
+        │ → CWU >= NIGHT_THRESHOLD (40°C)
+        │ → IDLE ⏳ (NIE grzejemy! czekamy na darmowe PV)
         │
-01:30   │ CWU: 50°C
-        │ → STOP
+06:00   │ CWU: 42°C (powoli stygnie)
+        │ → Nadal >= 40°C → IDLE
+
+SLOT_PV (08:00 - 18:00) - priorytet fotowoltaiki
+─────────────────────────────────────────────────────────────
+08:00   │ SLOT_PV rozpoczęty!
+        │ PV: 800W (jeszcze słabe)
+        │ CWU: 41°C
+        │ → Produkcja < grzałka → IDLE (budujemy bilans)
         │
-08:00   │ PV: 3000W
-        │ CWU: 47°C (wystygła trochę)
-        │ → Produkcja < grzałka, ale mamy tanią taryfę!
-        │ → GRZEJ (fallback taryfowy aktywny bo weekend)
+09:30   │ PV: 4200W (słońce mocne!)
+        │ Bilans od 09:00: +1.4 kWh
+        │ CWU: 40°C
+        │ → Produkcja > grzałka → START grzania z PV! 🌞
         │
-08:45   │ CWU: 50°C
-        │ → STOP
+11:00   │ CWU: 50°C
+        │ → STOP (target osiągnięty)
+        │ Reszta PV idzie do sieci (+bilans)
+
+EFEKT: Woda nagrzana za DARMO z PV!
+Gdyby stary algorytm: grzalibyśmy o 00:00 z taniej taryfy = płacimy 0.72 zł/kWh
+Teraz: grzejemy o 09:30 z PV = płacimy 0 zł (a nawet zarabiamy na eksporcie!)
+
+SLOT_EVENING (18:00 - 24:00) - woda jeszcze ciepła
+─────────────────────────────────────────────────────────────
+18:00   │ CWU: 47°C (użyte trochę)
+        │ PV: 500W (słabe)
+        │ → Produkcja < grzałka, ale CWU > target-5 → IDLE
         │
-        │ (Cały dzień - energia z PV idzie do sieci,
-        │  bo woda jest już ciepła)
-        │
-22:00   │ CWU: 45°C
+20:00   │ CWU: 45°C
         │ PV: 0W
-        │ Taryfa: nadal tania (weekend)
-        │ → GRZEJ
+        │ → Droga taryfa, czekamy na 22:00
         │
-23:00   │ CWU: 50°C
+22:00   │ Tania taryfa
+        │ CWU: 44°C < 50°C
+        │ → START grzania z taryfy (fallback)
+        │
+23:15   │ CWU: 50°C
         │ → STOP
+```
+
+### Scenariusz 3b: Weekend - pochmurny dzień (PV zawodzi)
+
+```
+Niedziela, Wrzesień, całkowite zachmurzenie
+
+SLOT_NIGHT (00:00 - 08:00)
+─────────────────────────────────────────────────────────────
+00:00   │ CWU: 43°C (> 40°C)
+        │ → IDLE (czekamy na PV)
+        │
+07:00   │ CWU: 39°C (< 40°C próg nocny!)
+        │ → START grzania z taryfy (bufor bezpieczeństwa)
+        │ → Target: 42°C (nie 50°C - tylko bufor)
+        │
+07:45   │ CWU: 42°C
+        │ → STOP (NIGHT_TARGET osiągnięty)
+
+SLOT_PV (08:00 - 18:00)
+─────────────────────────────────────────────────────────────
+08:00   │ SLOT_PV rozpoczęty
+        │ PV: 200W (chmury 😞)
+        │ CWU: 42°C
+        │ → Produkcja << grzałka → IDLE (czekamy na PV)
+        │
+12:00   │ PV: 400W (nadal chmury)
+        │ CWU: 40°C
+        │ → Nadal IDLE (produkcja za słaba)
+        │
+16:00   │ DEADLINE! ⏰
+        │ PV: 300W (bez szans)
+        │ CWU: 38°C < EVENING_THRESHOLD (42°C)
+        │ → Fallback! START grzania z taryfy
+        │ → Komunikat: "PV insufficient, using cheap tariff"
+        │
+17:30   │ CWU: 50°C
+        │ → STOP
+
+EFEKT: Poczekaliśmy do 16:00 na szansę dla PV.
+Niestety pochmurno, więc fallback na tanią taryfę.
+Bez deadline'u czekalibyśmy do wieczora i woda byłaby za zimna na kąpiel.
+```
+
+### Scenariusz 3c: Weekend - częściowe zachmurzenie
+
+```
+Sobota, Lipiec, zmienna pogoda
+
+SLOT_NIGHT (00:00 - 08:00)
+─────────────────────────────────────────────────────────────
+06:00   │ CWU: 41°C (> 40°C) → IDLE
+
+SLOT_PV (08:00 - 18:00)
+─────────────────────────────────────────────────────────────
+08:00   │ PV: 1000W (chmury)
+        │ CWU: 40°C
+        │ → IDLE
+        │
+10:00   │ PV: 3800W (słońce wyszło!)
+        │ Bilans od 10:00: +0.5 kWh
+        │ CWU: 39°C
+        │ → START grzania z PV 🌤️
+        │
+10:30   │ PV: 1200W (chmura!)
+        │ Bilans od 10:00: +0.8 kWh
+        │ CWU: 42°C
+        │ → Strategia "druga połowa": bilans 0.8 < 1.65 wymagane
+        │ → Produkcja 1200W < 3300W
+        │ → STOP (warunki się zmieniły)
+        │
+11:00   │ Nowa godzina, bilans = 0
+        │ PV: 4500W (znowu słońce!)
+        │ CWU: 42°C
+        │ → START grzania z PV
+        │
+12:00   │ CWU: 47°C
+        │ PV: 5000W (super!)
+        │ → Kontynuujemy
+        │
+12:30   │ CWU: 50°C
+        │ → STOP (target!)
+
+EFEKT: Grzanie przerywane przez chmury, ale ostatecznie
+udało się nagrzać z PV. Bilansowanie działa - nie płacimy
+za prąd mimo zmiennych warunków.
 ```
 
 ### Scenariusz 4: Problem z grzałką (brak postępu)
@@ -957,10 +1193,33 @@ def _find_optimal_start_minute(self) -> int:
 
 Tryb Summer to zaawansowany algorytm optymalizujący wykorzystanie energii z fotowoltaiki do grzania CWU. Kluczowe cechy:
 
-1. **Bilansowanie godzinowe** - maksymalizuje oszczędności przy rozliczeniu za zbilansowane godziny
-2. **Adaptacyjna strategia** - różne podejście w pierwszej i drugiej połowie godziny
-3. **Fallback na taryfę** - pewność ciepłej wody nawet w pochmurne dni
-4. **Brak grzania podłogowego** - uproszczona logika na lato
-5. **Detekcja problemów** - ostrzeżenia gdy grzałka nie działa
+1. **System slotów czasowych** - PV ma priorytet, taryfa jest fallbackiem
+   - SLOT_PV (08:00-18:00): Czekamy na darmową energię z PV
+   - SLOT_EVENING (18:00-24:00): Fallback na tanią taryfę
+   - SLOT_NIGHT (00:00-08:00): Tylko bufor bezpieczeństwa (grzanie do 42°C gdy <40°C)
 
-Implementacja wymaga modyfikacji ~5 plików i dodania ~300-400 linii kodu. Testy powinny obejmować wszystkie scenariusze opisane w tym dokumencie.
+2. **Bilansowanie godzinowe** - maksymalizuje oszczędności przy rozliczeniu za zbilansowane godziny
+   - Pierwsza połowa: ostrożna strategia, budujemy bilans
+   - Druga połowa: agresywna strategia, wykorzystujemy zgromadzony zapas
+
+3. **Deadline dla PV (16:00)** - jeśli PV nie nagrzało wody do 16:00, fallback na taryfę
+   - Zapobiega sytuacji gdy woda jest za zimna na wieczorną kąpiel
+
+4. **Inteligentna obsługa weekendów** - NIE grzejemy o północy mimo taniej taryfy!
+   - Czekamy na PV które da DARMOWĄ energię
+   - Oszczędność: 0 zł vs 0.72 zł/kWh z taniej taryfy
+
+5. **Brak grzania podłogowego** - uproszczona logika na lato
+
+6. **Detekcja problemów** - ostrzeżenia gdy grzałka nie działa (brak wzrostu temp)
+
+### Porównanie oszczędności
+
+| Scenariusz | Stary algorytm | Nowy algorytm | Oszczędność |
+|------------|----------------|---------------|-------------|
+| Weekend słoneczny | Grzanie o 00:00 z taryfy 0.72 zł/kWh | Grzanie o 10:00 z PV 0 zł | **100%** |
+| Dzień roboczy słoneczny | Grzanie o 22:00 z taryfy | Grzanie o 10:00 z PV | **100%** |
+| Weekend pochmurny | Grzanie o 00:00 | Grzanie o 16:00 (deadline) | **0%** (ale ta sama cena) |
+| Częściowe zachmurzenie | Mix taryfa + PV | Maksymalizacja PV | **~50%** |
+
+Implementacja wymaga modyfikacji ~5 plików i dodania ~400-500 linii kodu. Testy powinny obejmować wszystkie scenariusze opisane w tym dokumencie.
