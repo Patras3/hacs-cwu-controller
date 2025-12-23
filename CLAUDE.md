@@ -71,4 +71,4 @@ python -m pytest tests/test_coordinator.py -k "test_name" -v
 - `CWU_PAUSE_TIME`: 10 min
 - `CWU_SENSOR_UNAVAILABLE_TIMEOUT`: 60 min → safe mode
 - `POWER_IDLE_THRESHOLD`: 10W (fake heating detection)
-- `FAKE_HEATING_DETECTION_TIME`: 5 min
+- `FAKE_HEATING_DETECTION_TIME`: 10 min

@@ -1400,6 +1400,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
             self._fake_heating_detected_at = datetime.now()
+            self._low_power_start = None  # Reset to prevent duplicate detection
             await self._async_set_water_heater_mode(WH_MODE_OFF)
             await self._async_send_notification(
                 "CWU Controller Alert",

@@ -60,7 +60,7 @@ POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating
 # Time constants
 CWU_MAX_HEATING_TIME: Final = 170  # 2h50m in minutes (before 3h limit)
 CWU_PAUSE_TIME: Final = 10  # 10 minutes pause between cycles
-FAKE_HEATING_DETECTION_TIME: Final = 5  # Minutes of low power before detection
+FAKE_HEATING_DETECTION_TIME: Final = 10  # Minutes of low power before detection
 FAKE_HEATING_RESTART_WAIT: Final = 2  # Minutes to wait before restarting after fake heating
 SENSOR_UNAVAILABLE_GRACE: Final = 30  # Minutes before using fallback
 
