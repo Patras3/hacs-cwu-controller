@@ -112,7 +112,7 @@ Godzina 13:30, wartość = +2.0 kWh
 W weekendy i święta cały dzień jest tania taryfa. Prosty algorytm zacząłby grzać o północy,
 ale to nieoptymalne - lepiej poczekać na PV które da DARMOWĄ energię (a nie tylko tanią).
 
-**Rozwiązanie: System slotów czasowych**
+**Rozwiązanie: System slotów czasowych z uwzględnieniem okien taryfowych**
 
 | Slot | Godziny | Priorytet | Opis |
 |------|---------|-----------|------|
@@ -120,11 +120,28 @@ ale to nieoptymalne - lepiej poczekać na PV które da DARMOWĄ energię (a nie 
 | **Taryfowy wieczorny** | 18:00 - 24:00 | 🥈 Średni | Fallback jeśli PV nie wystarczyło |
 | **Taryfowy nocny** | 00:00 - 08:00 | 🥉 Niski | Tylko gdy woda zimna (< 40°C) |
 
-### Główny algorytm z uwzględnieniem slotów
+**WAŻNE: Okna taniej taryfy w SLOT_PV!**
+
+W dni robocze mamy okno **13:00-15:00** które jest TANIE (0.72 zł/kWh).
+Jeśli PV nie wystarczy, lepiej grzać o 13:00 za 0.72 zł niż czekać do 16:00 i płacić 1.16 zł!
+
+```
+Dni robocze - okna taryfowe:
+├── 00:00-06:00  TANIA  ← SLOT_NIGHT
+├── 06:00-13:00  DROGA  ← SLOT_PV (tylko PV!)
+├── 13:00-15:00  TANIA  ← SLOT_PV (PV > taryfa, ale taryfa OK jako fallback!)
+├── 15:00-22:00  DROGA  ← SLOT_PV (15-18) + SLOT_EVENING (18-22)
+└── 22:00-24:00  TANIA  ← SLOT_EVENING (fallback OK)
+
+Weekendy/święta:
+└── 00:00-24:00  TANIA  (cały dzień, ale PV ma priorytet!)
+```
+
+### Główny algorytm z uwzględnieniem slotów i okien taryfowych
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    SUMMER MODE - ALGORYTM ZE SLOTAMI                         │
+│                    SUMMER MODE - ALGORYTM ZE SLOTAMI v2                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  1. EMERGENCY CHECK (zawsze pierwszy)                                        │
@@ -137,25 +154,23 @@ ale to nieoptymalne - lepiej poczekać na PV które da DARMOWĄ energię (a nie 
 │                                                                              │
 │  3. OKREŚL AKTUALNY SLOT                                                     │
 │     │                                                                        │
-│     ├── 08:00 - 18:00 → SLOT_PV                                             │
-│     │   └── Priorytet: PV > taryfa (ale taryfa jako backup)                 │
-│     │                                                                        │
+│     ├── 08:00 - 18:00 → SLOT_PV (z uwzględnieniem 13-15!)                   │
 │     ├── 18:00 - 24:00 → SLOT_EVENING                                        │
-│     │   └── PV (jeśli jeszcze jest) > taryfa                                │
-│     │                                                                        │
 │     └── 00:00 - 08:00 → SLOT_NIGHT                                          │
-│         └── Tylko taryfa, ale ostrożnie (próg 40°C, nie target)             │
 │                                                                              │
-│  4. LOGIKA SLOT_PV (08:00 - 18:00)                                          │
+│  4. LOGIKA SLOT_PV (08:00 - 18:00) - POPRAWIONA!                            │
 │     │                                                                        │
-│     │  Czy jest produkcja PV wystarczająca?                                 │
-│     │  └── TAK → GRZEJ Z PV (algorytm bilansowania)                         │
+│     │  4a. Czy jest produkcja PV wystarczająca?                             │
+│     │      └── TAK → GRZEJ Z PV (algorytm bilansowania)                     │
 │     │                                                                        │
-│     │  Czy minął DEADLINE (16:00) i CWU < EVENING_THRESHOLD (42°C)?         │
-│     │  └── TAK → GRZEJ Z TARYFY (PV nie dało rady, musimy przed wieczorem)  │
+│     │  4b. PV nie wystarczy - sprawdź czy jest tanie okno (13:00-15:00)     │
+│     │      └── TAK (13-15) i CWU < target → GRZEJ Z TARYFY (tania!)         │
 │     │                                                                        │
-│     │  W pozostałych przypadkach:                                            │
-│     │  └── IDLE (czekamy na lepsze warunki PV)                              │
+│     │  4c. Czy minął DEADLINE (16:00) i CWU < EVENING_THRESHOLD (42°C)?     │
+│     │      └── TAK → GRZEJ Z TARYFY (droga, ale konieczna - emergency)      │
+│     │                                                                        │
+│     │  4d. W pozostałych przypadkach:                                        │
+│     │      └── IDLE (czekamy na PV lub tanie okno 13-15)                    │
 │     │                                                                        │
 │  5. LOGIKA SLOT_EVENING (18:00 - 24:00)                                     │
 │     │                                                                        │
@@ -178,6 +193,27 @@ ale to nieoptymalne - lepiej poczekać na PV które da DARMOWĄ energię (a nie 
 │     │  └── TAK → IDLE (woda wystarczająco ciepła, czekaj na PV)             │
 │     │                                                                        │
 └─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Hierarchia priorytetów w SLOT_PV (dni robocze)
+
+```
+SLOT_PV Priority (08:00 - 18:00):
+═══════════════════════════════════════════════════════════════
+
+1. 🌞 PV wystarczające (produkcja > grzałka lub dobry bilans)
+   → GRZEJ Z PV (0 zł - najlepsze!)
+
+2. ⚡ Okno 13:00-15:00 + PV nie wystarczy + CWU < target
+   → GRZEJ Z TARYFY (0.72 zł - tanie, akceptowalne)
+
+3. ⏰ Po 16:00 (deadline) + CWU < 42°C + brak PV
+   → GRZEJ Z TARYFY (1.16 zł - drogo, ale konieczne!)
+
+4. 😴 Pozostałe przypadki
+   → IDLE (czekaj na lepsze warunki)
+
+═══════════════════════════════════════════════════════════════
 ```
 
 ### Parametry slotów (konfigurowalne)
@@ -509,15 +545,18 @@ def _should_heat_from_tariff(self, cwu_temp: float | None) -> tuple[bool, str]:
             return False, f"Night slot: CWU cold but expensive tariff"
         return False, f"Night slot: CWU OK ({cwu_temp}°C >= {night_threshold}°C), waiting for PV"
 
-    # SLOT_PV: Only fallback after deadline
+    # SLOT_PV: Check cheap window (13-15) FIRST, then deadline
     if slot == "SLOT_PV":
+        # Priority 2: Cheap tariff window (13:00-15:00) - use it if PV not enough!
+        if self.is_cheap_tariff():
+            return True, f"PV slot + cheap tariff window: CWU needs heating ({cwu_temp}°C < {target}°C) at 0.72 zł/kWh"
+
+        # Priority 3: After deadline (16:00) - expensive but necessary
         if hour >= deadline and cwu_temp < evening_threshold:
-            if self.is_cheap_tariff():
-                return True, f"PV slot deadline passed: CWU needs heating ({cwu_temp}°C < {evening_threshold}°C)"
-            # Even in expensive tariff, if really needed
-            if cwu_temp < night_threshold:
-                return True, f"PV slot deadline: CWU too cold ({cwu_temp}°C), emergency tariff heating"
-        return False, f"PV slot: Waiting for PV (hour {hour}, deadline {deadline})"
+            return True, f"PV slot deadline passed: CWU needs heating ({cwu_temp}°C < {evening_threshold}°C) - expensive but necessary"
+
+        # Priority 4: Wait for PV or cheap window
+        return False, f"PV slot: Waiting for PV or cheap window 13-15 (hour {hour})"
 
     # SLOT_EVENING: Standard fallback to cheap tariff
     if slot == "SLOT_EVENING":
@@ -799,6 +838,51 @@ Czwartek, Czerwiec, pogoda słoneczna
         │
 23:30   │ CWU: 50°C
         │ → STOP grzania
+```
+
+### Scenariusz 1b: Dzień roboczy - PV słabe, ale okno 13-15 ratuje
+
+```
+Wtorek, Lipiec, pochmurno rano, słonecznie po południu
+
+SLOT_NIGHT (00:00 - 08:00)
+─────────────────────────────────────────────────────────────
+06:00   │ CWU: 42°C (> 40°C) → IDLE
+
+SLOT_PV (08:00 - 18:00)
+─────────────────────────────────────────────────────────────
+08:00   │ PV: 600W (chmury)
+        │ CWU: 41°C
+        │ Taryfa: DROGA (06:00-13:00)
+        │ → Produkcja < grzałka, taryfa droga
+        │ → IDLE (czekamy na PV lub okno 13-15)
+        │
+12:00   │ PV: 800W (nadal chmury)
+        │ CWU: 39°C
+        │ Taryfa: DROGA
+        │ → IDLE (jeszcze godzina do taniej taryfy!)
+        │
+13:00   │ 🎉 TANIA TARYFA! (okno 13-15)
+        │ PV: 1000W (nadal za mało)
+        │ CWU: 38°C < target 50°C
+        │ → START grzania z TARYFY (0.72 zł/kWh)
+        │ → Lepiej teraz niż czekać do deadline 16:00!
+        │
+14:30   │ CWU: 47°C
+        │ PV: 4500W (słońce wyszło!)
+        │ → Przełączamy na PV! (produkcja > grzałka)
+        │
+15:00   │ Koniec taniej taryfy, ale mamy PV
+        │ CWU: 49°C
+        │ → Kontynuujemy z PV
+        │
+15:15   │ CWU: 50°C
+        │ → STOP (target!)
+
+EFEKT: Wykorzystaliśmy okno 13-15 zamiast czekać do 16:00!
+Zapłaciliśmy 0.72 zł/kWh za ~1.5h zamiast 1.16 zł/kWh.
+Oszczędność: (1.16-0.72) × 3.3kW × 1.5h = 2.18 zł
+A gdy pojawiło się słońce, przełączyliśmy na darmowe PV!
 ```
 
 ### Scenariusz 2: Pochmurny dzień z przebłyskami
