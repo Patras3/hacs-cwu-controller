@@ -227,6 +227,158 @@ SLOT_PV Priority (08:00 - 18:00):
 | `summer_night_threshold` | 40°C | Poniżej tej temp grzejemy w nocy |
 | `summer_night_target` | 42°C | Do jakiej temp grzać w nocy (tylko bufor) |
 
+---
+
+## Ochrona grzałki i stabilność
+
+### Problem: Grzałka jako "kierunkowskaz"
+
+Grzałka nie może włączać się i wyłączać co minutę - to ją zniszczy!
+Potrzebujemy mechanizmów stabilizacji.
+
+### Rozwiązanie: Minimalne czasy pracy i cooldown
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       OCHRONA GRZAŁKI                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  MINIMALNE CZASY:                                                            │
+│  ├── MIN_HEATING_TIME = 30 min (po włączeniu grzej minimum 30 min)          │
+│  ├── MIN_COOLDOWN = 5 min (po wyłączeniu czekaj 5 min przed włączeniem)     │
+│  └── BALANCE_CHECK_INTERVAL = 15 min (sprawdzaj bilans co 15 min)           │
+│                                                                              │
+│  LOGIKA WŁĄCZENIA:                                                           │
+│  ├── Sprawdź czy minął cooldown od ostatniego wyłączenia                    │
+│  ├── Sprawdź warunki PV/bilansu                                             │
+│  └── Jeśli OK → włącz i ustaw timer na MIN_HEATING_TIME                     │
+│                                                                              │
+│  LOGIKA WYŁĄCZENIA (w trakcie grzania):                                     │
+│  ├── Czy osiągnięto target? → STOP (niezależnie od timera)                  │
+│  ├── Czy minęło MIN_HEATING_TIME?                                           │
+│  │   ├── NIE → kontynuuj grzanie (ochrona grzałki)                          │
+│  │   └── TAK → sprawdź warunki, jeśli złe → STOP                            │
+│  └── EMERGENCY (CWU > 55°C) → STOP natychmiast!                             │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Parametry ochrony grzałki
+
+| Parametr | Domyślna | Opis |
+|----------|----------|------|
+| `summer_min_heating_time` | 30 min | Minimalny czas pracy po włączeniu |
+| `summer_min_cooldown` | 5 min | Minimalny czas przerwy przed ponownym włączeniem |
+| `summer_max_cwu_temp` | 55°C | Maksymalna bezpieczna temperatura (emergency stop) |
+
+---
+
+## Nadmiarowe grzanie z nadwyżki PV (Excess PV Mode)
+
+### Filozofia
+
+Jeśli mamy dużą nadwyżkę PV (eksportujemy do sieci), lepiej dogrzać wodę niż:
+- Eksportować za grosze (np. 0.30 zł/kWh)
+- Obciążać sieć i potencjalnie powodować ograniczenia invertera
+
+**Przykład:**
+- Godzina 16:00, woda 48°C (poniżej targetu 50°C ale ciepła)
+- Eksportujemy -4500W do sieci
+- Bilans godziny: +3.0 kWh
+- → Lepiej dogrzać do 50°C za DARMO niż eksportować!
+
+### Warunki wejścia w Excess PV Mode
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       EXCESS PV MODE - WARUNKI                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  WSZYSTKIE warunki muszą być spełnione:                                     │
+│                                                                              │
+│  1. CWU < target (50°C) - jest co dogrzewać                                 │
+│     └── Ale CWU > target - 5°C (45°C) - woda nie jest zimna                 │
+│                                                                              │
+│  2. Duży eksport do sieci:                                                  │
+│     └── grid_power < -3000W (eksportujemy > 3kW)                            │
+│                                                                              │
+│  3. Dobry bilans godzinowy:                                                 │
+│     └── bilans_netto >= 2.0 kWh (mamy solidny zapas)                        │
+│                                                                              │
+│  4. Jesteśmy w SLOT_PV lub SLOT_EVENING (jest produkcja)                    │
+│                                                                              │
+│  5. Minął cooldown od ostatniego grzania                                    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Monitoring w Excess PV Mode (co 15 minut)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 EXCESS PV MODE - MONITORING (co 15 min)                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CHECK 1: Czy osiągnęliśmy target?                                          │
+│  └── CWU >= target → STOP (sukces!)                                         │
+│                                                                              │
+│  CHECK 2: Czy pobieramy za dużo z sieci?                                    │
+│  ├── grid_power > 1000W (lekki pobór) → OK, kontynuuj                       │
+│  ├── grid_power > 2000W (średni pobór) → WARNING, jeszcze 15 min            │
+│  └── grid_power > 3000W (duży pobór!) → STOP (warunki się zmieniły)         │
+│                                                                              │
+│  CHECK 3: Czy bilans jest bezpieczny?                                       │
+│  ├── bilans_netto >= 0.5 kWh → OK, mamy jeszcze zapas                       │
+│  └── bilans_netto < 0.5 kWh → STOP (wyczerpaliśmy zapas)                    │
+│                                                                              │
+│  CHECK 4: Czy minęło MIN_HEATING_TIME?                                      │
+│  └── NIE → kontynuuj (ochrona grzałki)                                      │
+│                                                                              │
+│  WAŻNE: Excess mode ma niższy priorytet - jeśli warunki się pogorszą,       │
+│         wyłączamy po MIN_HEATING_TIME (nie natychmiast!)                    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Parametry Excess PV Mode
+
+| Parametr | Domyślna | Opis |
+|----------|----------|------|
+| `summer_excess_export_threshold` | -3000 W | Eksport do sieci wymagany do aktywacji |
+| `summer_excess_balance_threshold` | 2.0 kWh | Minimalny bilans do aktywacji |
+| `summer_excess_balance_min` | 0.5 kWh | Bilans poniżej którego wyłączamy |
+| `summer_excess_grid_warning` | 2000 W | Pobór przy którym ostrzegamy |
+| `summer_excess_grid_stop` | 3000 W | Pobór przy którym wyłączamy |
+| `summer_excess_cwu_min` | target - 5°C | Min temp CWU do aktywacji (woda nie jest zimna) |
+| `summer_excess_check_interval` | 15 min | Jak często sprawdzać warunki |
+
+### Hierarchia priorytetów (zaktualizowana)
+
+```
+PEŁNA HIERARCHIA PRIORYTETÓW:
+═══════════════════════════════════════════════════════════════
+
+1. 🚨 EMERGENCY (CWU < 35°C)
+   → GRZEJ NATYCHMIAST (bezpieczeństwo!)
+
+2. 🌞 PV wystarczające w normalnym trybie
+   → GRZEJ Z PV (0 zł)
+
+3. ⚡ Okno 13:00-15:00 + PV nie wystarczy
+   → GRZEJ Z TARYFY (0.72 zł)
+
+4. 🔋 EXCESS PV MODE (duża nadwyżka + ciepła woda)
+   → DOGRZEJ Z NADWYŻKI (0 zł, lepsze niż eksport!)
+
+5. ⏰ Po deadline 16:00 + CWU < 42°C
+   → GRZEJ Z TARYFY (1.16 zł - konieczne)
+
+6. 😴 Pozostałe
+   → IDLE
+
+═══════════════════════════════════════════════════════════════
+```
+
 ### Algorytm bilansowania godzinowego (dla slotu PV)
 
 ```
@@ -378,6 +530,19 @@ CONF_SUMMER_NIGHT_TARGET: Final = "summer_night_target"
 DEFAULT_PV_BALANCE_SENSOR: Final = "sensor.energia_bilans_netto"
 DEFAULT_PV_PRODUCTION_SENSOR: Final = "sensor.inverter_moc_czynna"
 DEFAULT_GRID_POWER_SENSOR: Final = "sensor.glowny_total_system_power"
+
+# Ochrona grzałki
+SUMMER_MIN_HEATING_TIME: Final = 30  # min - minimalny czas pracy po włączeniu
+SUMMER_MIN_COOLDOWN: Final = 5  # min - minimalny czas przerwy przed ponownym włączeniem
+SUMMER_MAX_CWU_TEMP: Final = 55.0  # °C - maksymalna bezpieczna temperatura
+
+# Excess PV Mode - dogrzewanie z nadwyżki
+SUMMER_EXCESS_EXPORT_THRESHOLD: Final = -3000  # W - eksport wymagany do aktywacji
+SUMMER_EXCESS_BALANCE_THRESHOLD: Final = 2.0  # kWh - minimalny bilans do aktywacji
+SUMMER_EXCESS_BALANCE_MIN: Final = 0.5  # kWh - bilans poniżej którego wyłączamy
+SUMMER_EXCESS_GRID_WARNING: Final = 2000  # W - pobór przy którym ostrzegamy
+SUMMER_EXCESS_GRID_STOP: Final = 3000  # W - pobór przy którym wyłączamy
+SUMMER_EXCESS_CHECK_INTERVAL: Final = 15  # min - jak często sprawdzać warunki
 ```
 
 ### Nowe konfiguracje w `config_flow.py`
@@ -1017,7 +1182,7 @@ Niestety pochmurno, więc fallback na tanią taryfę.
 Bez deadline'u czekalibyśmy do wieczora i woda byłaby za zimna na kąpiel.
 ```
 
-### Scenariusz 3c: Weekend - częściowe zachmurzenie
+### Scenariusz 3c: Weekend - częściowe zachmurzenie (z ochroną grzałki!)
 
 ```
 Sobota, Lipiec, zmienna pogoda
@@ -1036,29 +1201,142 @@ SLOT_PV (08:00 - 18:00)
         │ Bilans od 10:00: +0.5 kWh
         │ CWU: 39°C
         │ → START grzania z PV 🌤️
+        │ → Timer: MIN_HEATING_TIME = 30 min
         │
-10:30   │ PV: 1200W (chmura!)
-        │ Bilans od 10:00: +0.8 kWh
-        │ CWU: 42°C
-        │ → Strategia "druga połowa": bilans 0.8 < 1.65 wymagane
-        │ → Produkcja 1200W < 3300W
-        │ → STOP (warunki się zmieniły)
+10:15   │ PV: 1200W (chmura!)
+        │ Bilans od 10:00: +0.3 kWh
+        │ CWU: 41°C
+        │ → Warunki złe ALE minęło tylko 15 min
+        │ → KONTYNUUJ (ochrona grzałki! min 30 min)
         │
-11:00   │ Nowa godzina, bilans = 0
-        │ PV: 4500W (znowu słońce!)
+10:30   │ PV: 800W (nadal chmura)
+        │ Bilans od 10:00: -0.2 kWh (zaczęliśmy pobierać!)
+        │ CWU: 43°C
+        │ → Minęło 30 min (MIN_HEATING_TIME)
+        │ → Warunki złe → STOP
+        │ → Cooldown: 5 min przed następnym włączeniem
+        │
+10:35   │ PV: 4000W (słońce wróciło!)
+        │ CWU: 43°C
+        │ → Warunki OK ALE cooldown (5 min) nie minął
+        │ → IDLE (czekamy)
+        │
+10:36   │ Cooldown minął (5 min od 10:30)
+        │ PV: 4200W
+        │ → START grzania z PV
+        │ → Timer: MIN_HEATING_TIME = 30 min
+        │
+11:06   │ CWU: 48°C
+        │ PV: 5000W (super!)
+        │ Bilans od 11:00: +0.6 kWh
+        │ → Kontynuujemy (warunki dobre, min czas minął)
+        │
+11:20   │ CWU: 50°C
+        │ → STOP (target osiągnięty!)
+        │ → Grzałka działała stabilnie, nie jak kierunkowskaz
+
+EFEKT: Ochrona grzałki zapobiegła włączaniu/wyłączaniu co minutę.
+Mimo zmiennych warunków, grzałka działała w stabilnych cyklach
+30+ min z 5 min przerwami.
+```
+
+### Scenariusz 3d: Excess PV Mode - dogrzewanie z nadwyżki
+
+```
+Sobota, Lipiec, bardzo słonecznie
+
+SLOT_PV (08:00 - 18:00)
+─────────────────────────────────────────────────────────────
+09:00   │ PV: 5000W
         │ CWU: 42°C
         │ → START grzania z PV
         │
-12:00   │ CWU: 47°C
-        │ PV: 5000W (super!)
-        │ → Kontynuujemy
+11:00   │ CWU: 50°C (target!)
+        │ → STOP
+        │ → Eksport do sieci: -4500W
         │
-12:30   │ CWU: 50°C
-        │ → STOP (target!)
+13:00   │ CWU: 48°C (lekko spadła - użycie wody)
+        │ PV: 5500W
+        │ grid_power: -4800W (eksportujemy prawie 5kW!)
+        │ Bilans od 13:00: +2.4 kWh
+        │
+        │ → CWU < target (48 < 50) ✓
+        │ → CWU > target-5 (48 > 45) ✓ (woda ciepła)
+        │ → Eksport > 3kW (-4800 < -3000) ✓
+        │ → Bilans > 2.0 kWh (2.4 > 2.0) ✓
+        │ → Cooldown minął ✓
+        │
+        │ → EXCESS PV MODE AKTYWOWANY! 🔋
+        │ → Lepiej dogrzać niż eksportować za grosze
+        │
+13:15   │ Check #1 (co 15 min):
+        │ CWU: 49°C
+        │ grid_power: -1200W (grzałka pobiera, ale nadal eksport)
+        │ Bilans: +1.8 kWh
+        │ → Wszystko OK, kontynuujemy
+        │
+13:30   │ Check #2:
+        │ CWU: 50°C (target!)
+        │ → STOP (sukces!)
+        │
+        │ Powrót do eksportu, ale woda jest nagrzana do max
+        │
+16:00   │ CWU: 47°C (znowu lekko spadła)
+        │ PV: 3500W
+        │ grid_power: -2800W (eksport, ale mniejszy)
+        │ Bilans od 16:00: +1.4 kWh
+        │
+        │ → Eksport < 3kW → NIE aktywujemy Excess Mode
+        │ → IDLE (produkcja spada, zachowujemy zapas)
+        │
+17:30   │ CWU: 46°C
+        │ PV: 1500W
+        │ → Nadal IDLE (czekamy na wieczór lub następny dzień)
 
-EFEKT: Grzanie przerywane przez chmury, ale ostatecznie
-udało się nagrzać z PV. Bilansowanie działa - nie płacimy
-za prąd mimo zmiennych warunków.
+EFEKT: Excess PV Mode wykorzystał nadwyżkę o 13:00-13:30
+do dogrzania wody zamiast eksportować za 0.30 zł/kWh.
+Ale o 16:00 już nie aktywował się - eksport był za mały,
+lepiej zachować zapas na wypadek chmur.
+```
+
+### Scenariusz 3e: Excess PV Mode - chmura przerywa
+
+```
+Niedziela, Lipiec, zmienne warunki
+
+14:00   │ CWU: 47°C
+        │ PV: 5200W
+        │ grid_power: -4500W
+        │ Bilans od 14:00: +2.2 kWh
+        │ → EXCESS PV MODE AKTYWOWANY! 🔋
+        │
+14:15   │ Check #1:
+        │ CWU: 48°C
+        │ PV: 2000W (chmura nadciąga!)
+        │ grid_power: +1300W (zaczęliśmy POBIERAĆ!)
+        │ Bilans: +1.1 kWh
+        │
+        │ → grid_power > 1000W (lekki pobór) → WARNING
+        │ → Ale MIN_HEATING_TIME (30 min) nie minęło!
+        │ → KONTYNUUJ (ochrona grzałki)
+        │
+14:30   │ Check #2:
+        │ CWU: 49°C
+        │ PV: 1000W (duża chmura)
+        │ grid_power: +2300W (pobieramy 2.3kW!)
+        │ Bilans: +0.4 kWh (< 0.5 kWh minimum!)
+        │
+        │ → MIN_HEATING_TIME (30 min) minęło ✓
+        │ → Bilans < 0.5 kWh → STOP!
+        │ → "Excess PV Mode stopped - balance exhausted"
+        │
+14:35   │ Cooldown aktywny (5 min)
+        │ PV: 800W
+        │ → IDLE
+
+EFEKT: Excess Mode działał 30 min (minimum dla ochrony grzałki),
+ale gdy warunki się pogorszyły I minął min czas → wyłączył się.
+Nie wyczerpaliśmy całego bilansu (zatrzymaliśmy przy 0.4 kWh).
 ```
 
 ### Scenariusz 4: Problem z grzałką (brak postępu)
@@ -1286,16 +1564,29 @@ Tryb Summer to zaawansowany algorytm optymalizujący wykorzystanie energii z fot
    - Pierwsza połowa: ostrożna strategia, budujemy bilans
    - Druga połowa: agresywna strategia, wykorzystujemy zgromadzony zapas
 
-3. **Deadline dla PV (16:00)** - jeśli PV nie nagrzało wody do 16:00, fallback na taryfę
+3. **Okno 13:00-15:00 jako fallback** - wykorzystujemy tanią taryfę gdy PV nie wystarczy
+   - Lepiej grzać o 13:00 za 0.72 zł niż czekać do 16:00 i płacić 1.16 zł!
+
+4. **Deadline dla PV (16:00)** - jeśli PV nie nagrzało wody do 16:00, emergency fallback
    - Zapobiega sytuacji gdy woda jest za zimna na wieczorną kąpiel
 
-4. **Inteligentna obsługa weekendów** - NIE grzejemy o północy mimo taniej taryfy!
+5. **Inteligentna obsługa weekendów** - NIE grzejemy o północy mimo taniej taryfy!
    - Czekamy na PV które da DARMOWĄ energię
    - Oszczędność: 0 zł vs 0.72 zł/kWh z taniej taryfy
 
-5. **Brak grzania podłogowego** - uproszczona logika na lato
+6. **Ochrona grzałki** - stabilne cykle pracy
+   - MIN_HEATING_TIME = 30 min (nie wyłączamy przed upływem)
+   - MIN_COOLDOWN = 5 min (przerwa przed ponownym włączeniem)
+   - Grzałka nie działa jak kierunkowskaz!
 
-6. **Detekcja problemów** - ostrzeżenia gdy grzałka nie działa (brak wzrostu temp)
+7. **Excess PV Mode** - dogrzewanie z nadwyżki
+   - Gdy eksportujemy >3kW i bilans >2kWh → dogrzej wodę
+   - Lepiej wykorzystać energię niż eksportować za grosze
+   - Monitoring co 15 min: stop gdy bilans <0.5 kWh lub pobór >3kW
+
+8. **Brak grzania podłogowego** - uproszczona logika na lato
+
+9. **Detekcja problemów** - ostrzeżenia gdy grzałka nie działa (brak wzrostu temp)
 
 ### Porównanie oszczędności
 
@@ -1303,7 +1594,23 @@ Tryb Summer to zaawansowany algorytm optymalizujący wykorzystanie energii z fot
 |------------|----------------|---------------|-------------|
 | Weekend słoneczny | Grzanie o 00:00 z taryfy 0.72 zł/kWh | Grzanie o 10:00 z PV 0 zł | **100%** |
 | Dzień roboczy słoneczny | Grzanie o 22:00 z taryfy | Grzanie o 10:00 z PV | **100%** |
-| Weekend pochmurny | Grzanie o 00:00 | Grzanie o 16:00 (deadline) | **0%** (ale ta sama cena) |
+| Dzień roboczy pochmurny | Czekanie do deadline 16:00 (droga) | Grzanie 13-15 (tania) | **38%** |
+| Weekend pochmurny | Grzanie o 00:00 | Grzanie o 16:00 (deadline) | **0%** (ta sama cena) |
 | Częściowe zachmurzenie | Mix taryfa + PV | Maksymalizacja PV | **~50%** |
+| Excess PV (dogrzewanie) | Eksport za 0.30 zł/kWh | Dogrzanie za 0 zł | **100%** |
 
-Implementacja wymaga modyfikacji ~5 plików i dodania ~400-500 linii kodu. Testy powinny obejmować wszystkie scenariusze opisane w tym dokumencie.
+### Scenariusze w dokumentacji
+
+| Nr | Nazwa | Pokazuje |
+|----|-------|----------|
+| 1 | Słoneczny dzień letni | Podstawowy flow PV |
+| 1b | PV słabe, okno 13-15 ratuje | Fallback na tanią taryfę w SLOT_PV |
+| 2 | Pochmurny z przebłyskami | Emergency + fallback |
+| 3 | Weekend słoneczny | PV priorytet, nie taryfa o 00:00 |
+| 3b | Weekend pochmurny | Deadline, bufor nocny |
+| 3c | Weekend częściowe zachmurzenie | **Ochrona grzałki** (min 30 min, cooldown) |
+| 3d | Excess PV Mode | Dogrzewanie z nadwyżki |
+| 3e | Excess PV - chmura przerywa | Monitoring bilansu, bezpieczne wyłączenie |
+| 4 | Problem z grzałką | Detekcja braku postępu |
+
+Implementacja wymaga modyfikacji ~5-6 plików i dodania ~500-600 linii kodu. Testy powinny obejmować wszystkie scenariusze opisane w tym dokumencie.
