@@ -1,8 +1,9 @@
 /**
- * CWU Controller Panel JavaScript v6.0
+ * CWU Controller Panel JavaScript v7.0
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
+ * v7.0: Mobile-first redesign - Quick stats widgets at top (Power, CWU Temp+State, Mini Power Chart)
  */
 
 // Configuration
@@ -94,6 +95,7 @@ let tempChart = null;
 let powerChart = null;
 let techChart = null;
 let modalChart = null;
+let quickPowerChart = null;
 let stateStartTime = null;
 let cwuTemp1hAgo = null;
 
@@ -117,17 +119,21 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v6.0 initializing...');
+    console.log('CWU Controller Panel v7.0 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
     initCharts();
+    initQuickPowerChart();
     await refreshData();
     await updateAllChartData();
+    await updateQuickPowerChart();
     await fetchCwuTemp1hAgo();
 
     updateTimer = setInterval(refreshData, CONFIG.updateInterval);
     chartUpdateTimer = setInterval(updateAllChartData, CONFIG.chartUpdateInterval);
+    // Update quick chart more frequently for real-time feel
+    setInterval(updateQuickPowerChart, 30000);
 
     updateLastUpdateTime();
     setInterval(updateLastUpdateTime, 1000);
@@ -571,6 +577,7 @@ function handleCwuSessionChange(oldState, newState) {
 async function updateUI() {
     const attrs = currentData.attributes || {};
 
+    updateQuickStats();
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
@@ -1820,6 +1827,161 @@ function showNotification(message, type = 'info') {
 function updateLastUpdateTime() {
     const el = document.getElementById('last-update');
     if (el) el.textContent = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/**
+ * Initialize quick power sparkline chart
+ */
+function initQuickPowerChart() {
+    const ctx = document.getElementById('quickPowerChart');
+    if (!ctx) return;
+
+    quickPowerChart = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            datasets: [{
+                data: [],
+                borderColor: '#fc8181',
+                backgroundColor: 'rgba(252, 129, 129, 0.3)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    display: false,
+                },
+                y: {
+                    display: false,
+                    suggestedMin: 0,
+                    suggestedMax: 2000
+                }
+            },
+            interaction: { mode: 'none' },
+            animation: { duration: 0 }
+        }
+    });
+}
+
+/**
+ * Update quick power sparkline chart with 1h data
+ */
+async function updateQuickPowerChart() {
+    if (!quickPowerChart) return;
+
+    const history = await fetchHistory(EXTERNAL_ENTITIES.power, 1);
+
+    const chartData = history
+        .filter(item => item.state !== 'unavailable' && item.state !== 'unknown')
+        .map(item => ({
+            x: new Date(item.last_changed || item.last_updated),
+            y: parseFloat(item.state) || 0
+        }))
+        .filter(item => !isNaN(item.y));
+
+    if (chartData.length > 0) {
+        // Auto-scale Y axis based on data
+        const maxPower = Math.max(...chartData.map(d => d.y));
+        quickPowerChart.options.scales.y.suggestedMax = Math.max(500, maxPower * 1.1);
+    }
+
+    quickPowerChart.data.datasets[0].data = chartData;
+    quickPowerChart.update('none');
+}
+
+/**
+ * Update quick stats widgets (Power, CWU Temp + State)
+ */
+function updateQuickStats() {
+    // Update Power
+    const quickPowerEl = document.getElementById('quick-power');
+    if (quickPowerEl) {
+        const power = currentData.power || 0;
+        quickPowerEl.textContent = Math.round(power);
+
+        // Color based on power level
+        const powerWidget = quickPowerEl.closest('.quick-widget');
+        powerWidget.classList.remove('idle', 'active', 'high');
+        if (power < 50) {
+            powerWidget.classList.add('idle');
+        } else if (power < 1000) {
+            powerWidget.classList.add('active');
+        } else {
+            powerWidget.classList.add('high');
+        }
+    }
+
+    // Update CWU Temp
+    const quickTempEl = document.getElementById('quick-cwu-temp');
+    if (quickTempEl) {
+        const temp = currentData.cwuTemp;
+        quickTempEl.textContent = temp !== undefined ? temp.toFixed(1) : '--';
+    }
+
+    // Update State Badge
+    const state = currentData.state || 'unknown';
+    const quickStateIcon = document.getElementById('quick-state-icon');
+    const quickStateName = document.getElementById('quick-state-name');
+    const quickStateBadge = document.getElementById('quick-state-badge');
+    const quickTempWidget = document.getElementById('quick-temp-widget');
+
+    if (quickStateIcon && quickStateName && quickStateBadge) {
+        const iconClass = STATE_ICONS[state] || 'mdi-help-circle';
+        quickStateIcon.className = `mdi ${iconClass}`;
+
+        // Format state name
+        const stateName = state.replace(/_/g, ' ');
+        quickStateName.textContent = stateName.charAt(0).toUpperCase() + stateName.slice(1);
+
+        // Apply state class for coloring
+        quickStateBadge.className = 'quick-state-badge';
+        quickTempWidget.className = 'quick-widget temp-widget';
+
+        if (state.includes('cwu') || state.includes('heating_cwu')) {
+            quickStateBadge.classList.add('state-cwu');
+            quickTempWidget.classList.add('state-cwu');
+        } else if (state.includes('floor')) {
+            quickStateBadge.classList.add('state-floor');
+            quickTempWidget.classList.add('state-floor');
+        } else if (state.includes('emergency')) {
+            quickStateBadge.classList.add('state-emergency');
+            quickTempWidget.classList.add('state-emergency');
+        } else if (state.includes('pause')) {
+            quickStateBadge.classList.add('state-pause');
+            quickTempWidget.classList.add('state-pause');
+        } else if (state.includes('safe_mode')) {
+            quickStateBadge.classList.add('state-safe');
+            quickTempWidget.classList.add('state-safe');
+        }
+    }
+
+    // Update temp change (only when CWU is heating)
+    const quickTempChange = document.getElementById('quick-temp-change');
+    if (quickTempChange) {
+        const attrs = currentData.attributes || {};
+        const sessionStartTemp = attrs.cwu_session_start_temp;
+        const isHeating = currentData.cwuHeatingActive;
+
+        if (isHeating && sessionStartTemp !== undefined && currentData.cwuTemp !== undefined) {
+            const change = currentData.cwuTemp - sessionStartTemp;
+            quickTempChange.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(1)}°C`;
+            quickTempChange.style.color = change >= 0 ? '#68d391' : '#fc8181';
+            quickTempChange.style.display = 'inline';
+        } else {
+            quickTempChange.style.display = 'none';
+        }
+    }
 }
 
 // Initialize

@@ -1,4 +1,4 @@
-/* CWU Controller Panel Styles v6.0 - Winter mode, Safe mode, G12w tariff */
+/* CWU Controller Panel Styles v7.0 - Mobile-first quick stats redesign */
 :root {
     --bg-primary: #0f0f1a;
     --bg-secondary: #1a1a2e;
@@ -2714,5 +2714,259 @@ body {
         width: 100%;
         height: 1px;
         margin: 10px 0;
+    }
+}
+
+/* ============================================
+   Quick Stats - Mobile First (v7.0)
+   ============================================ */
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.quick-widget {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    position: relative;
+    transition: var(--transition);
+}
+
+.quick-widget:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+/* Power Widget */
+.power-widget .quick-widget-icon {
+    font-size: 24px;
+    color: var(--accent-cyan);
+    margin-bottom: 8px;
+}
+
+.power-widget.idle .quick-widget-icon {
+    color: var(--text-muted);
+}
+
+.power-widget.active .quick-widget-icon {
+    color: var(--accent-cyan);
+    animation: power-pulse 1.5s infinite;
+}
+
+.power-widget.high .quick-widget-icon {
+    color: var(--accent-red);
+    animation: power-pulse 0.5s infinite;
+}
+
+@keyframes power-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.quick-widget-content {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.quick-widget-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.quick-widget-unit {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.quick-widget-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+}
+
+/* Temp Widget with State */
+.temp-widget {
+    position: relative;
+}
+
+.quick-widget-header {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.quick-state-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--glass-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.quick-state-badge .mdi {
+    font-size: 12px;
+}
+
+/* State colors for badge */
+.quick-state-badge.state-cwu {
+    background: rgba(0, 217, 255, 0.15);
+    border-color: rgba(0, 217, 255, 0.3);
+    color: var(--accent-cyan);
+}
+
+.quick-state-badge.state-floor {
+    background: rgba(237, 137, 54, 0.15);
+    border-color: rgba(237, 137, 54, 0.3);
+    color: var(--accent-orange);
+}
+
+.quick-state-badge.state-emergency {
+    background: rgba(252, 129, 129, 0.15);
+    border-color: rgba(252, 129, 129, 0.3);
+    color: var(--accent-red);
+    animation: emergency-badge-pulse 1s infinite;
+}
+
+@keyframes emergency-badge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(252, 129, 129, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(252, 129, 129, 0.2); }
+}
+
+.quick-state-badge.state-pause {
+    background: rgba(160, 174, 192, 0.15);
+    border-color: rgba(160, 174, 192, 0.3);
+    color: var(--text-muted);
+}
+
+.quick-state-badge.state-safe {
+    background: rgba(246, 224, 94, 0.15);
+    border-color: rgba(246, 224, 94, 0.3);
+    color: var(--accent-yellow);
+}
+
+/* Widget state colors */
+.temp-widget.state-cwu {
+    border-color: rgba(0, 217, 255, 0.3);
+    background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), var(--bg-card));
+}
+
+.temp-widget.state-floor {
+    border-color: rgba(237, 137, 54, 0.3);
+    background: linear-gradient(135deg, rgba(237, 137, 54, 0.1), var(--bg-card));
+}
+
+.temp-widget.state-emergency {
+    border-color: rgba(252, 129, 129, 0.4);
+    background: linear-gradient(135deg, rgba(252, 129, 129, 0.15), var(--bg-card));
+    animation: emergency-widget-pulse 1s infinite;
+}
+
+@keyframes emergency-widget-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(252, 129, 129, 0.2); }
+    50% { box-shadow: 0 0 30px rgba(252, 129, 129, 0.4); }
+}
+
+.temp-widget.state-pause {
+    border-color: rgba(160, 174, 192, 0.3);
+}
+
+.temp-widget.state-safe {
+    border-color: rgba(246, 224, 94, 0.3);
+    background: linear-gradient(135deg, rgba(246, 224, 94, 0.1), var(--bg-card));
+}
+
+.quick-temp-change {
+    font-size: 14px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+/* Chart Widget */
+.chart-widget {
+    padding: 12px;
+}
+
+.chart-widget .quick-widget-label {
+    margin-top: 0;
+    margin-bottom: 8px;
+}
+
+.quick-chart-container {
+    width: 100%;
+    height: 70px;
+    position: relative;
+}
+
+/* Power widget states */
+.power-widget.idle .quick-widget-value {
+    color: var(--text-muted);
+}
+
+.power-widget.active .quick-widget-value {
+    color: var(--accent-cyan);
+}
+
+.power-widget.high .quick-widget-value {
+    color: var(--accent-red);
+}
+
+/* Responsive Quick Stats */
+@media (max-width: 600px) {
+    .quick-stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .chart-widget {
+        grid-column: span 2;
+    }
+
+    .quick-widget {
+        min-height: 100px;
+        padding: 12px;
+    }
+
+    .quick-widget-value {
+        font-size: 28px;
+    }
+
+    .quick-state-badge {
+        font-size: 9px;
+        padding: 3px 8px;
+    }
+}
+
+@media (max-width: 400px) {
+    .quick-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-widget {
+        grid-column: span 1;
+    }
+
+    .quick-chart-container {
+        height: 60px;
     }
 }

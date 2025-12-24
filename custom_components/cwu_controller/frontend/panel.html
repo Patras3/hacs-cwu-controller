@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=6.0.2">
+    <link rel="stylesheet" href="styles.css?v=7.0.0">
 </head>
 <body>
     <div class="container">
@@ -54,6 +54,45 @@
             <div>
                 <strong>Manual Override Active</strong>
                 <p>Automatic control is suspended. Override expires in: <span id="override-remaining">--</span></p>
+            </div>
+        </div>
+
+        <!-- Quick Stats - Mobile First (no scroll needed) -->
+        <div class="quick-stats">
+            <!-- Power Widget -->
+            <div class="quick-widget power-widget">
+                <div class="quick-widget-icon">
+                    <span class="mdi mdi-flash"></span>
+                </div>
+                <div class="quick-widget-content">
+                    <span class="quick-widget-value" id="quick-power">--</span>
+                    <span class="quick-widget-unit">W</span>
+                </div>
+                <div class="quick-widget-label">Power</div>
+            </div>
+
+            <!-- CWU Temp + State Widget -->
+            <div class="quick-widget temp-widget" id="quick-temp-widget">
+                <div class="quick-widget-header">
+                    <span class="quick-state-badge" id="quick-state-badge">
+                        <span class="mdi mdi-sleep" id="quick-state-icon"></span>
+                        <span id="quick-state-name">Idle</span>
+                    </span>
+                </div>
+                <div class="quick-widget-content">
+                    <span class="quick-widget-value" id="quick-cwu-temp">--</span>
+                    <span class="quick-widget-unit">°C</span>
+                    <span class="quick-temp-change" id="quick-temp-change"></span>
+                </div>
+                <div class="quick-widget-label">CWU Temp</div>
+            </div>
+
+            <!-- Mini Power Chart Widget -->
+            <div class="quick-widget chart-widget">
+                <div class="quick-widget-label">Power 1h</div>
+                <div class="quick-chart-container">
+                    <canvas id="quickPowerChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -783,6 +822,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=6.0.2"></script>
+    <script src="panel.js?v=7.0.0"></script>
 </body>
 </html>
