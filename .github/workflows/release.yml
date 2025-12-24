@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current version
+        id: current_version
+        run: |
+          VERSION=$(jq -r '.version' custom_components/cwu_controller/manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.version }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "${{ github.event.inputs.version_type }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update manifest.json
+        run: |
+          jq '.version = "${{ steps.new_version.outputs.version }}"' \
+            custom_components/cwu_controller/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/cwu_controller/manifest.json
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges | head -20)
+          else
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          fi
+
+          # Escape for GitHub Actions
+          COMMITS="${COMMITS//'%'/'%25'}"
+          COMMITS="${COMMITS//$'\n'/'%0A'}"
+          COMMITS="${COMMITS//$'\r'/'%0D'}"
+
+          echo "commits=$COMMITS" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add custom_components/cwu_controller/manifest.json
+          git commit -m "chore: Bump version to ${{ steps.new_version.outputs.version }}"
+          git push
+
+      - name: Create and push tag
+        run: |
+          git tag "v${{ steps.new_version.outputs.version }}"
+          git push origin "v${{ steps.new_version.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ steps.new_version.outputs.version }}"
+          name: "v${{ steps.new_version.outputs.version }}"
+          body: |
+            ## Changes
+
+            ${{ steps.changelog.outputs.commits }}
+
+            ## Installation
+
+            Install via HACS or copy `custom_components/cwu_controller` to your Home Assistant config.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
