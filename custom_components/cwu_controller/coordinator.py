@@ -205,6 +205,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._summer_energy_pv_excess_yesterday: float = 0.0
         self._summer_energy_tariff_cheap_yesterday: float = 0.0
         self._summer_energy_tariff_expensive_yesterday: float = 0.0
+        self._summer_energy_last_reset_date: datetime | None = None  # Track last reset date
 
         # Energy tracking (kWh accumulated) - split by tariff type
         # Today's accumulated energy
@@ -976,6 +977,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Floor stays OFF in summer mode - no need to turn it on
 
             self._summer_last_stop = datetime.now()
+            self._summer_heating_start = None  # Reset for next session
             self._summer_heating_source = HEATING_SOURCE_NONE
             self._summer_excess_mode_active = False
             self._log_action("Summer mode: CWU heater disabled")
@@ -1039,23 +1041,37 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Update current time slot and reset stats at midnight."""
         now = datetime.now()
         hour = now.hour
+        today = now.date()
 
         # Update current slot
         self._summer_current_slot = self._get_summer_slot(hour)
 
-        # Reset daily stats at midnight
-        if hour == 0 and self._summer_energy_pv_today > 0:
-            # Move today's stats to yesterday
-            self._summer_energy_pv_yesterday = self._summer_energy_pv_today
-            self._summer_energy_pv_excess_yesterday = self._summer_energy_pv_excess_today
-            self._summer_energy_tariff_cheap_yesterday = self._summer_energy_tariff_cheap_today
-            self._summer_energy_tariff_expensive_yesterday = self._summer_energy_tariff_expensive_today
+        # Reset daily stats when date changes (handles restart scenarios too)
+        if self._summer_energy_last_reset_date is None:
+            # First run - just set the date
+            self._summer_energy_last_reset_date = now
+        elif self._summer_energy_last_reset_date.date() != today:
+            # Date changed - check if any energy was tracked today
+            total_today = (
+                self._summer_energy_pv_today +
+                self._summer_energy_pv_excess_today +
+                self._summer_energy_tariff_cheap_today +
+                self._summer_energy_tariff_expensive_today
+            )
+
+            if total_today > 0:
+                # Move today's stats to yesterday
+                self._summer_energy_pv_yesterday = self._summer_energy_pv_today
+                self._summer_energy_pv_excess_yesterday = self._summer_energy_pv_excess_today
+                self._summer_energy_tariff_cheap_yesterday = self._summer_energy_tariff_cheap_today
+                self._summer_energy_tariff_expensive_yesterday = self._summer_energy_tariff_expensive_today
 
             # Reset today's stats
             self._summer_energy_pv_today = 0.0
             self._summer_energy_pv_excess_today = 0.0
             self._summer_energy_tariff_cheap_today = 0.0
             self._summer_energy_tariff_expensive_today = 0.0
+            self._summer_energy_last_reset_date = now
 
     async def _run_summer_mode_logic(
         self,
@@ -1197,6 +1213,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 if self._summer_heating_source == HEATING_SOURCE_PV:
                     # Track PV energy used so far
                     await self._track_summer_energy_usage()
+                    # Reset timer for tariff energy tracking (not heater protection -
+                    # that already passed since we're in the conditions re-evaluation block)
                     self._summer_heating_start = now
                     source = HEATING_SOURCE_TARIFF_CHEAP if self.is_cheap_tariff() else HEATING_SOURCE_TARIFF_EXPENSIVE
                     self._summer_heating_source = source
