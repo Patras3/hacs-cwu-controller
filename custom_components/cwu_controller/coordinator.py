@@ -32,6 +32,7 @@ from .const import (
     URGENCY_HIGH,
     URGENCY_CRITICAL,
     POWER_IDLE_THRESHOLD,
+    POWER_SPIKE_THRESHOLD,
     POWER_THERMODYNAMIC_MIN,
     CWU_MAX_HEATING_TIME,
     CWU_PAUSE_TIME,
@@ -588,7 +589,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         return URGENCY_NONE
 
     def _detect_fake_heating(self, power: float | None, wh_state: str | None) -> bool:
-        """Detect if pump thinks it's heating but using broken heater."""
+        """Detect if pump thinks it's heating but not actually heating CWU.
+
+        Detects fake heating when:
+        - Water heater is in active mode (heat_pump or performance)
+        - CWU heating has been active for at least FAKE_HEATING_DETECTION_TIME
+        - No power spike >= POWER_SPIKE_THRESHOLD (100W) in the last 10 minutes
+
+        This catches both scenarios:
+        1. Power < 10W (pump waiting for broken immersion heater)
+        2. Power ~50W (pump running but compressor not heating CWU)
+        """
         if power is None or wh_state is None:
             return False
 
@@ -596,20 +607,30 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if wh_state not in (WH_MODE_HEAT_PUMP, WH_MODE_PERFORMANCE):
             return False
 
-        # Power should be very low (< 10W means waiting for heater)
-        if power >= POWER_IDLE_THRESHOLD:
-            # Reset low power tracking
-            self._low_power_start = None
+        # Need to be in CWU heating state for at least FAKE_HEATING_DETECTION_TIME
+        if self._cwu_heating_start is None:
             return False
 
-        # Track how long power has been low
         now = datetime.now()
-        if self._low_power_start is None:
-            self._low_power_start = now
+        minutes_heating = (now - self._cwu_heating_start).total_seconds() / 60
+        if minutes_heating < FAKE_HEATING_DETECTION_TIME:
             return False
 
-        minutes_low = (now - self._low_power_start).total_seconds() / 60
-        return minutes_low >= FAKE_HEATING_DETECTION_TIME
+        # Check if there was any power spike above threshold in recent readings
+        if not self._recent_power_readings:
+            return False
+
+        # Get readings from last FAKE_HEATING_DETECTION_TIME minutes
+        cutoff = now - timedelta(minutes=FAKE_HEATING_DETECTION_TIME)
+        recent_readings = [p for t, p in self._recent_power_readings if t > cutoff]
+
+        if not recent_readings:
+            return False
+
+        max_power = max(recent_readings)
+
+        # Fake heating if max power is below spike threshold (no real heating detected)
+        return max_power < POWER_SPIKE_THRESHOLD
 
     def _should_restart_cwu_cycle(self) -> bool:
         """Check if we need to restart CWU cycle due to 3h limit."""
@@ -1404,7 +1425,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             await self._async_set_water_heater_mode(WH_MODE_OFF)
             await self._async_send_notification(
                 "CWU Controller Alert",
-                f"Fake heating detected! Power < 10W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
+                f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
                 f"CWU temp: {cwu_temp}°C. Waiting {FAKE_HEATING_RESTART_WAIT} min before restart..."
             )
             self._log_action(f"Fake heating detected - CWU OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
