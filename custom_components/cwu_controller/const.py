@@ -53,6 +53,7 @@ DEFAULT_BEDROOM_MIN_TEMP: Final = 19.0
 
 # Power thresholds
 POWER_IDLE_THRESHOLD: Final = 10  # Below this = pump waiting for broken heater
+POWER_SPIKE_THRESHOLD: Final = 100  # Min power spike indicating real CWU heating
 POWER_PUMP_RUNNING: Final = 80  # Pump running but not compressor
 POWER_THERMODYNAMIC_MIN: Final = 300  # Thermodynamic heating active
 POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating

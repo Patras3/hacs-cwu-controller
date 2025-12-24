@@ -510,28 +510,88 @@ class TestStateManagement:
 
 
 class TestFakeHeatingDetection:
-    """Tests for fake heating detection (broken heater mode)."""
+    """Tests for fake heating detection (broken heater mode).
+
+    Fake heating is detected when:
+    - Water heater is in active mode (heat_pump/performance)
+    - CWU heating has been active for 10+ minutes
+    - No power spike >= 100W in the last 10 minutes
+    """
 
     def test_no_fake_heating_high_power(self, mock_coordinator):
-        """Test no fake heating detected when power is high."""
-        result = mock_coordinator._detect_fake_heating(500.0, "heat_pump")
+        """Test no fake heating detected when power spike exists."""
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = now - timedelta(minutes=15)
+        # Power readings with a spike above 100W
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=9), 50.0),
+            (now - timedelta(minutes=7), 150.0),  # Spike above threshold
+            (now - timedelta(minutes=5), 50.0),
+            (now - timedelta(minutes=3), 45.0),
+            (now - timedelta(minutes=1), 40.0),
+        ]
+        result = mock_coordinator._detect_fake_heating(40.0, "heat_pump")
         assert result is False
 
     def test_no_fake_heating_wrong_mode(self, mock_coordinator):
         """Test no fake heating detected when water heater is off."""
-        mock_coordinator._low_power_start = datetime.now() - timedelta(minutes=10)
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = now - timedelta(minutes=15)
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=5), 5.0),
+            (now - timedelta(minutes=3), 5.0),
+            (now - timedelta(minutes=1), 5.0),
+        ]
         result = mock_coordinator._detect_fake_heating(5.0, "off")
         assert result is False
 
-    def test_fake_heating_detected_after_timeout(self, mock_coordinator):
-        """Test fake heating detected after timeout with low power."""
-        mock_coordinator._low_power_start = datetime.now() - timedelta(minutes=10)
+    def test_fake_heating_detected_low_power(self, mock_coordinator):
+        """Test fake heating detected when power stays below threshold (< 10W)."""
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = now - timedelta(minutes=15)
+        # All readings below 100W (pump waiting for broken heater)
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=9), 5.0),
+            (now - timedelta(minutes=7), 5.0),
+            (now - timedelta(minutes=5), 5.0),
+            (now - timedelta(minutes=3), 5.0),
+            (now - timedelta(minutes=1), 5.0),
+        ]
         result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
         assert result is True
 
+    def test_fake_heating_detected_pump_running_no_spike(self, mock_coordinator):
+        """Test fake heating detected when pump runs (~50W) but no CWU heating spike."""
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = now - timedelta(minutes=15)
+        # Pump running at ~50W but no spike >= 100W (not heating CWU)
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=9), 45.0),
+            (now - timedelta(minutes=7), 50.0),
+            (now - timedelta(minutes=5), 55.0),
+            (now - timedelta(minutes=3), 48.0),
+            (now - timedelta(minutes=1), 52.0),
+        ]
+        result = mock_coordinator._detect_fake_heating(52.0, "heat_pump")
+        assert result is True
+
     def test_fake_heating_not_detected_short_duration(self, mock_coordinator):
-        """Test fake heating not detected before timeout."""
-        mock_coordinator._low_power_start = datetime.now() - timedelta(minutes=2)
+        """Test fake heating not detected before timeout (10 min)."""
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = now - timedelta(minutes=2)  # Only 2 min
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=1), 5.0),
+        ]
+        result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
+        assert result is False
+
+    def test_fake_heating_not_detected_no_cwu_start(self, mock_coordinator):
+        """Test no fake heating when CWU heating hasn't started."""
+        now = datetime.now()
+        mock_coordinator._cwu_heating_start = None
+        mock_coordinator._recent_power_readings = [
+            (now - timedelta(minutes=5), 5.0),
+        ]
         result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
         assert result is False
 
