@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=6.0.2">
+    <link rel="stylesheet" href="styles.css?v=7.0.0">
 </head>
 <body>
     <div class="container">
@@ -114,7 +114,7 @@
                         <select id="operating-mode-select" class="mode-select" onchange="changeOperatingMode(this.value)">
                             <option value="broken_heater">Broken Heater</option>
                             <option value="winter">Winter</option>
-                            <option value="summer">Summer (N/A)</option>
+                            <option value="summer">Summer (PV)</option>
                         </select>
                     </div>
                     <div class="tariff-info">
@@ -144,6 +144,87 @@
                             <span class="mdi mdi-alert-circle-outline"></span>
                             <span>Emergency below: <strong id="winter-emergency-threshold">--</strong>°C</span>
                         </div>
+                        <!-- Summer mode specific rows -->
+                        <div class="tariff-row" id="summer-slot-row" style="display: none;">
+                            <span class="mdi mdi-clock-time-eight" id="summer-slot-icon"></span>
+                            <span>Slot: <strong id="summer-current-slot">--</strong></span>
+                        </div>
+                        <div class="tariff-row" id="summer-source-row" style="display: none;">
+                            <span class="mdi mdi-solar-power" id="summer-source-icon"></span>
+                            <span>Source: <strong id="summer-heating-source">--</strong></span>
+                        </div>
+                        <div class="tariff-row" id="summer-target-row" style="display: none;">
+                            <span class="mdi mdi-target"></span>
+                            <span>Target: <strong id="summer-cwu-target">--</strong>°C</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summer PV Card (only visible in summer mode) -->
+            <div class="card glass-effect summer-pv-card" id="summer-pv-card" style="display: none;">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-solar-power-variant"></span>
+                        Summer PV Status
+                    </span>
+                    <span class="badge" id="summer-pv-status">--</span>
+                </div>
+                <div class="summer-pv-content">
+                    <div class="summer-pv-grid">
+                        <div class="summer-pv-item">
+                            <span class="summer-pv-icon mdi mdi-weather-sunny"></span>
+                            <div class="summer-pv-data">
+                                <div class="summer-pv-label">PV Production</div>
+                                <div class="summer-pv-value" id="summer-pv-production">-- W</div>
+                            </div>
+                        </div>
+                        <div class="summer-pv-item">
+                            <span class="summer-pv-icon mdi mdi-scale-balance"></span>
+                            <div class="summer-pv-data">
+                                <div class="summer-pv-label">Hourly Balance</div>
+                                <div class="summer-pv-value" id="summer-pv-balance">-- kWh</div>
+                            </div>
+                        </div>
+                        <div class="summer-pv-item">
+                            <span class="summer-pv-icon mdi mdi-transmission-tower"></span>
+                            <div class="summer-pv-data">
+                                <div class="summer-pv-label">Grid Power</div>
+                                <div class="summer-pv-value" id="summer-grid-power">-- W</div>
+                            </div>
+                        </div>
+                        <div class="summer-pv-item">
+                            <span class="summer-pv-icon mdi mdi-percent"></span>
+                            <div class="summer-pv-data">
+                                <div class="summer-pv-label">PV Efficiency</div>
+                                <div class="summer-pv-value" id="summer-pv-efficiency">-- %</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summer-decision-box">
+                        <div class="summer-decision-header">
+                            <span class="mdi mdi-information-outline"></span>
+                            <span>Decision Reason</span>
+                        </div>
+                        <div class="summer-decision-text" id="summer-decision-reason">--</div>
+                    </div>
+                    <div class="summer-stats-row">
+                        <div class="summer-stat">
+                            <span class="mdi mdi-solar-power"></span>
+                            <span>Today PV: <strong id="summer-energy-pv-today">0.00</strong> kWh</span>
+                        </div>
+                        <div class="summer-stat">
+                            <span class="mdi mdi-transmission-tower"></span>
+                            <span>Today Grid: <strong id="summer-energy-tariff-today">0.00</strong> kWh</span>
+                        </div>
+                        <div class="summer-stat">
+                            <span class="mdi mdi-piggy-bank"></span>
+                            <span>Savings: <strong id="summer-savings-today">0.00</strong> zł</span>
+                        </div>
+                    </div>
+                    <div class="summer-protection-row" id="summer-protection-row" style="display: none;">
+                        <span class="mdi mdi-shield-check"></span>
+                        <span id="summer-protection-status">Heater protection active</span>
                     </div>
                 </div>
             </div>
@@ -698,7 +779,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>CWU Controller v3.0.0 | Last update: <span id="last-update">--</span></p>
+            <p>CWU Controller v3.1.0 | Last update: <span id="last-update">--</span></p>
         </footer>
     </div>
 
@@ -783,6 +864,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=6.0.2"></script>
+    <script src="panel.js?v=7.0.0"></script>
 </body>
 </html>

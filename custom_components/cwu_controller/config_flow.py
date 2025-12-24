@@ -46,6 +46,28 @@ from .const import (
     MODE_WINTER,
     MODE_SUMMER,
     OPERATING_MODES,
+    # Summer mode configuration
+    CONF_PV_BALANCE_SENSOR,
+    CONF_PV_PRODUCTION_SENSOR,
+    CONF_GRID_POWER_SENSOR,
+    CONF_SUMMER_HEATER_POWER,
+    CONF_SUMMER_BALANCE_THRESHOLD,
+    CONF_SUMMER_PV_SLOT_START,
+    CONF_SUMMER_PV_SLOT_END,
+    CONF_SUMMER_PV_DEADLINE,
+    CONF_SUMMER_NIGHT_THRESHOLD,
+    CONF_SUMMER_NIGHT_TARGET,
+    DEFAULT_PV_BALANCE_SENSOR,
+    DEFAULT_PV_PRODUCTION_SENSOR,
+    DEFAULT_GRID_POWER_SENSOR,
+    SUMMER_HEATER_POWER,
+    SUMMER_BALANCE_THRESHOLD,
+    SUMMER_PV_SLOT_START,
+    SUMMER_PV_SLOT_END,
+    SUMMER_PV_DEADLINE,
+    SUMMER_NIGHT_THRESHOLD,
+    SUMMER_NIGHT_TARGET,
+    SUMMER_CWU_TARGET_TEMP,
 )
 
 
@@ -132,6 +154,16 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_FLOOR_INPUT_TEMP, default=defaults[CONF_FLOOR_INPUT_TEMP]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),
+            # Summer mode PV sensors
+            vol.Optional(CONF_PV_BALANCE_SENSOR, default=DEFAULT_PV_BALANCE_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(CONF_PV_PRODUCTION_SENSOR, default=DEFAULT_PV_PRODUCTION_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(CONF_GRID_POWER_SENSOR, default=DEFAULT_GRID_POWER_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
         })
 
         return self.async_show_form(
@@ -159,7 +191,7 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         mode_options = [
             selector.SelectOptionDict(value=MODE_BROKEN_HEATER, label="Broken Heater (Fake heating detection)"),
             selector.SelectOptionDict(value=MODE_WINTER, label="Winter (Tariff-optimized heating)"),
-            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (Not implemented yet)"),
+            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (PV-optimized heating)"),
         ]
 
         data_schema = vol.Schema({
@@ -191,6 +223,28 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             vol.Required(CONF_TARIFF_CHEAP_RATE, default=TARIFF_CHEAP_RATE): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
+            ),
+            # Summer mode specific settings
+            vol.Optional(CONF_SUMMER_HEATER_POWER, default=SUMMER_HEATER_POWER): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=1000, max=6000, step=100, unit_of_measurement="W")
+            ),
+            vol.Optional(CONF_SUMMER_BALANCE_THRESHOLD, default=SUMMER_BALANCE_THRESHOLD): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=1.0, step=0.1)
+            ),
+            vol.Optional(CONF_SUMMER_PV_SLOT_START, default=SUMMER_PV_SLOT_START): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=5, max=12, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_PV_SLOT_END, default=SUMMER_PV_SLOT_END): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=15, max=21, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_PV_DEADLINE, default=SUMMER_PV_DEADLINE): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=12, max=18, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_NIGHT_THRESHOLD, default=SUMMER_NIGHT_THRESHOLD): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=35, max=45, step=0.5, unit_of_measurement="°C")
+            ),
+            vol.Optional(CONF_SUMMER_NIGHT_TARGET, default=SUMMER_NIGHT_TARGET): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=38, max=48, step=0.5, unit_of_measurement="°C")
             ),
         })
 
@@ -227,7 +281,7 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
         mode_options = [
             selector.SelectOptionDict(value=MODE_BROKEN_HEATER, label="Broken Heater (Fake heating detection)"),
             selector.SelectOptionDict(value=MODE_WINTER, label="Winter (Tariff-optimized heating)"),
-            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (Not implemented yet)"),
+            selector.SelectOptionDict(value=MODE_SUMMER, label="Summer (PV-optimized heating)"),
         ]
 
         data_schema = vol.Schema({
@@ -259,6 +313,28 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
             ),
             vol.Required(CONF_TARIFF_CHEAP_RATE, default=data.get(CONF_TARIFF_CHEAP_RATE, TARIFF_CHEAP_RATE)): selector.NumberSelector(
                 selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.01, unit_of_measurement="zł/kWh")
+            ),
+            # Summer mode specific settings
+            vol.Optional(CONF_SUMMER_HEATER_POWER, default=data.get(CONF_SUMMER_HEATER_POWER, SUMMER_HEATER_POWER)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=1000, max=6000, step=100, unit_of_measurement="W")
+            ),
+            vol.Optional(CONF_SUMMER_BALANCE_THRESHOLD, default=data.get(CONF_SUMMER_BALANCE_THRESHOLD, SUMMER_BALANCE_THRESHOLD)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0.1, max=1.0, step=0.1)
+            ),
+            vol.Optional(CONF_SUMMER_PV_SLOT_START, default=data.get(CONF_SUMMER_PV_SLOT_START, SUMMER_PV_SLOT_START)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=5, max=12, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_PV_SLOT_END, default=data.get(CONF_SUMMER_PV_SLOT_END, SUMMER_PV_SLOT_END)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=15, max=21, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_PV_DEADLINE, default=data.get(CONF_SUMMER_PV_DEADLINE, SUMMER_PV_DEADLINE)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=12, max=18, step=1, unit_of_measurement="h")
+            ),
+            vol.Optional(CONF_SUMMER_NIGHT_THRESHOLD, default=data.get(CONF_SUMMER_NIGHT_THRESHOLD, SUMMER_NIGHT_THRESHOLD)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=35, max=45, step=0.5, unit_of_measurement="°C")
+            ),
+            vol.Optional(CONF_SUMMER_NIGHT_TARGET, default=data.get(CONF_SUMMER_NIGHT_TARGET, SUMMER_NIGHT_TARGET)): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=38, max=48, step=0.5, unit_of_measurement="°C")
             ),
         })
 

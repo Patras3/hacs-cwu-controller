@@ -42,6 +42,14 @@ async def async_setup_entry(
         FloorEnergyCostTodaySensor(coordinator, entry),
         # Tariff sensor
         CurrentTariffRateSensor(coordinator, entry),
+        # Summer mode sensors - always registered but only active in summer mode
+        SummerPVEnergyTodaySensor(coordinator, entry),
+        SummerTariffEnergyTodaySensor(coordinator, entry),
+        SummerPVEfficiencySensor(coordinator, entry),
+        SummerSavingsTodaySensor(coordinator, entry),
+        SummerHeatingSourceSensor(coordinator, entry),
+        SummerPVBalanceSensor(coordinator, entry),
+        SummerCurrentSlotSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -144,6 +152,18 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             # Tariff rates
             "tariff_cheap_rate": data.get("tariff_cheap_rate"),
             "tariff_expensive_rate": data.get("tariff_expensive_rate"),
+            # Summer mode specific
+            "summer_cwu_target": data.get("summer_cwu_target"),
+            "summer_night_target": data.get("summer_night_target"),
+            "summer_current_slot": data.get("summer_current_slot"),
+            "summer_heating_source": data.get("summer_heating_source"),
+            "summer_excess_mode_active": data.get("summer_excess_mode_active"),
+            "summer_decision_reason": data.get("summer_decision_reason"),
+            "summer_pv_balance": data.get("summer_pv_balance"),
+            "summer_pv_production": data.get("summer_pv_production"),
+            "summer_grid_power": data.get("summer_grid_power"),
+            "summer_cooldown_active": data.get("summer_cooldown_active"),
+            "summer_min_heating_elapsed": data.get("summer_min_heating_elapsed"),
         }
 
 
@@ -459,4 +479,278 @@ class CurrentTariffRateSensor(CWUControllerBaseSensor):
             "tariff_type": "cheap" if is_cheap else "expensive",
             "is_cheap_tariff": is_cheap,
             "is_cwu_heating_window": self.coordinator.data.get("is_cwu_heating_window", False),
+        }
+
+
+# =============================================================================
+# Summer Mode Sensors
+# =============================================================================
+
+
+class SummerPVEnergyTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing PV energy used for CWU heating today (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_pv_energy_today", "Summer PV Energy Today")
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_icon = "mdi:solar-power"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return PV energy used today in kWh."""
+        if self.coordinator.data is None:
+            return None
+        summer_energy = self.coordinator.data.get("summer_energy_today")
+        if summer_energy is None:
+            return 0.0
+        return round(summer_energy.get("total_pv", 0), 3)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        summer_energy = self.coordinator.data.get("summer_energy_today") or {}
+        yesterday = self.coordinator.data.get("summer_energy_yesterday") or {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "direct_pv_kwh": summer_energy.get("pv", 0),
+            "excess_pv_kwh": summer_energy.get("pv_excess", 0),
+            "yesterday_pv_kwh": yesterday.get("total_pv", 0),
+            "note": "Energy used from PV for CWU heating (free!)",
+        }
+
+
+class SummerTariffEnergyTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing tariff energy used for CWU heating today (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_tariff_energy_today", "Summer Tariff Energy Today")
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_icon = "mdi:transmission-tower"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return tariff energy used today in kWh."""
+        if self.coordinator.data is None:
+            return None
+        summer_energy = self.coordinator.data.get("summer_energy_today")
+        if summer_energy is None:
+            return 0.0
+        return round(summer_energy.get("total_tariff", 0), 3)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        summer_energy = self.coordinator.data.get("summer_energy_today") or {}
+        yesterday = self.coordinator.data.get("summer_energy_yesterday") or {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "cheap_tariff_kwh": summer_energy.get("tariff_cheap", 0),
+            "expensive_tariff_kwh": summer_energy.get("tariff_expensive", 0),
+            "yesterday_tariff_kwh": yesterday.get("total_tariff", 0),
+            "note": "Energy used from grid for CWU heating (paid)",
+        }
+
+
+class SummerPVEfficiencySensor(CWUControllerBaseSensor):
+    """Sensor showing percentage of energy from PV (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_pv_efficiency", "Summer PV Efficiency")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_icon = "mdi:solar-power-variant"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return PV efficiency percentage."""
+        if self.coordinator.data is None:
+            return None
+        summer_energy = self.coordinator.data.get("summer_energy_today")
+        if summer_energy is None:
+            return 0.0
+        return round(summer_energy.get("pv_efficiency", 0), 1)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        summer_energy = self.coordinator.data.get("summer_energy_today") or {}
+        yesterday = self.coordinator.data.get("summer_energy_yesterday") or {}
+        return {
+            "total_energy_kwh": summer_energy.get("total", 0),
+            "pv_energy_kwh": summer_energy.get("total_pv", 0),
+            "tariff_energy_kwh": summer_energy.get("total_tariff", 0),
+            "yesterday_efficiency": yesterday.get("pv_efficiency", 0),
+            "note": "Percentage of CWU heating energy from PV (higher = better)",
+        }
+
+
+class SummerSavingsTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing estimated savings from PV usage (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_savings_today", "Summer Savings Today")
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = "PLN"
+        self._attr_icon = "mdi:piggy-bank"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return estimated savings in PLN."""
+        if self.coordinator.data is None:
+            return None
+        summer_energy = self.coordinator.data.get("summer_energy_today")
+        if summer_energy is None:
+            return 0.0
+        return round(summer_energy.get("savings", 0), 2)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        summer_energy = self.coordinator.data.get("summer_energy_today") or {}
+        yesterday = self.coordinator.data.get("summer_energy_yesterday") or {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "actual_cost": summer_energy.get("actual_cost", 0),
+            "yesterday_savings": yesterday.get("savings", 0),
+            "note": "Savings compared to using expensive tariff for all heating",
+        }
+
+
+class SummerHeatingSourceSensor(CWUControllerBaseSensor):
+    """Sensor showing current heating source (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_heating_source", "Summer Heating Source")
+        self._attr_icon = "mdi:information-outline"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return current heating source."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("summer_heating_source", "none")
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on heating source."""
+        source = self.native_value
+        icons = {
+            "none": "mdi:power-sleep",
+            "pv": "mdi:solar-power",
+            "pv_excess": "mdi:solar-power-variant",
+            "tariff_cheap": "mdi:currency-usd",
+            "tariff_expensive": "mdi:currency-usd-off",
+            "emergency": "mdi:alert",
+        }
+        return icons.get(source, "mdi:information-outline")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "current_slot": self.coordinator.data.get("summer_current_slot"),
+            "excess_mode_active": self.coordinator.data.get("summer_excess_mode_active"),
+            "decision_reason": self.coordinator.data.get("summer_decision_reason"),
+            "cooldown_active": self.coordinator.data.get("summer_cooldown_active"),
+            "min_heating_elapsed": self.coordinator.data.get("summer_min_heating_elapsed"),
+        }
+
+
+class SummerPVBalanceSensor(CWUControllerBaseSensor):
+    """Sensor showing current hourly PV balance (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_pv_balance", "Summer PV Balance")
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_icon = "mdi:scale-balance"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current hourly PV balance in kWh."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("summer_pv_balance")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        balance = self.coordinator.data.get("summer_pv_balance")
+        return {
+            "pv_production_w": self.coordinator.data.get("summer_pv_production"),
+            "grid_power_w": self.coordinator.data.get("summer_grid_power"),
+            "status": "exporting" if balance is not None and balance > 0 else "importing",
+            "note": "Hourly balance - resets each hour",
+        }
+
+
+class SummerCurrentSlotSensor(CWUControllerBaseSensor):
+    """Sensor showing current time slot (Summer mode)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "summer_current_slot", "Summer Current Slot")
+        self._attr_icon = "mdi:clock-outline"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return current time slot."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("summer_current_slot", "unknown")
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on slot."""
+        slot = self.native_value
+        icons = {
+            "slot_pv": "mdi:weather-sunny",
+            "slot_evening": "mdi:weather-sunset",
+            "slot_night": "mdi:weather-night",
+        }
+        return icons.get(slot, "mdi:clock-outline")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        slot = self.native_value
+        descriptions = {
+            "slot_pv": "PV slot (08:00-18:00) - Prioritize solar energy",
+            "slot_evening": "Evening slot (18:00-24:00) - Fallback to cheap tariff",
+            "slot_night": "Night slot (00:00-08:00) - Only safety buffer heating",
+        }
+        return {
+            "description": descriptions.get(slot, "Unknown slot"),
+            "is_cheap_tariff": self.coordinator.data.get("is_cheap_tariff"),
         }

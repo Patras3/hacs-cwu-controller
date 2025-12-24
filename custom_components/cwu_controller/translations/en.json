@@ -17,7 +17,10 @@
           "pump_input_temp": "Heat Pump Input Temperature (optional)",
           "pump_output_temp": "Heat Pump Output Temperature (optional)",
           "cwu_input_temp": "CWU Input Temperature (optional)",
-          "floor_input_temp": "Floor Heating Input Temperature (optional)"
+          "floor_input_temp": "Floor Heating Input Temperature (optional)",
+          "pv_balance_sensor": "PV Hourly Balance Sensor (Summer mode)",
+          "pv_production_sensor": "PV Production Sensor (Summer mode)",
+          "grid_power_sensor": "Grid Power Sensor (Summer mode)"
         }
       },
       "thresholds": {
@@ -32,7 +35,14 @@
           "salon_min_temp": "Living Room Minimum Temperature",
           "bedroom_min_temp": "Bedroom Minimum Temperature",
           "tariff_expensive_rate": "Expensive Tariff Rate (G12w peak)",
-          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)"
+          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)",
+          "summer_heater_power": "Summer Mode: Heater Power (W)",
+          "summer_balance_threshold": "Summer Mode: Balance Threshold Ratio",
+          "summer_pv_slot_start": "Summer Mode: PV Slot Start Hour",
+          "summer_pv_slot_end": "Summer Mode: PV Slot End Hour",
+          "summer_pv_deadline": "Summer Mode: PV Deadline Hour",
+          "summer_night_threshold": "Summer Mode: Night Safety Threshold (°C)",
+          "summer_night_target": "Summer Mode: Night Target Temperature (°C)"
         }
       }
     },
@@ -57,7 +67,14 @@
           "salon_min_temp": "Living Room Minimum Temperature",
           "bedroom_min_temp": "Bedroom Minimum Temperature",
           "tariff_expensive_rate": "Expensive Tariff Rate (G12w peak)",
-          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)"
+          "tariff_cheap_rate": "Cheap Tariff Rate (G12w off-peak)",
+          "summer_heater_power": "Summer Mode: Heater Power (W)",
+          "summer_balance_threshold": "Summer Mode: Balance Threshold Ratio",
+          "summer_pv_slot_start": "Summer Mode: PV Slot Start Hour",
+          "summer_pv_slot_end": "Summer Mode: PV Slot End Hour",
+          "summer_pv_deadline": "Summer Mode: PV Deadline Hour",
+          "summer_night_threshold": "Summer Mode: Night Safety Threshold (°C)",
+          "summer_night_target": "Summer Mode: Night Target Temperature (°C)"
         }
       }
     }
@@ -96,6 +113,27 @@
       },
       "current_tariff_rate": {
         "name": "Current Tariff Rate"
+      },
+      "summer_pv_energy_today": {
+        "name": "Summer PV Energy Today"
+      },
+      "summer_tariff_energy_today": {
+        "name": "Summer Tariff Energy Today"
+      },
+      "summer_pv_efficiency": {
+        "name": "Summer PV Efficiency"
+      },
+      "summer_savings_today": {
+        "name": "Summer Savings Today"
+      },
+      "summer_heating_source": {
+        "name": "Summer Heating Source"
+      },
+      "summer_pv_balance": {
+        "name": "Summer PV Balance"
+      },
+      "summer_current_slot": {
+        "name": "Summer Current Slot"
       }
     },
     "switch": {

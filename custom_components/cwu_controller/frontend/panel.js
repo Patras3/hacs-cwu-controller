@@ -1,8 +1,9 @@
 /**
- * CWU Controller Panel JavaScript v6.0
+ * CWU Controller Panel JavaScript v7.0
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
+ * v7.0: Summer mode - PV-optimized heating with hourly balance tracking
  */
 
 // Configuration
@@ -652,6 +653,12 @@ function updateOperatingModeDisplay() {
     const winterTargetRow = document.getElementById('winter-target-row');
     const winterEmergencyRow = document.getElementById('winter-emergency-row');
 
+    // Summer mode elements
+    const summerSlotRow = document.getElementById('summer-slot-row');
+    const summerSourceRow = document.getElementById('summer-source-row');
+    const summerTargetRow = document.getElementById('summer-target-row');
+    const summerPvCard = document.getElementById('summer-pv-card');
+
     if (mode === 'winter') {
         if (heatingWindowRow) {
             heatingWindowRow.style.display = 'flex';
@@ -669,10 +676,152 @@ function updateOperatingModeDisplay() {
             winterEmergencyRow.style.display = 'flex';
             document.getElementById('winter-emergency-threshold').textContent = winterEmergencyThreshold.toFixed(1);
         }
+        // Hide summer elements
+        if (summerSlotRow) summerSlotRow.style.display = 'none';
+        if (summerSourceRow) summerSourceRow.style.display = 'none';
+        if (summerTargetRow) summerTargetRow.style.display = 'none';
+        if (summerPvCard) summerPvCard.style.display = 'none';
+    } else if (mode === 'summer') {
+        // Hide winter elements
+        if (heatingWindowRow) heatingWindowRow.style.display = 'none';
+        if (winterTargetRow) winterTargetRow.style.display = 'none';
+        if (winterEmergencyRow) winterEmergencyRow.style.display = 'none';
+
+        // Show summer elements
+        if (summerSlotRow) summerSlotRow.style.display = 'flex';
+        if (summerSourceRow) summerSourceRow.style.display = 'flex';
+        if (summerTargetRow) summerTargetRow.style.display = 'flex';
+        if (summerPvCard) summerPvCard.style.display = 'block';
+
+        // Update summer mode display
+        updateSummerModeDisplay();
     } else {
         if (heatingWindowRow) heatingWindowRow.style.display = 'none';
         if (winterTargetRow) winterTargetRow.style.display = 'none';
         if (winterEmergencyRow) winterEmergencyRow.style.display = 'none';
+        if (summerSlotRow) summerSlotRow.style.display = 'none';
+        if (summerSourceRow) summerSourceRow.style.display = 'none';
+        if (summerTargetRow) summerTargetRow.style.display = 'none';
+        if (summerPvCard) summerPvCard.style.display = 'none';
+    }
+}
+
+/**
+ * Update summer mode specific display
+ */
+function updateSummerModeDisplay() {
+    const attrs = currentData.attributes || {};
+
+    // Summer mode info from coordinator
+    const currentSlot = attrs.summer_current_slot || 'unknown';
+    const heatingSource = attrs.summer_heating_source || 'none';
+    const summerTarget = attrs.summer_cwu_target;
+    const decisionReason = attrs.summer_decision_reason || '--';
+    const pvBalance = attrs.summer_pv_balance;
+    const pvProduction = attrs.summer_pv_production;
+    const gridPower = attrs.summer_grid_power;
+    const cooldownActive = attrs.summer_cooldown_active || false;
+    const minHeatingElapsed = attrs.summer_min_heating_elapsed !== false;
+    const excessModeActive = attrs.summer_excess_mode_active || false;
+
+    // Slot display
+    const slotNames = {
+        'slot_pv': 'PV (08:00-18:00)',
+        'slot_evening': 'Evening (18:00-24:00)',
+        'slot_night': 'Night (00:00-08:00)'
+    };
+    const slotIcons = {
+        'slot_pv': 'mdi-weather-sunny',
+        'slot_evening': 'mdi-weather-sunset',
+        'slot_night': 'mdi-weather-night'
+    };
+    document.getElementById('summer-current-slot').textContent = slotNames[currentSlot] || currentSlot;
+    const slotIcon = document.getElementById('summer-slot-icon');
+    if (slotIcon) {
+        slotIcon.className = 'mdi ' + (slotIcons[currentSlot] || 'mdi-clock-time-eight');
+    }
+
+    // Heating source display
+    const sourceNames = {
+        'none': 'Idle',
+        'pv': 'Solar PV',
+        'pv_excess': 'Excess PV',
+        'tariff_cheap': 'Cheap Tariff',
+        'tariff_expensive': 'Expensive Tariff',
+        'emergency': 'Emergency!'
+    };
+    const sourceIcons = {
+        'none': 'mdi-power-sleep',
+        'pv': 'mdi-solar-power',
+        'pv_excess': 'mdi-solar-power-variant',
+        'tariff_cheap': 'mdi-currency-usd',
+        'tariff_expensive': 'mdi-currency-usd-off',
+        'emergency': 'mdi-alert'
+    };
+    document.getElementById('summer-heating-source').textContent = sourceNames[heatingSource] || heatingSource;
+    const sourceIcon = document.getElementById('summer-source-icon');
+    if (sourceIcon) {
+        sourceIcon.className = 'mdi ' + (sourceIcons[heatingSource] || 'mdi-information-outline');
+    }
+
+    // Target temperature
+    if (summerTarget) {
+        document.getElementById('summer-cwu-target').textContent = summerTarget.toFixed(1);
+    }
+
+    // PV Card data
+    const pvStatusBadge = document.getElementById('summer-pv-status');
+    if (pvStatusBadge) {
+        if (heatingSource === 'pv' || heatingSource === 'pv_excess') {
+            pvStatusBadge.textContent = 'Active';
+            pvStatusBadge.className = 'badge badge-success';
+        } else if (heatingSource !== 'none') {
+            pvStatusBadge.textContent = 'Tariff';
+            pvStatusBadge.className = 'badge badge-warning';
+        } else {
+            pvStatusBadge.textContent = 'Idle';
+            pvStatusBadge.className = 'badge';
+        }
+    }
+
+    // PV values
+    document.getElementById('summer-pv-production').textContent = pvProduction != null ? `${pvProduction.toFixed(0)} W` : '-- W';
+    document.getElementById('summer-pv-balance').textContent = pvBalance != null ? `${pvBalance.toFixed(2)} kWh` : '-- kWh';
+    document.getElementById('summer-grid-power').textContent = gridPower != null ? `${gridPower.toFixed(0)} W` : '-- W';
+
+    // PV efficiency from summer_energy_today
+    const summerEnergyToday = attrs.summer_energy_today || {};
+    const pvEfficiency = summerEnergyToday.pv_efficiency || 0;
+    document.getElementById('summer-pv-efficiency').textContent = `${pvEfficiency.toFixed(1)}%`;
+
+    // Decision reason
+    document.getElementById('summer-decision-reason').textContent = decisionReason;
+
+    // Energy stats
+    const totalPv = summerEnergyToday.total_pv || 0;
+    const totalTariff = summerEnergyToday.total_tariff || 0;
+    const savings = summerEnergyToday.savings || 0;
+    document.getElementById('summer-energy-pv-today').textContent = totalPv.toFixed(2);
+    document.getElementById('summer-energy-tariff-today').textContent = totalTariff.toFixed(2);
+    document.getElementById('summer-savings-today').textContent = savings.toFixed(2);
+
+    // Heater protection status
+    const protectionRow = document.getElementById('summer-protection-row');
+    const protectionStatus = document.getElementById('summer-protection-status');
+    if (protectionRow && protectionStatus) {
+        if (cooldownActive || !minHeatingElapsed) {
+            protectionRow.style.display = 'flex';
+            if (cooldownActive) {
+                protectionStatus.textContent = 'Cooldown active (min 5 min before restart)';
+            } else if (!minHeatingElapsed) {
+                protectionStatus.textContent = 'Min heating time not elapsed (30 min protection)';
+            }
+        } else if (excessModeActive) {
+            protectionRow.style.display = 'flex';
+            protectionStatus.textContent = 'Excess PV Mode active - reheating from surplus';
+        } else {
+            protectionRow.style.display = 'none';
+        }
     }
 }
 

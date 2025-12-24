@@ -77,6 +77,52 @@ from .const import (
     DEFAULT_ENERGY_SENSOR,
     ENERGY_TRACKING_INTERVAL,
     ENERGY_DELTA_ANOMALY_THRESHOLD,
+    # Summer mode settings
+    SUMMER_PV_SLOT_START,
+    SUMMER_PV_SLOT_END,
+    SUMMER_PV_DEADLINE,
+    SUMMER_CWU_TARGET_TEMP,
+    SUMMER_EVENING_THRESHOLD,
+    SUMMER_NIGHT_THRESHOLD,
+    SUMMER_NIGHT_TARGET,
+    SUMMER_CWU_MAX_TEMP,
+    SUMMER_HEATER_POWER,
+    SUMMER_BALANCE_THRESHOLD,
+    SUMMER_PV_MIN_PRODUCTION,
+    SUMMER_MIN_HEATING_TIME,
+    SUMMER_MIN_COOLDOWN,
+    SUMMER_BALANCE_CHECK_INTERVAL,
+    SUMMER_CWU_NO_PROGRESS_TIMEOUT,
+    SUMMER_CWU_MIN_TEMP_INCREASE,
+    SUMMER_EXCESS_EXPORT_THRESHOLD,
+    SUMMER_EXCESS_BALANCE_THRESHOLD,
+    SUMMER_EXCESS_BALANCE_MIN,
+    SUMMER_EXCESS_GRID_WARNING,
+    SUMMER_EXCESS_GRID_STOP,
+    SUMMER_EXCESS_CWU_MIN_OFFSET,
+    CONF_PV_BALANCE_SENSOR,
+    CONF_PV_PRODUCTION_SENSOR,
+    CONF_GRID_POWER_SENSOR,
+    CONF_SUMMER_HEATER_POWER,
+    CONF_SUMMER_BALANCE_THRESHOLD,
+    CONF_SUMMER_PV_SLOT_START,
+    CONF_SUMMER_PV_SLOT_END,
+    CONF_SUMMER_PV_DEADLINE,
+    CONF_SUMMER_NIGHT_THRESHOLD,
+    CONF_SUMMER_NIGHT_TARGET,
+    DEFAULT_PV_BALANCE_SENSOR,
+    DEFAULT_PV_PRODUCTION_SENSOR,
+    DEFAULT_GRID_POWER_SENSOR,
+    HEATING_SOURCE_NONE,
+    HEATING_SOURCE_PV,
+    HEATING_SOURCE_PV_EXCESS,
+    HEATING_SOURCE_TARIFF_CHEAP,
+    HEATING_SOURCE_TARIFF_EXPENSIVE,
+    HEATING_SOURCE_EMERGENCY,
+    SLOT_PV,
+    SLOT_EVENING,
+    SLOT_NIGHT,
+    PV_EXPORT_RATE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,6 +186,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Operating mode
         self._operating_mode: str = config.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)
+
+        # Summer mode state tracking
+        self._summer_heating_source: str = HEATING_SOURCE_NONE
+        self._summer_current_slot: str = SLOT_PV
+        self._summer_heating_start: datetime | None = None
+        self._summer_last_stop: datetime | None = None  # For cooldown tracking
+        self._summer_excess_mode_active: bool = False
+        self._summer_last_balance_check: datetime | None = None
+        self._summer_decision_reason: str = ""
+
+        # Summer mode PV statistics (for daily report)
+        self._summer_energy_pv_today: float = 0.0  # kWh from PV
+        self._summer_energy_pv_excess_today: float = 0.0  # kWh from excess PV mode
+        self._summer_energy_tariff_cheap_today: float = 0.0  # kWh from cheap tariff
+        self._summer_energy_tariff_expensive_today: float = 0.0  # kWh from expensive tariff
+        self._summer_energy_pv_yesterday: float = 0.0
+        self._summer_energy_pv_excess_yesterday: float = 0.0
+        self._summer_energy_tariff_cheap_yesterday: float = 0.0
+        self._summer_energy_tariff_expensive_yesterday: float = 0.0
 
         # Energy tracking (kWh accumulated) - split by tariff type
         # Today's accumulated energy
@@ -445,6 +510,753 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def get_winter_cwu_emergency_threshold(self) -> float:
         """Get temperature below which CWU heating is forced outside windows."""
         return self.get_winter_cwu_target() - WINTER_CWU_EMERGENCY_OFFSET
+
+    # =========================================================================
+    # Summer Mode Helper Methods
+    # =========================================================================
+
+    def _get_pv_balance(self) -> float | None:
+        """Get current hourly energy balance in kWh.
+
+        This sensor shows how much energy was exported/imported in the current hour.
+        Positive = exported (surplus), Negative = imported (deficit).
+        Resets to 0 at each full hour.
+        """
+        sensor = self.config.get(CONF_PV_BALANCE_SENSOR, DEFAULT_PV_BALANCE_SENSOR)
+        return self._get_sensor_value(sensor)
+
+    def _get_pv_production(self) -> float | None:
+        """Get current PV production in W."""
+        sensor = self.config.get(CONF_PV_PRODUCTION_SENSOR, DEFAULT_PV_PRODUCTION_SENSOR)
+        return self._get_sensor_value(sensor)
+
+    def _get_grid_power(self) -> float | None:
+        """Get current grid power flow in W.
+
+        Positive = importing from grid (consuming)
+        Negative = exporting to grid (producing surplus)
+        """
+        sensor = self.config.get(CONF_GRID_POWER_SENSOR, DEFAULT_GRID_POWER_SENSOR)
+        return self._get_sensor_value(sensor)
+
+    def _get_summer_heater_power(self) -> int:
+        """Get configured heater power in W."""
+        return self.config.get(CONF_SUMMER_HEATER_POWER, SUMMER_HEATER_POWER)
+
+    def _get_summer_balance_threshold(self) -> float:
+        """Get balance threshold ratio (0.0-1.0)."""
+        return self.config.get(CONF_SUMMER_BALANCE_THRESHOLD, SUMMER_BALANCE_THRESHOLD)
+
+    def _get_summer_slot(self, hour: int | None = None) -> str:
+        """Determine current time slot for summer mode.
+
+        Returns:
+            SLOT_PV: 08:00-18:00 - prioritize PV production
+            SLOT_EVENING: 18:00-24:00 - fallback to cheap tariff
+            SLOT_NIGHT: 00:00-08:00 - only safety buffer heating
+        """
+        if hour is None:
+            hour = datetime.now().hour
+
+        pv_start = self.config.get(CONF_SUMMER_PV_SLOT_START, SUMMER_PV_SLOT_START)
+        pv_end = self.config.get(CONF_SUMMER_PV_SLOT_END, SUMMER_PV_SLOT_END)
+
+        if pv_start <= hour < pv_end:
+            return SLOT_PV
+        elif pv_end <= hour < 24:
+            return SLOT_EVENING
+        else:  # 0 <= hour < pv_start
+            return SLOT_NIGHT
+
+    def get_summer_cwu_target(self) -> float:
+        """Get CWU target temperature for summer mode."""
+        return self.config.get("cwu_target_temp", SUMMER_CWU_TARGET_TEMP)
+
+    def get_summer_night_threshold(self) -> float:
+        """Get temperature threshold for night heating (safety buffer)."""
+        return self.config.get(CONF_SUMMER_NIGHT_THRESHOLD, SUMMER_NIGHT_THRESHOLD)
+
+    def get_summer_night_target(self) -> float:
+        """Get target temperature for night heating (just safety buffer, not full target)."""
+        return self.config.get(CONF_SUMMER_NIGHT_TARGET, SUMMER_NIGHT_TARGET)
+
+    def _is_summer_cooldown_active(self) -> bool:
+        """Check if cooldown period is active (min 5 min between heating cycles)."""
+        if self._summer_last_stop is None:
+            return False
+
+        elapsed = (datetime.now() - self._summer_last_stop).total_seconds() / 60
+        return elapsed < SUMMER_MIN_COOLDOWN
+
+    def _is_summer_min_heating_time_elapsed(self) -> bool:
+        """Check if minimum heating time has elapsed (heater protection)."""
+        if self._summer_heating_start is None:
+            return True
+
+        elapsed = (datetime.now() - self._summer_heating_start).total_seconds() / 60
+        return elapsed >= SUMMER_MIN_HEATING_TIME
+
+    def _should_heat_from_pv(self, cwu_temp: float | None) -> tuple[bool, str]:
+        """Determine if we should heat CWU from PV.
+
+        Uses hourly balance-based decision making:
+        - First half of hour (XX:00-XX:29): Conservative - only if PV > heater or balance >= 1kWh
+        - Second half of hour (XX:30-XX:59): Aggressive - if balance covers remaining time
+
+        Returns:
+            (should_heat, reason) tuple
+        """
+        if cwu_temp is None:
+            return False, "CWU temp unavailable"
+
+        target = self.get_summer_cwu_target()
+        if cwu_temp >= target:
+            return False, f"CWU at target ({cwu_temp:.1f}°C >= {target:.1f}°C)"
+
+        # Check cooldown
+        if self._is_summer_cooldown_active():
+            elapsed = (datetime.now() - self._summer_last_stop).total_seconds() / 60 if self._summer_last_stop else 0
+            return False, f"Cooldown active ({elapsed:.1f}/{SUMMER_MIN_COOLDOWN} min)"
+
+        now = datetime.now()
+        minute = now.minute
+
+        pv_production = self._get_pv_production()
+        pv_balance = self._get_pv_balance()
+        heater_power = self._get_summer_heater_power()
+        threshold_ratio = self._get_summer_balance_threshold()
+
+        # No PV data - can't make PV decision
+        if pv_balance is None:
+            return False, "PV balance sensor unavailable"
+
+        # No/low production - not a PV opportunity
+        if pv_production is None or pv_production < SUMMER_PV_MIN_PRODUCTION:
+            return False, f"No PV production ({pv_production or 0:.0f}W < {SUMMER_PV_MIN_PRODUCTION}W)"
+
+        # STRATEGY: First half of hour (XX:00-XX:29)
+        if minute < 30:
+            # Conservative - only heat if PV clearly exceeds heater power
+            if pv_production >= heater_power:
+                return True, f"First half: PV covers heater ({pv_production:.0f}W >= {heater_power}W)"
+
+            # Or if we have a solid balance buffer (>= 1 kWh)
+            if pv_balance >= 1.0:
+                return True, f"First half: Good balance ({pv_balance:.2f} kWh >= 1.0 kWh)"
+
+            return False, f"First half: Building balance ({pv_balance:.2f} kWh, PV {pv_production:.0f}W)"
+
+        # STRATEGY: Second half of hour (XX:30-XX:59)
+        else:
+            remaining_minutes = 60 - minute
+            energy_needed = (heater_power / 1000) * (remaining_minutes / 60)  # kWh
+            threshold = energy_needed * threshold_ratio
+
+            # Do we have enough balance to cover remaining time?
+            if pv_balance >= threshold:
+                return True, f"Second half: Balance OK ({pv_balance:.2f} kWh >= {threshold:.2f} kWh)"
+
+            # Production covers consumption?
+            if pv_production >= heater_power:
+                return True, f"Second half: PV covers heater ({pv_production:.0f}W >= {heater_power}W)"
+
+            return False, f"Second half: Insufficient ({pv_balance:.2f} kWh < {threshold:.2f} kWh, PV {pv_production:.0f}W)"
+
+    def _should_heat_from_tariff_summer(self, cwu_temp: float | None) -> tuple[bool, str]:
+        """Determine if we should heat CWU from cheap tariff (summer mode fallback).
+
+        Implements slot-based logic:
+        - SLOT_NIGHT: Only heat if CWU < night_threshold (40°C), target is night_target (42°C)
+        - SLOT_PV: Use cheap window 13-15 if available, or deadline (16:00) fallback
+        - SLOT_EVENING: Standard fallback to cheap tariff (22:00+)
+
+        Returns:
+            (should_heat, reason) tuple
+        """
+        if cwu_temp is None:
+            return False, "CWU temp unavailable"
+
+        now = datetime.now()
+        hour = now.hour
+        slot = self._get_summer_slot(hour)
+        target = self.get_summer_cwu_target()
+
+        # Already at target
+        if cwu_temp >= target:
+            return False, f"CWU at target ({cwu_temp:.1f}°C >= {target:.1f}°C)"
+
+        # Check cooldown
+        if self._is_summer_cooldown_active():
+            elapsed = (datetime.now() - self._summer_last_stop).total_seconds() / 60 if self._summer_last_stop else 0
+            return False, f"Cooldown active ({elapsed:.1f}/{SUMMER_MIN_COOLDOWN} min)"
+
+        night_threshold = self.get_summer_night_threshold()
+        night_target = self.get_summer_night_target()
+        evening_threshold = self.config.get("summer_evening_threshold", SUMMER_EVENING_THRESHOLD)
+        deadline = self.config.get(CONF_SUMMER_PV_DEADLINE, SUMMER_PV_DEADLINE)
+
+        # SLOT_NIGHT (00:00-08:00): Very conservative - only safety buffer
+        if slot == SLOT_NIGHT:
+            if cwu_temp < night_threshold:
+                if self.is_cheap_tariff():
+                    return True, f"Night slot: CWU cold ({cwu_temp:.1f}°C < {night_threshold:.1f}°C), heating to {night_target:.1f}°C"
+                return False, "Night slot: CWU cold but expensive tariff"
+            return False, f"Night slot: CWU OK ({cwu_temp:.1f}°C >= {night_threshold:.1f}°C), waiting for PV"
+
+        # SLOT_PV (08:00-18:00): Check cheap window (13-15) first, then deadline
+        if slot == SLOT_PV:
+            # Priority: Cheap tariff window (13:00-15:00)
+            if self.is_cheap_tariff():
+                return True, f"PV slot + cheap window (13-15): Heating at 0.72 zł/kWh ({cwu_temp:.1f}°C < {target:.1f}°C)"
+
+            # Deadline fallback (after 16:00)
+            if hour >= deadline and cwu_temp < evening_threshold:
+                return True, f"PV slot deadline ({hour}:00 >= {deadline}:00): Emergency heating ({cwu_temp:.1f}°C < {evening_threshold:.1f}°C)"
+
+            return False, f"PV slot: Waiting for PV or cheap window 13-15 (current hour: {hour})"
+
+        # SLOT_EVENING (18:00-24:00): Standard fallback
+        if slot == SLOT_EVENING:
+            if self.is_cheap_tariff():
+                return True, f"Evening slot + cheap tariff: Heating ({cwu_temp:.1f}°C < {target:.1f}°C)"
+            return False, f"Evening slot: Expensive tariff, waiting for 22:00"
+
+        return False, f"Unknown slot: {slot}"
+
+    def _should_heat_excess_pv(self, cwu_temp: float | None) -> tuple[bool, str]:
+        """Determine if we should activate Excess PV Mode (reheat from surplus).
+
+        Excess PV Mode activates when:
+        - Water is warm but below target (45°C < CWU < 50°C)
+        - Large export to grid (> 3kW)
+        - Good hourly balance (> 2 kWh)
+        - In PV or Evening slot
+
+        This uses surplus energy that would otherwise be exported for low prices.
+
+        Returns:
+            (should_heat, reason) tuple
+        """
+        if cwu_temp is None:
+            return False, "CWU temp unavailable"
+
+        target = self.get_summer_cwu_target()
+
+        # Already at target
+        if cwu_temp >= target:
+            return False, f"CWU at target ({cwu_temp:.1f}°C >= {target:.1f}°C)"
+
+        # Water must be warm (not cold) - we're optimizing, not emergency heating
+        min_temp_for_excess = target - SUMMER_EXCESS_CWU_MIN_OFFSET
+        if cwu_temp < min_temp_for_excess:
+            return False, f"CWU too cold for excess mode ({cwu_temp:.1f}°C < {min_temp_for_excess:.1f}°C)"
+
+        # Check cooldown
+        if self._is_summer_cooldown_active():
+            elapsed = (datetime.now() - self._summer_last_stop).total_seconds() / 60 if self._summer_last_stop else 0
+            return False, f"Cooldown active ({elapsed:.1f}/{SUMMER_MIN_COOLDOWN} min)"
+
+        # Must be in PV or Evening slot
+        slot = self._get_summer_slot()
+        if slot == SLOT_NIGHT:
+            return False, "Night slot - no excess PV mode"
+
+        grid_power = self._get_grid_power()
+        pv_balance = self._get_pv_balance()
+
+        if grid_power is None or pv_balance is None:
+            return False, "Grid power or balance sensor unavailable"
+
+        # Check for large export (negative grid power = export)
+        if grid_power > SUMMER_EXCESS_EXPORT_THRESHOLD:
+            return False, f"Not enough export ({grid_power:.0f}W > {SUMMER_EXCESS_EXPORT_THRESHOLD}W threshold)"
+
+        # Check for good balance
+        if pv_balance < SUMMER_EXCESS_BALANCE_THRESHOLD:
+            return False, f"Balance too low ({pv_balance:.2f} kWh < {SUMMER_EXCESS_BALANCE_THRESHOLD:.1f} kWh)"
+
+        export_kw = abs(grid_power) / 1000
+        return True, f"Excess PV: Export {export_kw:.1f}kW, balance {pv_balance:.2f}kWh - better to heat than export"
+
+    def _check_summer_excess_mode_conditions(self) -> tuple[bool, str]:
+        """Check if Excess PV Mode should continue (called every 15 min during excess heating).
+
+        Stops if:
+        - CWU reached target
+        - Balance dropped below minimum (0.5 kWh)
+        - Grid draw exceeds stop threshold (3 kW)
+        - Min heating time not elapsed (heater protection)
+
+        Returns:
+            (should_continue, reason) tuple
+        """
+        cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        target = self.get_summer_cwu_target()
+
+        # Target reached - success!
+        if cwu_temp is not None and cwu_temp >= target:
+            return False, f"Excess mode: Target reached ({cwu_temp:.1f}°C >= {target:.1f}°C)"
+
+        # Check min heating time (heater protection)
+        if not self._is_summer_min_heating_time_elapsed():
+            elapsed = (datetime.now() - self._summer_heating_start).total_seconds() / 60 if self._summer_heating_start else 0
+            return True, f"Excess mode: Continuing (min heating time {elapsed:.0f}/{SUMMER_MIN_HEATING_TIME} min)"
+
+        grid_power = self._get_grid_power()
+        pv_balance = self._get_pv_balance()
+
+        # Balance check
+        if pv_balance is not None and pv_balance < SUMMER_EXCESS_BALANCE_MIN:
+            return False, f"Excess mode: Balance exhausted ({pv_balance:.2f} kWh < {SUMMER_EXCESS_BALANCE_MIN:.1f} kWh)"
+
+        # Grid draw check
+        if grid_power is not None and grid_power > SUMMER_EXCESS_GRID_STOP:
+            return False, f"Excess mode: Grid draw too high ({grid_power:.0f}W > {SUMMER_EXCESS_GRID_STOP}W)"
+
+        # Warning for moderate grid draw
+        if grid_power is not None and grid_power > SUMMER_EXCESS_GRID_WARNING:
+            return True, f"Excess mode: WARNING - Grid draw {grid_power:.0f}W (watching)"
+
+        return True, f"Excess mode: Conditions OK (balance {pv_balance:.2f} kWh, grid {grid_power:.0f}W)"
+
+    def _check_summer_cwu_no_progress(self, current_temp: float | None) -> bool:
+        """Check if summer mode CWU heating has made no progress after timeout.
+
+        Similar to winter mode but with shorter timeout (60 min vs 180 min)
+        and higher expected increase (2°C vs 1°C) since heater should heat faster.
+        """
+        if self._summer_heating_start is None:
+            return False
+        if self._cwu_session_start_temp is None:
+            return False
+        if current_temp is None:
+            return False
+
+        elapsed = (datetime.now() - self._summer_heating_start).total_seconds() / 60
+        if elapsed < SUMMER_CWU_NO_PROGRESS_TIMEOUT:
+            return False
+
+        temp_increase = current_temp - self._cwu_session_start_temp
+        return temp_increase < SUMMER_CWU_MIN_TEMP_INCREASE
+
+    @property
+    def summer_energy_today(self) -> dict[str, float]:
+        """Return today's summer mode energy statistics."""
+        total_pv = self._summer_energy_pv_today + self._summer_energy_pv_excess_today
+        total_tariff = self._summer_energy_tariff_cheap_today + self._summer_energy_tariff_expensive_today
+        total = total_pv + total_tariff
+
+        # Calculate efficiency (% of energy from PV)
+        pv_efficiency = (total_pv / total * 100) if total > 0 else 0.0
+
+        # Calculate savings (vs all expensive tariff)
+        expensive_rate = self.get_tariff_expensive_rate()
+        cheap_rate = self.get_tariff_cheap_rate()
+        export_rate = PV_EXPORT_RATE
+
+        # What we would have paid with all expensive tariff
+        cost_if_expensive = total * expensive_rate
+
+        # What we actually saved:
+        # - PV energy: free (plus we would have exported it for export_rate)
+        # - PV excess: free (would have exported)
+        # - Cheap tariff: paid cheap rate
+        # - Expensive tariff: paid expensive rate
+        actual_cost = (
+            self._summer_energy_tariff_cheap_today * cheap_rate +
+            self._summer_energy_tariff_expensive_today * expensive_rate
+        )
+        # Value of PV energy used (would have been exported)
+        pv_value = total_pv * export_rate
+
+        savings = cost_if_expensive - actual_cost + pv_value
+
+        return {
+            "pv": self._summer_energy_pv_today,
+            "pv_excess": self._summer_energy_pv_excess_today,
+            "tariff_cheap": self._summer_energy_tariff_cheap_today,
+            "tariff_expensive": self._summer_energy_tariff_expensive_today,
+            "total_pv": total_pv,
+            "total_tariff": total_tariff,
+            "total": total,
+            "pv_efficiency": pv_efficiency,
+            "savings": savings,
+            "actual_cost": actual_cost,
+        }
+
+    @property
+    def summer_energy_yesterday(self) -> dict[str, float]:
+        """Return yesterday's summer mode energy statistics."""
+        total_pv = self._summer_energy_pv_yesterday + self._summer_energy_pv_excess_yesterday
+        total_tariff = self._summer_energy_tariff_cheap_yesterday + self._summer_energy_tariff_expensive_yesterday
+        total = total_pv + total_tariff
+
+        pv_efficiency = (total_pv / total * 100) if total > 0 else 0.0
+
+        expensive_rate = self.get_tariff_expensive_rate()
+        cheap_rate = self.get_tariff_cheap_rate()
+        export_rate = PV_EXPORT_RATE
+
+        cost_if_expensive = total * expensive_rate
+        actual_cost = (
+            self._summer_energy_tariff_cheap_yesterday * cheap_rate +
+            self._summer_energy_tariff_expensive_yesterday * expensive_rate
+        )
+        pv_value = total_pv * export_rate
+        savings = cost_if_expensive - actual_cost + pv_value
+
+        return {
+            "pv": self._summer_energy_pv_yesterday,
+            "pv_excess": self._summer_energy_pv_excess_yesterday,
+            "tariff_cheap": self._summer_energy_tariff_cheap_yesterday,
+            "tariff_expensive": self._summer_energy_tariff_expensive_yesterday,
+            "total_pv": total_pv,
+            "total_tariff": total_tariff,
+            "total": total,
+            "pv_efficiency": pv_efficiency,
+            "savings": savings,
+            "actual_cost": actual_cost,
+        }
+
+    # =========================================================================
+    # Summer Mode Control Methods
+    # =========================================================================
+
+    async def _summer_start_heating(self, source: str = HEATING_SOURCE_PV) -> None:
+        """Start CWU heating in summer mode.
+
+        Summer mode uses performance mode (heater only, no compressor).
+        Floor heating is always OFF in summer.
+
+        Args:
+            source: The heating source (PV, tariff_cheap, tariff_expensive, emergency)
+        """
+        if self._transition_in_progress:
+            self._log_action("Summer start heating skipped - transition in progress")
+            return
+
+        self._transition_in_progress = True
+        try:
+            self._log_action(f"Summer mode: Starting CWU heating from {source}...")
+
+            # Ensure floor is OFF (safety - should already be off in summer)
+            await self._async_set_climate(False)
+            await asyncio.sleep(2)
+
+            # Set water heater to performance mode (uses heater, not compressor)
+            await self._async_set_water_heater_mode(WH_MODE_PERFORMANCE)
+            self._log_action("Summer mode: CWU heater enabled (performance mode)")
+
+            # Track session start
+            cwu_temp = self._last_known_cwu_temp
+            if cwu_temp is None:
+                cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+            self._cwu_session_start_temp = cwu_temp
+            self._summer_heating_start = datetime.now()
+            self._summer_heating_source = source
+            self._cwu_heating_start = datetime.now()
+
+        finally:
+            self._transition_in_progress = False
+
+    async def _summer_stop_heating(self) -> None:
+        """Stop CWU heating in summer mode."""
+        if self._transition_in_progress:
+            self._log_action("Summer stop heating skipped - transition in progress")
+            return
+
+        self._transition_in_progress = True
+        try:
+            self._log_action("Summer mode: Stopping CWU heating...")
+
+            # Track energy usage by source before stopping
+            await self._track_summer_energy_usage()
+
+            await self._async_set_water_heater_mode(WH_MODE_OFF)
+            # Floor stays OFF in summer mode - no need to turn it on
+
+            self._summer_last_stop = datetime.now()
+            self._summer_heating_source = HEATING_SOURCE_NONE
+            self._summer_excess_mode_active = False
+            self._log_action("Summer mode: CWU heater disabled")
+        finally:
+            self._transition_in_progress = False
+
+    async def _track_summer_energy_usage(self) -> None:
+        """Track energy usage by source when stopping heating.
+
+        Called before stopping heater to accumulate energy stats.
+        """
+        if self._summer_heating_start is None:
+            return
+
+        # Calculate energy used in this session
+        elapsed_hours = (datetime.now() - self._summer_heating_start).total_seconds() / 3600
+        heater_power = self._get_summer_heater_power()
+        energy_kwh = (heater_power / 1000) * elapsed_hours
+
+        # Attribute to the correct source
+        source = self._summer_heating_source
+        if source == HEATING_SOURCE_PV:
+            self._summer_energy_pv_today += energy_kwh
+        elif source == HEATING_SOURCE_PV_EXCESS:
+            self._summer_energy_pv_excess_today += energy_kwh
+        elif source == HEATING_SOURCE_TARIFF_CHEAP:
+            self._summer_energy_tariff_cheap_today += energy_kwh
+        elif source in (HEATING_SOURCE_TARIFF_EXPENSIVE, HEATING_SOURCE_EMERGENCY):
+            self._summer_energy_tariff_expensive_today += energy_kwh
+
+        self._log_action(
+            f"Summer energy tracked: {energy_kwh:.2f} kWh from {source} "
+            f"({elapsed_hours:.2f}h at {heater_power}W)"
+        )
+
+    async def _enter_summer_safe_mode(self) -> None:
+        """Enter safe mode in summer - only CWU, no floor.
+
+        Unlike winter safe mode, we only enable CWU heating.
+        Floor heating stays OFF because house doesn't need it in summer.
+        """
+        if self._transition_in_progress:
+            self._log_action("Summer safe mode skipped - transition in progress")
+            return
+
+        self._transition_in_progress = True
+        try:
+            self._log_action("Summer mode: Entering safe mode - enabling CWU only")
+
+            # Ensure floor is OFF
+            await self._async_set_climate(False)
+            await asyncio.sleep(2)
+
+            # Enable CWU with performance mode (heater only)
+            await self._async_set_water_heater_mode(WH_MODE_PERFORMANCE)
+            self._log_action("Summer safe mode active - CWU heater in control")
+        finally:
+            self._transition_in_progress = False
+
+    def _update_summer_slot(self) -> None:
+        """Update current time slot and reset stats at midnight."""
+        now = datetime.now()
+        hour = now.hour
+
+        # Update current slot
+        self._summer_current_slot = self._get_summer_slot(hour)
+
+        # Reset daily stats at midnight
+        if hour == 0 and self._summer_energy_pv_today > 0:
+            # Move today's stats to yesterday
+            self._summer_energy_pv_yesterday = self._summer_energy_pv_today
+            self._summer_energy_pv_excess_yesterday = self._summer_energy_pv_excess_today
+            self._summer_energy_tariff_cheap_yesterday = self._summer_energy_tariff_cheap_today
+            self._summer_energy_tariff_expensive_yesterday = self._summer_energy_tariff_expensive_today
+
+            # Reset today's stats
+            self._summer_energy_pv_today = 0.0
+            self._summer_energy_pv_excess_today = 0.0
+            self._summer_energy_tariff_cheap_today = 0.0
+            self._summer_energy_tariff_expensive_today = 0.0
+
+    async def _run_summer_mode_logic(
+        self,
+        cwu_urgency: int,
+        cwu_temp: float | None,
+    ) -> None:
+        """Run control logic for summer mode.
+
+        Summer mode features:
+        - Heat pump in emergency mode (heater only, no compressor)
+        - Floor heating permanently OFF
+        - Heat CWU from PV surplus with hourly balancing
+        - Fallback to cheap tariff when no PV
+        - Excess PV Mode for reheating from surplus
+        - No fake heating detection (heater works properly)
+        - Heater protection (min 30 min runtime, 5 min cooldown)
+        - Warning if no progress (similar to winter mode)
+        """
+        now = datetime.now()
+        target = self.get_summer_cwu_target()
+        critical = self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
+        night_target = self.get_summer_night_target()
+        slot = self._get_summer_slot()
+
+        # Update slot tracking
+        self._update_summer_slot()
+
+        # =====================================================================
+        # 1. EMERGENCY CHECK - Critical temperature takes immediate priority
+        # =====================================================================
+        if cwu_temp is not None and cwu_temp < critical:
+            if self._current_state != STATE_EMERGENCY_CWU:
+                await self._summer_start_heating(HEATING_SOURCE_EMERGENCY)
+                self._change_state(STATE_EMERGENCY_CWU)
+                await self._async_send_notification(
+                    "CWU Emergency (Summer Mode)",
+                    f"CWU critically low: {cwu_temp:.1f}°C (< {critical:.1f}°C)!\n"
+                    f"Starting emergency heating immediately."
+                )
+                self._summer_decision_reason = f"Emergency: CWU {cwu_temp:.1f}°C < {critical:.1f}°C critical"
+                self._log_action(f"Summer mode: {self._summer_decision_reason}")
+            return
+
+        # =====================================================================
+        # 2. MAXIMUM TEMPERATURE CHECK - Emergency stop
+        # =====================================================================
+        if cwu_temp is not None and cwu_temp >= SUMMER_CWU_MAX_TEMP:
+            if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+                self._log_action(
+                    f"Summer mode: MAX temperature reached ({cwu_temp:.1f}°C >= {SUMMER_CWU_MAX_TEMP:.1f}°C) - EMERGENCY STOP"
+                )
+                await self._summer_stop_heating()
+                self._change_state(STATE_IDLE)
+                self._summer_decision_reason = f"Emergency stop: {cwu_temp:.1f}°C >= max {SUMMER_CWU_MAX_TEMP:.1f}°C"
+            return
+
+        # =====================================================================
+        # 3. CURRENTLY HEATING - Check if we should continue
+        # =====================================================================
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            # Check for no-progress timeout
+            if self._check_summer_cwu_no_progress(cwu_temp):
+                start_temp = self._cwu_session_start_temp
+                elapsed = (now - self._summer_heating_start).total_seconds() / 60 if self._summer_heating_start else 0
+
+                self._summer_decision_reason = (
+                    f"No progress after {elapsed:.0f} min "
+                    f"(start: {start_temp:.1f}°C, current: {cwu_temp:.1f}°C)"
+                )
+                self._log_action(f"Summer mode: {self._summer_decision_reason}")
+                await self._async_send_notification(
+                    "CWU Heating Problem (Summer Mode)",
+                    f"CWU temperature hasn't increased after {elapsed:.0f} minutes.\n"
+                    f"Started at: {start_temp:.1f}°C\n"
+                    f"Current: {cwu_temp:.1f}°C\n"
+                    f"Expected increase: {SUMMER_CWU_MIN_TEMP_INCREASE:.1f}°C\n\n"
+                    f"Heater may have an issue. Stopping heating."
+                )
+                await self._summer_stop_heating()
+                self._change_state(STATE_IDLE)
+                self._cwu_session_start_temp = None
+                return
+
+            # Determine effective target (night_target for night slot, full target otherwise)
+            effective_target = night_target if slot == SLOT_NIGHT else target
+
+            # Target reached - stop heating
+            if cwu_temp is not None and cwu_temp >= effective_target:
+                self._summer_decision_reason = f"Target reached: {cwu_temp:.1f}°C >= {effective_target:.1f}°C"
+                self._log_action(f"Summer mode: {self._summer_decision_reason}")
+                await self._summer_stop_heating()
+                self._change_state(STATE_IDLE)
+                self._cwu_session_start_temp = None
+                return
+
+            # Check if we're in Excess PV Mode - needs periodic condition check
+            if self._summer_excess_mode_active:
+                # Check if we should do a balance check (every 15 min)
+                should_check = (
+                    self._summer_last_balance_check is None or
+                    (now - self._summer_last_balance_check).total_seconds() / 60 >= SUMMER_BALANCE_CHECK_INTERVAL
+                )
+
+                if should_check:
+                    self._summer_last_balance_check = now
+                    should_continue, reason = self._check_summer_excess_mode_conditions()
+
+                    if not should_continue:
+                        self._summer_decision_reason = reason
+                        self._log_action(f"Summer mode: {reason}")
+                        await self._summer_stop_heating()
+                        self._change_state(STATE_IDLE)
+                        return
+                    else:
+                        self._summer_decision_reason = reason
+                        self._log_action(f"Summer mode: {reason}")
+
+                # Continue excess mode heating
+                return
+
+            # Check heater protection - minimum heating time
+            if not self._is_summer_min_heating_time_elapsed():
+                elapsed = (now - self._summer_heating_start).total_seconds() / 60 if self._summer_heating_start else 0
+                self._summer_decision_reason = (
+                    f"Heater protection: continuing ({elapsed:.0f}/{SUMMER_MIN_HEATING_TIME} min elapsed)"
+                )
+                return
+
+            # Re-evaluate heating conditions
+            should_heat_pv, pv_reason = self._should_heat_from_pv(cwu_temp)
+            should_heat_tariff, tariff_reason = self._should_heat_from_tariff_summer(cwu_temp)
+
+            if should_heat_pv:
+                # Still have PV conditions - continue
+                self._summer_decision_reason = f"Continuing PV heating: {pv_reason}"
+                return
+            elif should_heat_tariff:
+                # Switch to tariff if we were on PV
+                if self._summer_heating_source == HEATING_SOURCE_PV:
+                    # Track PV energy used so far
+                    await self._track_summer_energy_usage()
+                    self._summer_heating_start = now
+                    source = HEATING_SOURCE_TARIFF_CHEAP if self.is_cheap_tariff() else HEATING_SOURCE_TARIFF_EXPENSIVE
+                    self._summer_heating_source = source
+                    self._summer_decision_reason = f"Switched to tariff: {tariff_reason}"
+                    self._log_action(f"Summer mode: {self._summer_decision_reason}")
+                return
+            else:
+                # Conditions no longer met - stop
+                self._summer_decision_reason = f"Conditions ended. PV: {pv_reason}, Tariff: {tariff_reason}"
+                self._log_action(f"Summer mode: Stopping - {self._summer_decision_reason}")
+                await self._summer_stop_heating()
+                self._change_state(STATE_IDLE)
+                return
+
+        # =====================================================================
+        # 4. IDLE - Determine if we should start heating
+        # =====================================================================
+
+        # Already at target
+        if cwu_temp is not None and cwu_temp >= target:
+            self._summer_decision_reason = f"At target: {cwu_temp:.1f}°C >= {target:.1f}°C"
+            if self._current_state != STATE_IDLE:
+                self._change_state(STATE_IDLE)
+            return
+
+        # Priority 1: Try PV heating
+        should_heat_pv, pv_reason = self._should_heat_from_pv(cwu_temp)
+        if should_heat_pv:
+            self._summer_decision_reason = f"Starting PV heating: {pv_reason}"
+            self._log_action(f"Summer mode: {self._summer_decision_reason}")
+            await self._summer_start_heating(HEATING_SOURCE_PV)
+            self._change_state(STATE_HEATING_CWU)
+            return
+
+        # Priority 2: Check Excess PV Mode (reheat from surplus)
+        should_heat_excess, excess_reason = self._should_heat_excess_pv(cwu_temp)
+        if should_heat_excess:
+            self._summer_decision_reason = f"Starting Excess PV Mode: {excess_reason}"
+            self._log_action(f"Summer mode: {self._summer_decision_reason}")
+            self._summer_excess_mode_active = True
+            self._summer_last_balance_check = now
+            await self._summer_start_heating(HEATING_SOURCE_PV_EXCESS)
+            self._change_state(STATE_HEATING_CWU)
+            return
+
+        # Priority 3: Tariff fallback
+        should_heat_tariff, tariff_reason = self._should_heat_from_tariff_summer(cwu_temp)
+        if should_heat_tariff:
+            source = HEATING_SOURCE_TARIFF_CHEAP if self.is_cheap_tariff() else HEATING_SOURCE_TARIFF_EXPENSIVE
+            self._summer_decision_reason = f"Starting tariff heating: {tariff_reason}"
+            self._log_action(f"Summer mode: {self._summer_decision_reason}")
+            await self._summer_start_heating(source)
+            self._change_state(STATE_HEATING_CWU)
+            return
+
+        # No conditions met - stay idle
+        self._summer_decision_reason = f"Waiting. PV: {pv_reason}"
+        if self._current_state != STATE_IDLE:
+            self._log_action(f"Summer mode: Idle - {self._summer_decision_reason}")
+            self._change_state(STATE_IDLE)
 
     async def async_set_operating_mode(self, mode: str) -> None:
         """Set operating mode."""
@@ -1020,19 +1832,43 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         total_if_expensive = total_kwh * expensive_rate
         savings = total_if_expensive - total_cost
 
-        message = (
-            f"📊 Daily Energy Report (yesterday)\n\n"
-            f"🚿 CWU: {cwu_kwh:.2f} kWh ({cwu_cost:.2f} zł)\n"
-            f"   ├ Cheap: {energy['cwu_cheap']:.2f} kWh\n"
-            f"   └ Expensive: {energy['cwu_expensive']:.2f} kWh\n\n"
-            f"🏠 Floor: {floor_kwh:.2f} kWh ({floor_cost:.2f} zł)\n"
-            f"   ├ Cheap: {energy['floor_cheap']:.2f} kWh\n"
-            f"   └ Expensive: {energy['floor_expensive']:.2f} kWh\n\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"📈 Total: {total_kwh:.2f} kWh ({total_cost:.2f} zł)\n"
-            f"💰 Saved: {savings:.2f} zł vs expensive rate\n\n"
-            f"💡 Mode: {self._operating_mode.replace('_', ' ').title()}"
-        )
+        # Build message - different format for Summer mode
+        if self._operating_mode == MODE_SUMMER:
+            summer_energy = self.summer_energy_yesterday
+            pv_total = summer_energy["total_pv"]
+            tariff_total = summer_energy["total_tariff"]
+            pv_efficiency = summer_energy["pv_efficiency"]
+            summer_savings = summer_energy["savings"]
+
+            message = (
+                f"☀️ Daily Energy Report - Summer Mode (yesterday)\n\n"
+                f"🌞 PV Energy: {pv_total:.2f} kWh (FREE)\n"
+                f"   ├ Direct PV: {summer_energy['pv']:.2f} kWh\n"
+                f"   └ Excess PV: {summer_energy['pv_excess']:.2f} kWh\n\n"
+                f"⚡ Grid Energy: {tariff_total:.2f} kWh\n"
+                f"   ├ Cheap tariff: {summer_energy['tariff_cheap']:.2f} kWh\n"
+                f"   └ Expensive: {summer_energy['tariff_expensive']:.2f} kWh\n\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"📊 PV Efficiency: {pv_efficiency:.1f}%\n"
+                f"💰 Saved: {summer_savings:.2f} zł\n"
+                f"💵 Actual cost: {summer_energy['actual_cost']:.2f} zł\n\n"
+                f"🚿 CWU Total: {cwu_kwh:.2f} kWh ({cwu_cost:.2f} zł)\n"
+                f"💡 Mode: Summer"
+            )
+        else:
+            message = (
+                f"📊 Daily Energy Report (yesterday)\n\n"
+                f"🚿 CWU: {cwu_kwh:.2f} kWh ({cwu_cost:.2f} zł)\n"
+                f"   ├ Cheap: {energy['cwu_cheap']:.2f} kWh\n"
+                f"   └ Expensive: {energy['cwu_expensive']:.2f} kWh\n\n"
+                f"🏠 Floor: {floor_kwh:.2f} kWh ({floor_cost:.2f} zł)\n"
+                f"   ├ Cheap: {energy['floor_cheap']:.2f} kWh\n"
+                f"   └ Expensive: {energy['floor_expensive']:.2f} kWh\n\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"📈 Total: {total_kwh:.2f} kWh ({total_cost:.2f} zł)\n"
+                f"💰 Saved: {savings:.2f} zł vs expensive rate\n\n"
+                f"💡 Mode: {self._operating_mode.replace('_', ' ').title()}"
+            )
 
         await self._async_send_notification("CWU Controller Daily Report", message)
         self._last_daily_report_date = now
@@ -1225,6 +2061,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Winter mode specific
             "winter_cwu_target": self.get_winter_cwu_target() if self._operating_mode == MODE_WINTER else None,
             "winter_cwu_emergency_threshold": self.get_winter_cwu_emergency_threshold() if self._operating_mode == MODE_WINTER else None,
+            # Summer mode specific
+            "summer_cwu_target": self.get_summer_cwu_target() if self._operating_mode == MODE_SUMMER else None,
+            "summer_night_target": self.get_summer_night_target() if self._operating_mode == MODE_SUMMER else None,
+            "summer_current_slot": self._summer_current_slot if self._operating_mode == MODE_SUMMER else None,
+            "summer_heating_source": self._summer_heating_source if self._operating_mode == MODE_SUMMER else None,
+            "summer_excess_mode_active": self._summer_excess_mode_active if self._operating_mode == MODE_SUMMER else False,
+            "summer_decision_reason": self._summer_decision_reason if self._operating_mode == MODE_SUMMER else None,
+            "summer_pv_balance": self._get_pv_balance() if self._operating_mode == MODE_SUMMER else None,
+            "summer_pv_production": self._get_pv_production() if self._operating_mode == MODE_SUMMER else None,
+            "summer_grid_power": self._get_grid_power() if self._operating_mode == MODE_SUMMER else None,
+            "summer_cooldown_active": self._is_summer_cooldown_active() if self._operating_mode == MODE_SUMMER else False,
+            "summer_min_heating_elapsed": self._is_summer_min_heating_time_elapsed() if self._operating_mode == MODE_SUMMER else True,
+            # Summer mode energy stats (from property)
+            "summer_energy_today": self.summer_energy_today if self._operating_mode == MODE_SUMMER else None,
+            "summer_energy_yesterday": self.summer_energy_yesterday if self._operating_mode == MODE_SUMMER else None,
             # Energy tracking (using property for calculated values)
             "energy_today_cwu_kwh": self.energy_today["cwu"],
             "energy_today_cwu_cheap_kwh": self.energy_today["cwu_cheap"],
@@ -1356,13 +2207,24 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     self._log_action(
                         f"CWU sensor unavailable for {unavailable_minutes:.0f} minutes - entering safe mode"
                     )
-                    await self._async_send_notification(
-                        "CWU Controller - Safe Mode",
-                        f"CWU temperature sensor has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
-                        f"Entering safe mode - heat pump will control both floor and CWU.\n"
-                        f"Normal control will resume when sensors recover."
-                    )
-                    await self._enter_safe_mode()
+                    # Summer mode uses different safe mode (CWU only, no floor)
+                    if self._operating_mode == MODE_SUMMER:
+                        await self._async_send_notification(
+                            "CWU Controller - Safe Mode (Summer)",
+                            f"CWU temperature sensor has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
+                            f"Entering safe mode - enabling CWU heater.\n"
+                            f"Floor heating remains OFF (summer mode).\n"
+                            f"Normal control will resume when sensors recover."
+                        )
+                        await self._enter_summer_safe_mode()
+                    else:
+                        await self._async_send_notification(
+                            "CWU Controller - Safe Mode",
+                            f"CWU temperature sensor has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
+                            f"Entering safe mode - heat pump will control both floor and CWU.\n"
+                            f"Normal control will resume when sensors recover."
+                        )
+                        await self._enter_safe_mode()
                     self._change_state(STATE_SAFE_MODE)
                     return
         else:
@@ -1374,11 +2236,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             await self._run_winter_mode_logic(cwu_urgency, floor_urgency, cwu_temp, salon_temp)
             return
         elif self._operating_mode == MODE_SUMMER:
-            # Summer mode not implemented yet
-            self._log_action("Summer mode not implemented - using floor heating")
-            if self._current_state != STATE_HEATING_FLOOR:
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
+            await self._run_summer_mode_logic(cwu_urgency, cwu_temp)
             return
 
         # Default: Broken heater mode (original logic)

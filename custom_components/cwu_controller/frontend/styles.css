@@ -2716,3 +2716,176 @@ body {
         margin: 10px 0;
     }
 }
+
+/* =============================================================================
+   Summer PV Card Styles
+   ============================================================================= */
+
+.summer-pv-card {
+    grid-column: span 2;
+}
+
+.summer-pv-content {
+    padding: 12px;
+}
+
+.summer-pv-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.summer-pv-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.summer-pv-item:hover {
+    background: var(--bg-hover);
+}
+
+.summer-pv-icon {
+    font-size: 28px;
+    color: var(--accent-yellow);
+}
+
+.summer-pv-icon.mdi-scale-balance {
+    color: var(--accent-cyan);
+}
+
+.summer-pv-icon.mdi-transmission-tower {
+    color: var(--accent-orange);
+}
+
+.summer-pv-icon.mdi-percent {
+    color: var(--accent-green);
+}
+
+.summer-pv-data {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summer-pv-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summer-pv-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.summer-decision-box {
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 16px;
+    border-left: 3px solid var(--accent-cyan);
+}
+
+.summer-decision-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.summer-decision-header .mdi {
+    font-size: 16px;
+    color: var(--accent-cyan);
+}
+
+.summer-decision-text {
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.summer-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+}
+
+.summer-stat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.summer-stat .mdi {
+    font-size: 18px;
+}
+
+.summer-stat .mdi-solar-power {
+    color: var(--accent-yellow);
+}
+
+.summer-stat .mdi-transmission-tower {
+    color: var(--accent-orange);
+}
+
+.summer-stat .mdi-piggy-bank {
+    color: var(--accent-green);
+}
+
+.summer-stat strong {
+    color: var(--text-primary);
+}
+
+.summer-protection-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(0, 217, 255, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--accent-cyan);
+    font-size: 13px;
+}
+
+.summer-protection-row .mdi {
+    font-size: 18px;
+}
+
+/* Responsive for Summer PV Card */
+@media (max-width: 992px) {
+    .summer-pv-card {
+        grid-column: span 1;
+    }
+
+    .summer-pv-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 576px) {
+    .summer-pv-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .summer-stats-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+}

@@ -192,6 +192,18 @@ def winter_config(default_config):
 
 
 @pytest.fixture
+def summer_config(default_config):
+    """Return configuration with summer mode."""
+    from custom_components.cwu_controller.const import MODE_SUMMER
+    config = default_config.copy()
+    config[CONF_OPERATING_MODE] = MODE_SUMMER
+    config["pv_balance_sensor"] = "sensor.energia_bilans_netto"
+    config["pv_production_sensor"] = "sensor.inverter_moc_czynna"
+    config["grid_power_sensor"] = "sensor.glowny_total_system_power"
+    return config
+
+
+@pytest.fixture
 def mock_coordinator(mock_hass, default_config):
     """Create a mock coordinator for testing."""
     import logging

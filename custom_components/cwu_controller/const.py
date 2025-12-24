@@ -133,3 +133,76 @@ WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below targe
 WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
 WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progress (3h)
 WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
+
+# =============================================================================
+# Summer Mode specific settings
+# =============================================================================
+
+# Summer mode time slots (hours)
+SUMMER_PV_SLOT_START: Final = 8   # 08:00 - start of PV slot
+SUMMER_PV_SLOT_END: Final = 18    # 18:00 - end of PV slot (sunset in summer)
+SUMMER_PV_DEADLINE: Final = 16    # 16:00 - after this hour, fallback to tariff if needed
+
+# Summer mode temperature thresholds
+SUMMER_CWU_TARGET_TEMP: Final = 50.0  # °C - target temperature
+SUMMER_EVENING_THRESHOLD: Final = 42.0  # °C - below this temp, enable fallback after deadline
+SUMMER_NIGHT_THRESHOLD: Final = 40.0    # °C - below this temp, heat at night (safety buffer)
+SUMMER_NIGHT_TARGET: Final = 42.0       # °C - target temp for night heating (just buffer)
+SUMMER_CWU_MAX_TEMP: Final = 55.0       # °C - maximum safe temperature (emergency stop)
+
+# Summer mode PV settings
+SUMMER_HEATER_POWER: Final = 3300  # W - default heater power
+SUMMER_BALANCE_THRESHOLD: Final = 0.5  # 50% - balance threshold ratio for heating decision
+SUMMER_PV_MIN_PRODUCTION: Final = 500  # W - minimum PV production to consider "sunny day"
+
+# Summer mode heater protection
+SUMMER_MIN_HEATING_TIME: Final = 30  # min - minimum runtime after turning on (heater protection)
+SUMMER_MIN_COOLDOWN: Final = 5  # min - minimum cooldown before turning on again
+SUMMER_BALANCE_CHECK_INTERVAL: Final = 15  # min - how often to check balance during heating
+
+# Summer mode no-progress detection
+SUMMER_CWU_NO_PROGRESS_TIMEOUT: Final = 60  # min - timeout for no progress (shorter than winter)
+SUMMER_CWU_MIN_TEMP_INCREASE: Final = 2.0  # °C - expected temp increase (higher than winter)
+
+# Excess PV Mode - reheat water from surplus PV
+SUMMER_EXCESS_EXPORT_THRESHOLD: Final = -3000  # W - export to grid required to activate
+SUMMER_EXCESS_BALANCE_THRESHOLD: Final = 2.0  # kWh - minimum balance to activate
+SUMMER_EXCESS_BALANCE_MIN: Final = 0.5  # kWh - balance below which we stop
+SUMMER_EXCESS_GRID_WARNING: Final = 2000  # W - grid draw at which we warn
+SUMMER_EXCESS_GRID_STOP: Final = 3000  # W - grid draw at which we stop
+SUMMER_EXCESS_CWU_MIN_OFFSET: Final = 5.0  # °C - water must be above (target - this) to activate
+
+# Summer mode PV sensor configuration keys
+CONF_PV_BALANCE_SENSOR: Final = "pv_balance_sensor"
+CONF_PV_PRODUCTION_SENSOR: Final = "pv_production_sensor"
+CONF_GRID_POWER_SENSOR: Final = "grid_power_sensor"
+CONF_SUMMER_HEATER_POWER: Final = "summer_heater_power"
+CONF_SUMMER_BALANCE_THRESHOLD: Final = "summer_balance_threshold"
+
+# Summer mode time slot configuration keys
+CONF_SUMMER_PV_SLOT_START: Final = "summer_pv_slot_start"
+CONF_SUMMER_PV_SLOT_END: Final = "summer_pv_slot_end"
+CONF_SUMMER_PV_DEADLINE: Final = "summer_pv_deadline"
+CONF_SUMMER_NIGHT_THRESHOLD: Final = "summer_night_threshold"
+CONF_SUMMER_NIGHT_TARGET: Final = "summer_night_target"
+
+# Default PV sensor names
+DEFAULT_PV_BALANCE_SENSOR: Final = "sensor.energia_bilans_netto"
+DEFAULT_PV_PRODUCTION_SENSOR: Final = "sensor.inverter_moc_czynna"
+DEFAULT_GRID_POWER_SENSOR: Final = "sensor.glowny_total_system_power"
+
+# Summer mode heating sources (for tracking and display)
+HEATING_SOURCE_NONE: Final = "none"
+HEATING_SOURCE_PV: Final = "pv"
+HEATING_SOURCE_PV_EXCESS: Final = "pv_excess"
+HEATING_SOURCE_TARIFF_CHEAP: Final = "tariff_cheap"
+HEATING_SOURCE_TARIFF_EXPENSIVE: Final = "tariff_expensive"
+HEATING_SOURCE_EMERGENCY: Final = "emergency"
+
+# Summer mode time slots (for state tracking)
+SLOT_PV: Final = "slot_pv"
+SLOT_EVENING: Final = "slot_evening"
+SLOT_NIGHT: Final = "slot_night"
+
+# PV export rate (for savings calculation)
+PV_EXPORT_RATE: Final = 0.30  # zł/kWh - typical rate for exported energy
