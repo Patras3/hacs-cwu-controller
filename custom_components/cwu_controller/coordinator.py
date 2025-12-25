@@ -169,11 +169,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._last_daily_report_date: datetime | None = None
 
-        # BSB-LAN data cache
-        self._bsb_lan_data: dict[str, Any] | None = None
-        self._bsb_lan_last_update: datetime | None = None
-        self._bsb_lan_error: str | None = None
-
         # Persistence - data will be loaded async after init
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._last_energy_save: datetime | None = None
@@ -1148,39 +1143,42 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         await self._async_set_climate(False)
         await self._async_send_notification("CWU Controller Test", "Floor heating turned OFF")
 
-    async def _async_fetch_bsb_lan(self) -> None:
-        """Fetch data from BSB-LAN heat pump controller."""
+    async def async_fetch_bsb_lan(self) -> dict[str, Any]:
+        """Fetch data from BSB-LAN heat pump controller.
+
+        Returns dict with either 'data' key (success) or 'error' key (failure).
+        Called on-demand by the frontend API endpoint.
+        """
         url = f"http://{BSB_LAN_HOST}/JQ={BSB_LAN_PARAMS}"
         try:
             timeout = aiohttp.ClientTimeout(total=BSB_LAN_TIMEOUT)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
-                        data = await response.json()
-                        self._bsb_lan_data = {
-                            "dhw_status": data.get("8003", {}).get("desc", "---"),
-                            "hp_status": data.get("8006", {}).get("desc", "---"),
-                            "flow_temp": self._parse_bsb_value(data.get("8412", {})),
-                            "return_temp": self._parse_bsb_value(data.get("8410", {})),
-                            "cwu_temp": self._parse_bsb_value(data.get("8830", {})),
-                            "outside_temp": self._parse_bsb_value(data.get("8700", {})),
+                        raw_data = await response.json()
+                        bsb_data = {
+                            "dhw_status": raw_data.get("8003", {}).get("desc", "---"),
+                            "hp_status": raw_data.get("8006", {}).get("desc", "---"),
+                            "flow_temp": self._parse_bsb_value(raw_data.get("8412", {})),
+                            "return_temp": self._parse_bsb_value(raw_data.get("8410", {})),
+                            "cwu_temp": self._parse_bsb_value(raw_data.get("8830", {})),
+                            "outside_temp": self._parse_bsb_value(raw_data.get("8700", {})),
                         }
                         # Calculate delta T
-                        if self._bsb_lan_data["flow_temp"] is not None and self._bsb_lan_data["return_temp"] is not None:
-                            self._bsb_lan_data["delta_t"] = self._bsb_lan_data["flow_temp"] - self._bsb_lan_data["return_temp"]
+                        if bsb_data["flow_temp"] is not None and bsb_data["return_temp"] is not None:
+                            bsb_data["delta_t"] = bsb_data["flow_temp"] - bsb_data["return_temp"]
                         else:
-                            self._bsb_lan_data["delta_t"] = None
-                        self._bsb_lan_last_update = datetime.now()
-                        self._bsb_lan_error = None
+                            bsb_data["delta_t"] = None
+                        return {"data": bsb_data}
                     else:
-                        self._bsb_lan_error = f"HTTP {response.status}"
+                        return {"error": f"HTTP {response.status}"}
         except asyncio.TimeoutError:
-            self._bsb_lan_error = "Timeout"
+            return {"error": "Timeout"}
         except aiohttp.ClientError as e:
-            self._bsb_lan_error = str(e)
+            return {"error": str(e)}
         except Exception as e:
-            self._bsb_lan_error = str(e)
             _LOGGER.debug("BSB-LAN fetch error: %s", e)
+            return {"error": str(e)}
 
     def _parse_bsb_value(self, data: dict) -> float | None:
         """Parse BSB-LAN value from response."""
@@ -1196,9 +1194,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Update data and run control logic."""
         now = datetime.now()
         current_hour = now.hour
-
-        # Fetch BSB-LAN data (non-blocking, runs in background)
-        asyncio.create_task(self._async_fetch_bsb_lan())
 
         # Get sensor values
         cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
@@ -1351,10 +1346,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Tariff rates (for sensors)
             "tariff_cheap_rate": self.get_tariff_cheap_rate(),
             "tariff_expensive_rate": self.get_tariff_expensive_rate(),
-            # BSB-LAN heat pump data
-            "bsb_lan_data": self._bsb_lan_data,
-            "bsb_lan_error": self._bsb_lan_error,
-            "bsb_lan_last_update": self._bsb_lan_last_update.isoformat() if self._bsb_lan_last_update else None,
         }
 
         if self._fake_heating_detected_at:
