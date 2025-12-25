@@ -44,7 +44,7 @@ class CWUControllerEnabledSwitch(CoordinatorEntity, SwitchEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "3.1.0",
+            "sw_version": "3.1.6",
         }
 
     @property
