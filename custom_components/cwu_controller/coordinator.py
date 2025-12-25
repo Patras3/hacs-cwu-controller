@@ -594,7 +594,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         Detects fake heating when:
         - Water heater is in active mode (heat_pump or performance)
         - CWU heating has been active for at least FAKE_HEATING_DETECTION_TIME
-        - No power spike >= POWER_SPIKE_THRESHOLD (100W) in the last 10 minutes
+        - No power spike >= POWER_SPIKE_THRESHOLD (200W) in the last 10 minutes
 
         This catches both scenarios:
         1. Power < 10W (pump waiting for broken immersion heater)

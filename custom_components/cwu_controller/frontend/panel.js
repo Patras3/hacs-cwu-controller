@@ -1,9 +1,10 @@
 /**
- * CWU Controller Panel JavaScript v7.0
+ * CWU Controller Panel JavaScript v7.1
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
  * v7.0: Mobile-first redesign - Quick stats widgets at top (Power, CWU Temp+State, Mini Power Chart)
+ * v7.1: Added BSB-LAN heat pump status widget with live data from pump
  */
 
 // Configuration
@@ -16,6 +17,14 @@ const CONFIG = {
     pumpCirculatingPower: 80,
     idlePower: 10,
     cycleInterval: 7, // minutes between peaks
+};
+
+// BSB-LAN Configuration
+const BSB_LAN = {
+    baseUrl: 'http://192.168.50.219',
+    params: '8003,8006,8412,8410,8830,8700',
+    timeout: 5000,
+    refreshInterval: 30000, // 30 seconds
 };
 
 // Entity IDs
@@ -119,7 +128,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v7.0 initializing...');
+    console.log('CWU Controller Panel v7.1 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
@@ -129,6 +138,10 @@ async function init() {
     await updateAllChartData();
     await updateQuickPowerChart();
     await fetchCwuTemp1hAgo();
+
+    // Initialize BSB-LAN (async, don't block)
+    refreshBsbLan();
+    setInterval(refreshBsbLan, BSB_LAN.refreshInterval);
 
     updateTimer = setInterval(refreshData, CONFIG.updateInterval);
     chartUpdateTimer = setInterval(updateAllChartData, CONFIG.chartUpdateInterval);
@@ -1827,6 +1840,140 @@ function showNotification(message, type = 'info') {
 function updateLastUpdateTime() {
     const el = document.getElementById('last-update');
     if (el) el.textContent = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/**
+ * BSB-LAN Functions
+ */
+let bsbLanData = null;
+let bsbLanLastUpdate = null;
+
+async function refreshBsbLan() {
+    const contentEl = document.getElementById('bsb-lan-content');
+    const statusEl = document.getElementById('bsb-lan-status');
+    const refreshIcon = document.getElementById('bsb-refresh-icon');
+
+    if (!contentEl) return;
+
+    // Show loading state on refresh button
+    if (refreshIcon) {
+        refreshIcon.classList.add('mdi-spin');
+    }
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), BSB_LAN.timeout);
+
+        const response = await fetch(`${BSB_LAN.baseUrl}/JQ=${BSB_LAN.params}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        bsbLanData = data;
+        bsbLanLastUpdate = new Date();
+
+        updateBsbLanDisplay(data);
+
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
+        }
+    } catch (error) {
+        console.error('BSB-LAN fetch error:', error);
+        showBsbLanError(error.name === 'AbortError' ? 'Timeout' : error.message);
+
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
+        }
+    } finally {
+        if (refreshIcon) {
+            refreshIcon.classList.remove('mdi-spin');
+        }
+    }
+}
+
+function updateBsbLanDisplay(data) {
+    const contentEl = document.getElementById('bsb-lan-content');
+    if (!contentEl) return;
+
+    // Parse values - show raw from API without interpretation
+    const dhwStatus = data['8003']?.desc || '---';
+    const hpStatus = data['8006']?.desc || '---';
+    const flowTemp = parseFloat(data['8412']?.value) || 0;
+    const returnTemp = parseFloat(data['8410']?.value) || 0;
+    const cwuTemp = parseFloat(data['8830']?.value) || 0;
+    const outsideTemp = parseFloat(data['8700']?.value) || 0;
+    const deltaT = flowTemp - returnTemp;
+
+    // Delta T interpretation (this is just math, keep it)
+    let deltaTClass = 'normal';
+    let deltaTDesc = '';
+    if (deltaT >= 3 && deltaT <= 5) {
+        deltaTClass = 'good';
+        deltaTDesc = 'Normal';
+    } else if (deltaT > 0.5 && deltaT < 3) {
+        deltaTClass = 'warning';
+        deltaTDesc = 'Weak';
+    } else if (deltaT <= 0.5) {
+        deltaTClass = 'bad';
+        deltaTDesc = 'No flow';
+    } else if (deltaT > 5) {
+        deltaTClass = 'high';
+        deltaTDesc = 'High';
+    }
+
+    contentEl.innerHTML = `
+        <div class="bsb-status-row">
+            <div class="bsb-raw-statuses">
+                <div class="bsb-raw-status">
+                    <span class="bsb-raw-label">DHW:</span>
+                    <span class="bsb-raw-value">${dhwStatus}</span>
+                </div>
+                <div class="bsb-raw-status">
+                    <span class="bsb-raw-label">HP:</span>
+                    <span class="bsb-raw-value">${hpStatus}</span>
+                </div>
+            </div>
+            <div class="bsb-outside-temp">
+                <span class="mdi mdi-thermometer"></span>
+                <span>${outsideTemp.toFixed(1)}°C</span>
+            </div>
+        </div>
+        <div class="bsb-temps-grid">
+            <div class="bsb-temp-item">
+                <span class="bsb-temp-label">CWU (BSB)</span>
+                <span class="bsb-temp-value">${cwuTemp.toFixed(1)}°C</span>
+            </div>
+            <div class="bsb-temp-item flow">
+                <span class="bsb-temp-label">Flow</span>
+                <span class="bsb-temp-value">${flowTemp.toFixed(1)}°C</span>
+            </div>
+            <div class="bsb-temp-item return">
+                <span class="bsb-temp-label">Return</span>
+                <span class="bsb-temp-value">${returnTemp.toFixed(1)}°C</span>
+            </div>
+            <div class="bsb-temp-item delta ${deltaTClass}">
+                <span class="bsb-temp-label">ΔT</span>
+                <span class="bsb-temp-value">${deltaT >= 0 ? '+' : ''}${deltaT.toFixed(1)}°C</span>
+                <span class="bsb-temp-desc">${deltaTDesc}</span>
+            </div>
+        </div>
+    `;
+}
+
+function showBsbLanError(message) {
+    const contentEl = document.getElementById('bsb-lan-content');
+    if (!contentEl) return;
+
+    contentEl.innerHTML = `
+        <div class="bsb-error">
+            <span class="mdi mdi-alert-circle"></span>
+            <span>Connection failed: ${message}</span>
+            <button class="btn btn-sm" onclick="refreshBsbLan()">Retry</button>
+        </div>
+    `;
 }
 
 /**
