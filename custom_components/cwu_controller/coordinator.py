@@ -1084,8 +1084,16 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_override = True
         self._manual_override_until = datetime.now() + timedelta(minutes=duration_minutes)
 
+        # First turn off everything
+        self._log_action("Force CWU: Stopping all heating first...")
+        await self._async_set_water_heater_mode(WH_MODE_OFF)
         await self._async_set_climate(False)
-        await asyncio.sleep(1)
+
+        # Wait for pump to settle
+        self._log_action("Waiting 60s for pump to settle...")
+        await asyncio.sleep(60)
+
+        # Now enable CWU
         await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
 
         self._change_state(STATE_HEATING_CWU)
@@ -1100,8 +1108,16 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_override = True
         self._manual_override_until = datetime.now() + timedelta(minutes=duration_minutes)
 
+        # First turn off everything
+        self._log_action("Force Floor: Stopping all heating first...")
         await self._async_set_water_heater_mode(WH_MODE_OFF)
-        await asyncio.sleep(1)
+        await self._async_set_climate(False)
+
+        # Wait for pump to settle
+        self._log_action("Waiting 60s for pump to settle...")
+        await asyncio.sleep(60)
+
+        # Now enable floor heating
         await self._async_set_climate(True)
 
         self._change_state(STATE_HEATING_FLOOR)
