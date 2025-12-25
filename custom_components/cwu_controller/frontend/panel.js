@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v7.4
+ * CWU Controller Panel JavaScript v7.5
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -1880,9 +1880,12 @@ function updateBsbLanDisplay(bsbData) {
     const statusEl = document.getElementById('bsb-lan-status');
     if (!contentEl) return;
 
+    // Use cached data if not provided
+    const data = bsbData || currentData.bsbLan;
+
     // Handle unavailable or missing data
-    if (!bsbData || !bsbData.available) {
-        const reason = bsbData?.control_source === 'ha_cloud' ? 'Using HA Cloud fallback' : 'BSB-LAN unavailable';
+    if (!data || !data.available) {
+        const reason = data?.control_source === 'ha_cloud' ? 'Using HA Cloud fallback' : 'BSB-LAN unavailable';
         contentEl.innerHTML = `
             <div class="bsb-error">
                 <span class="mdi mdi-lan-disconnect"></span>
@@ -1896,14 +1899,14 @@ function updateBsbLanDisplay(bsbData) {
     }
 
     // Parse values from sensor data
-    const dhwStatus = bsbData.dhw_status || '---';
-    const hpStatus = bsbData.hp_status || '---';
-    const flowTemp = bsbData.flow_temp || 0;
-    const returnTemp = bsbData.return_temp || 0;
-    const cwuTemp = bsbData.cwu_temp || 0;
-    const outsideTemp = bsbData.outside_temp || 0;
-    const deltaT = bsbData.delta_t !== null && !isNaN(bsbData.delta_t) ? bsbData.delta_t : (flowTemp - returnTemp);
-    const controlSource = bsbData.control_source || 'unknown';
+    const dhwStatus = data.dhw_status || '---';
+    const hpStatus = data.hp_status || '---';
+    const flowTemp = data.flow_temp || 0;
+    const returnTemp = data.return_temp || 0;
+    const cwuTemp = data.cwu_temp || 0;
+    const outsideTemp = data.outside_temp || 0;
+    const deltaT = data.delta_t !== null && !isNaN(data.delta_t) ? data.delta_t : (flowTemp - returnTemp);
+    const controlSource = data.control_source || 'unknown';
 
     // Delta T interpretation
     let deltaTClass = 'normal';
