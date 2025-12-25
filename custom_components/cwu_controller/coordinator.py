@@ -1351,12 +1351,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if self._fake_heating_detected_at:
                 elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
                 if elapsed >= FAKE_HEATING_RESTART_WAIT:
-                    # Full restart sequence: stop all, wait, start CWU
-                    self._log_action("Manual mode: Restarting CWU after fake heating...")
-                    await self._async_set_water_heater_mode(WH_MODE_OFF)
-                    await self._async_set_climate(False)
-                    self._log_action("Waiting 60s for pump to settle...")
-                    await asyncio.sleep(60)
+                    # Just restart CWU - everything is already stopped
                     await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
                     self._fake_heating_detected_at = None
                     self._change_state(STATE_HEATING_CWU)
