@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v7.3
+ * CWU Controller Panel JavaScript v7.4
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -36,12 +36,12 @@ const ENTITIES = {
     manualOverride: 'binary_sensor.cwu_controller_manual_override',
     // BSB-LAN sensors (fetched via coordinator, not direct API)
     bsbDhwStatus: 'sensor.cwu_controller_bsb_dhw_status',
-    bsbHpStatus: 'sensor.cwu_controller_bsb_hp_status',
-    bsbCwuTemp: 'sensor.cwu_controller_bsb_cwu_temp',
-    bsbFlowTemp: 'sensor.cwu_controller_bsb_flow_temp',
-    bsbReturnTemp: 'sensor.cwu_controller_bsb_return_temp',
+    bsbHpStatus: 'sensor.cwu_controller_bsb_heat_pump_status',
+    bsbCwuTemp: 'sensor.cwu_controller_bsb_cwu_temperature',
+    bsbFlowTemp: 'sensor.cwu_controller_bsb_flow_temperature',
+    bsbReturnTemp: 'sensor.cwu_controller_bsb_return_temperature',
     bsbDeltaT: 'sensor.cwu_controller_bsb_delta_t',
-    bsbOutsideTemp: 'sensor.cwu_controller_bsb_outside_temp',
+    bsbOutsideTemp: 'sensor.cwu_controller_bsb_outside_temperature',
     bsbAvailable: 'binary_sensor.cwu_controller_bsb_lan_available',
     controlSource: 'sensor.cwu_controller_control_source',
 };

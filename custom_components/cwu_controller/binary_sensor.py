@@ -52,7 +52,7 @@ class CWUControllerBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.1",
+            "sw_version": "4.0.2",
         }
 
 
