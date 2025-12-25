@@ -1822,8 +1822,156 @@ function updateLastUpdateTime() {
     if (el) el.textContent = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+// ============================================================================
+// BSB-LAN Integration
+// ============================================================================
+
+const BSB_LAN_URL = 'http://192.168.50.219';
+const BSB_PARAMS = '8003,8006,8412,8410,8830,8700';
+
+let bsbData = null;
+let bsbLastUpdate = null;
+
+/**
+ * Fetch data from BSB-LAN
+ */
+async function refreshBsbData() {
+    const loadingEl = document.getElementById('bsb-loading');
+    const errorEl = document.getElementById('bsb-error');
+
+    if (loadingEl) loadingEl.style.display = 'inline';
+    if (errorEl) errorEl.style.display = 'none';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${BSB_LAN_URL}/JQ=${BSB_PARAMS}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        bsbData = data;
+        bsbLastUpdate = new Date();
+        updateBsbUI(data);
+
+    } catch (error) {
+        console.error('BSB-LAN fetch error:', error);
+        if (errorEl) {
+            errorEl.style.display = 'flex';
+            document.getElementById('bsb-error-text').textContent =
+                error.name === 'AbortError' ? 'Timeout' : error.message;
+        }
+    } finally {
+        if (loadingEl) loadingEl.style.display = 'none';
+    }
+}
+
+/**
+ * Update BSB-LAN UI with fetched data
+ */
+function updateBsbUI(data) {
+    // DHW Status (8003)
+    const dhwStatusEl = document.getElementById('bsb-dhw-status');
+    if (dhwStatusEl && data['8003']) {
+        const desc = data['8003'].desc || data['8003'].value || '--';
+        dhwStatusEl.textContent = desc;
+        dhwStatusEl.className = 'bsb-status-value';
+        if (desc.includes('Charging') && !desc.includes('electric')) {
+            dhwStatusEl.classList.add('active');
+        } else if (desc.includes('electric')) {
+            dhwStatusEl.classList.add('electric');
+        }
+    }
+
+    // HP Status (8006)
+    const hpStatusEl = document.getElementById('bsb-hp-status');
+    if (hpStatusEl && data['8006']) {
+        const desc = data['8006'].desc || data['8006'].value || '--';
+        hpStatusEl.textContent = desc;
+        hpStatusEl.className = 'bsb-status-value';
+        if (desc.includes('Compressor')) {
+            hpStatusEl.classList.add('active');
+        } else if (desc.includes('Frost')) {
+            hpStatusEl.classList.add('defrost');
+        }
+    }
+
+    // Temperatures
+    const flowTemp = data['8412'] ? parseFloat(data['8412'].value) : null;
+    const returnTemp = data['8410'] ? parseFloat(data['8410'].value) : null;
+    const cwuTemp = data['8830'] ? parseFloat(data['8830'].value) : null;
+    const outsideTemp = data['8700'] ? parseFloat(data['8700'].value) : null;
+
+    const flowEl = document.getElementById('bsb-flow-temp');
+    const returnEl = document.getElementById('bsb-return-temp');
+    const cwuEl = document.getElementById('bsb-cwu-temp');
+    const outsideEl = document.getElementById('bsb-outside-temp');
+    const deltaEl = document.getElementById('bsb-delta-t');
+
+    if (flowEl) flowEl.textContent = flowTemp !== null ? `${flowTemp.toFixed(1)}°C` : '--°C';
+    if (returnEl) returnEl.textContent = returnTemp !== null ? `${returnTemp.toFixed(1)}°C` : '--°C';
+    if (cwuEl) cwuEl.textContent = cwuTemp !== null ? `${cwuTemp.toFixed(1)}°C` : '--°C';
+    if (outsideEl) outsideEl.textContent = outsideTemp !== null ? `${outsideTemp.toFixed(1)}°C` : '--°C';
+
+    // Delta T
+    if (deltaEl && flowTemp !== null && returnTemp !== null) {
+        const deltaT = flowTemp - returnTemp;
+        deltaEl.textContent = `${deltaT >= 0 ? '+' : ''}${deltaT.toFixed(1)}°C`;
+        deltaEl.className = 'bsb-temp-value';
+        if (deltaT >= 3) {
+            deltaEl.classList.add('good');
+        } else if (deltaT < 0) {
+            deltaEl.classList.add('negative');
+        } else {
+            deltaEl.classList.add('low');
+        }
+    }
+
+    // Indicators
+    const compressorInd = document.getElementById('bsb-compressor-indicator');
+    const electricInd = document.getElementById('bsb-electric-indicator');
+    const defrostInd = document.getElementById('bsb-defrost-indicator');
+
+    const hpDesc = data['8006']?.desc || '';
+    const dhwDesc = data['8003']?.desc || '';
+
+    if (compressorInd) {
+        compressorInd.classList.toggle('active', hpDesc.includes('Compressor'));
+    }
+    if (electricInd) {
+        electricInd.classList.toggle('active', dhwDesc.toLowerCase().includes('electric'));
+    }
+    if (defrostInd) {
+        defrostInd.classList.toggle('active', hpDesc.includes('Frost'));
+    }
+
+    // Last update time
+    const lastUpdateEl = document.getElementById('bsb-last-update');
+    if (lastUpdateEl && bsbLastUpdate) {
+        lastUpdateEl.textContent = bsbLastUpdate.toLocaleTimeString('pl-PL', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    }
+}
+
+// Auto-refresh BSB data every 30 seconds
+setInterval(() => {
+    if (document.visibilityState === 'visible') {
+        refreshBsbData();
+    }
+}, 30000);
+
 // Initialize
 document.addEventListener('DOMContentLoaded', init);
+
+// Also fetch BSB data on init
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(refreshBsbData, 1000); // Delay 1s to not block main init
+});
 
 // Close modals on escape or outside click
 document.addEventListener('keydown', e => {

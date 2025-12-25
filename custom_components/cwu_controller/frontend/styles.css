@@ -2716,3 +2716,232 @@ body {
         margin: 10px 0;
     }
 }
+
+/* ============================================================================
+   BSB-LAN Card Styles
+   ============================================================================ */
+
+.bsb-card {
+    grid-column: span 1;
+}
+
+.bsb-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bsb-loading {
+    color: var(--accent-primary);
+}
+
+.bsb-last-update {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.bsb-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.bsb-status-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.bsb-status-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: var(--bg-hover);
+    border-radius: 8px;
+}
+
+.bsb-status-icon {
+    font-size: 24px;
+    color: var(--text-secondary);
+}
+
+.bsb-status-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.bsb-status-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.bsb-status-value {
+    font-size: 12px;
+    color: var(--text-primary);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bsb-status-value.active {
+    color: var(--accent-green);
+}
+
+.bsb-status-value.electric {
+    color: var(--accent-orange);
+}
+
+.bsb-status-value.defrost {
+    color: var(--accent-primary);
+}
+
+.bsb-temps-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+}
+
+.bsb-temp-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 5px;
+    background: var(--bg-hover);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.bsb-temp-item.highlight {
+    background: rgba(0, 217, 255, 0.1);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.bsb-temp-icon {
+    font-size: 20px;
+    color: var(--text-secondary);
+}
+
+.bsb-temp-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bsb-temp-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.bsb-temp-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.bsb-temp-value.good {
+    color: var(--accent-green);
+}
+
+.bsb-temp-value.low {
+    color: var(--accent-orange);
+}
+
+.bsb-temp-value.negative {
+    color: var(--accent-red);
+}
+
+.bsb-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 10px 0;
+}
+
+.bsb-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    background: var(--bg-secondary);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    transition: all 0.3s ease;
+}
+
+.bsb-indicator .mdi {
+    font-size: 16px;
+}
+
+.bsb-indicator.active {
+    opacity: 1;
+    background: rgba(104, 211, 145, 0.2);
+    color: var(--accent-green);
+}
+
+.bsb-indicator.active .mdi {
+    color: var(--accent-green);
+}
+
+#bsb-electric-indicator.active {
+    background: rgba(237, 137, 54, 0.2);
+    color: var(--accent-orange);
+}
+
+#bsb-electric-indicator.active .mdi {
+    color: var(--accent-orange);
+}
+
+#bsb-defrost-indicator.active {
+    background: rgba(0, 217, 255, 0.2);
+    color: var(--accent-primary);
+}
+
+#bsb-defrost-indicator.active .mdi {
+    color: var(--accent-primary);
+}
+
+.bsb-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(245, 101, 101, 0.1);
+    border: 1px solid rgba(245, 101, 101, 0.3);
+    border-radius: 8px;
+    color: var(--accent-red);
+    font-size: 12px;
+}
+
+.bsb-error .mdi {
+    font-size: 18px;
+}
+
+/* Responsive for BSB card */
+@media (max-width: 768px) {
+    .bsb-temps-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .bsb-status-row {
+        grid-template-columns: 1fr;
+    }
+
+    .bsb-indicators {
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 480px) {
+    .bsb-temps-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

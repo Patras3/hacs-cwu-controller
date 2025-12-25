@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=6.0.2">
+    <link rel="stylesheet" href="styles.css?v=6.1.0">
 </head>
 <body>
     <div class="container">
@@ -243,6 +243,98 @@
                             <span class="energy-label energy-sub"><span class="mdi mdi-heating-coil"></span> Floor:</span>
                             <span class="energy-value" id="cost-yesterday-floor">~0.00 zł</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BSB-LAN Heat Pump Status Card -->
+            <div class="card glass-effect bsb-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-heat-pump-outline"></span>
+                        BSB-LAN Status
+                    </span>
+                    <div class="bsb-controls">
+                        <span class="bsb-loading" id="bsb-loading" style="display: none;">
+                            <span class="mdi mdi-loading mdi-spin"></span>
+                        </span>
+                        <span class="bsb-last-update" id="bsb-last-update">--</span>
+                        <button class="btn btn-icon btn-sm" onclick="refreshBsbData()" title="Refresh BSB-LAN">
+                            <span class="mdi mdi-refresh"></span>
+                        </button>
+                    </div>
+                </div>
+                <div class="bsb-content">
+                    <div class="bsb-status-row">
+                        <div class="bsb-status-item">
+                            <span class="bsb-status-icon mdi mdi-water-boiler"></span>
+                            <div class="bsb-status-info">
+                                <span class="bsb-status-label">DHW Status</span>
+                                <span class="bsb-status-value" id="bsb-dhw-status">--</span>
+                            </div>
+                        </div>
+                        <div class="bsb-status-item">
+                            <span class="bsb-status-icon mdi mdi-heat-pump"></span>
+                            <div class="bsb-status-info">
+                                <span class="bsb-status-label">Heat Pump</span>
+                                <span class="bsb-status-value" id="bsb-hp-status">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bsb-temps-grid">
+                        <div class="bsb-temp-item">
+                            <span class="bsb-temp-icon mdi mdi-thermometer-water"></span>
+                            <div class="bsb-temp-info">
+                                <span class="bsb-temp-label">CWU (pump)</span>
+                                <span class="bsb-temp-value" id="bsb-cwu-temp">--°C</span>
+                            </div>
+                        </div>
+                        <div class="bsb-temp-item">
+                            <span class="bsb-temp-icon mdi mdi-arrow-up-bold"></span>
+                            <div class="bsb-temp-info">
+                                <span class="bsb-temp-label">Flow</span>
+                                <span class="bsb-temp-value" id="bsb-flow-temp">--°C</span>
+                            </div>
+                        </div>
+                        <div class="bsb-temp-item">
+                            <span class="bsb-temp-icon mdi mdi-arrow-down-bold"></span>
+                            <div class="bsb-temp-info">
+                                <span class="bsb-temp-label">Return</span>
+                                <span class="bsb-temp-value" id="bsb-return-temp">--°C</span>
+                            </div>
+                        </div>
+                        <div class="bsb-temp-item highlight">
+                            <span class="bsb-temp-icon mdi mdi-delta"></span>
+                            <div class="bsb-temp-info">
+                                <span class="bsb-temp-label">ΔT</span>
+                                <span class="bsb-temp-value" id="bsb-delta-t">--°C</span>
+                            </div>
+                        </div>
+                        <div class="bsb-temp-item">
+                            <span class="bsb-temp-icon mdi mdi-weather-partly-cloudy"></span>
+                            <div class="bsb-temp-info">
+                                <span class="bsb-temp-label">Outside</span>
+                                <span class="bsb-temp-value" id="bsb-outside-temp">--°C</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bsb-indicators">
+                        <span class="bsb-indicator" id="bsb-compressor-indicator" title="Compressor">
+                            <span class="mdi mdi-engine"></span>
+                            <span>Compressor</span>
+                        </span>
+                        <span class="bsb-indicator" id="bsb-electric-indicator" title="Electric Heater">
+                            <span class="mdi mdi-lightning-bolt"></span>
+                            <span>Electric</span>
+                        </span>
+                        <span class="bsb-indicator" id="bsb-defrost-indicator" title="Defrost">
+                            <span class="mdi mdi-snowflake-melt"></span>
+                            <span>Defrost</span>
+                        </span>
+                    </div>
+                    <div class="bsb-error" id="bsb-error" style="display: none;">
+                        <span class="mdi mdi-alert-circle"></span>
+                        <span id="bsb-error-text">Connection error</span>
                     </div>
                 </div>
             </div>
@@ -783,6 +875,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=6.0.2"></script>
+    <script src="panel.js?v=6.1.0"></script>
 </body>
 </html>
