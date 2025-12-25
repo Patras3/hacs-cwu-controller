@@ -169,6 +169,7 @@ BSB_DHW_STATUS_CHARGING_ELECTRIC: Final = "Charging electric"  # Broken heater!
 
 # BSB-LAN Compressor status indicators (from 8006)
 BSB_HP_COMPRESSOR_ON: Final = "Compressor"  # substring match
+BSB_HP_OFF_TIME_ACTIVE: Final = "off time"  # "Compressor off time min active" - mandatory rest period
 
 # Control source tracking
 CONTROL_SOURCE_BSB_LAN: Final = "bsb_lan"

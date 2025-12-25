@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v7.5
+ * CWU Controller Panel JavaScript v7.6
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -899,8 +899,55 @@ async function updateCwuSessionCard() {
         document.getElementById('session-vs-1h').style.color = diff1h >= 0 ? '#68d391' : '#fc8181';
     }
 
+    // Update pump data from BSB-LAN
+    updateSessionPumpData();
+
     // Update integrated cycle timer
     updateSessionCycleTimer(durationMin);
+}
+
+/**
+ * Update heat pump data in session card (from BSB-LAN)
+ */
+function updateSessionPumpData() {
+    const pumpDataEl = document.getElementById('session-pump-data');
+    if (!pumpDataEl) return;
+
+    const bsb = currentData.bsbLan;
+    if (!bsb || !bsb.available) {
+        pumpDataEl.style.display = 'none';
+        return;
+    }
+
+    pumpDataEl.style.display = 'block';
+
+    const cwuEl = document.getElementById('session-pump-cwu');
+    const flowEl = document.getElementById('session-pump-flow');
+    const returnEl = document.getElementById('session-pump-return');
+    const deltaEl = document.getElementById('session-pump-delta');
+
+    if (cwuEl) cwuEl.textContent = bsb.cwu_temp ? `${bsb.cwu_temp.toFixed(1)}°C` : '--°C';
+    if (flowEl) flowEl.textContent = bsb.flow_temp ? `${bsb.flow_temp.toFixed(1)}°C` : '--°C';
+    if (returnEl) returnEl.textContent = bsb.return_temp ? `${bsb.return_temp.toFixed(1)}°C` : '--°C';
+
+    if (deltaEl) {
+        const deltaT = bsb.delta_t !== null ? bsb.delta_t : (bsb.flow_temp && bsb.return_temp ? bsb.flow_temp - bsb.return_temp : null);
+        if (deltaT !== null) {
+            deltaEl.textContent = `${deltaT.toFixed(1)}°C`;
+            // Color based on delta T quality
+            if (deltaT >= 3 && deltaT <= 5) {
+                deltaEl.style.color = '#68d391'; // Good
+            } else if (deltaT > 0.5 && deltaT < 3) {
+                deltaEl.style.color = '#ed8936'; // Warning
+            } else if (deltaT <= 0.5) {
+                deltaEl.style.color = '#fc8181'; // Bad - no flow
+            } else {
+                deltaEl.style.color = 'var(--accent-cyan)'; // High but ok
+            }
+        } else {
+            deltaEl.textContent = '--°C';
+        }
+    }
 }
 
 /**

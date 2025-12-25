@@ -1821,6 +1821,73 @@ body {
     color: var(--text-muted);
 }
 
+/* Session Pump Data (BSB-LAN) */
+.session-pump-data {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(183, 148, 244, 0.08);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(183, 148, 244, 0.2);
+}
+
+.pump-data-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-purple);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pump-data-header .mdi {
+    font-size: 16px;
+}
+
+.pump-data-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.pump-data-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+}
+
+.pump-data-item.delta {
+    background: rgba(0, 217, 255, 0.1);
+}
+
+.pump-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.pump-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pump-data-item.delta .pump-value {
+    color: var(--accent-cyan);
+}
+
+@media (max-width: 480px) {
+    .pump-data-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 /* ============================================
    Modal Styles
    ============================================ */

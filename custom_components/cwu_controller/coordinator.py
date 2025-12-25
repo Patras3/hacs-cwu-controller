@@ -90,6 +90,7 @@ from .const import (
     BSB_DHW_STATUS_CHARGING,
     BSB_DHW_STATUS_CHARGING_ELECTRIC,
     BSB_HP_COMPRESSOR_ON,
+    BSB_HP_OFF_TIME_ACTIVE,
     CONTROL_SOURCE_BSB_LAN,
     CONTROL_SOURCE_HA_CLOUD,
     BSB_FAKE_HEATING_DETECTION_TIME,
@@ -897,6 +898,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         Fake heating detected when:
         1. DHW status shows "Charging electric" = broken heater scenario
         2. DHW status shows "Charging" but compressor not running for 5+ minutes
+           EXCEPT when compressor is in mandatory off time ("off time min active")
         """
         if not self._bsb_lan_data:
             return False
@@ -912,8 +914,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # DHW charging but compressor not running
         dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_status.lower()
         compressor_running = BSB_HP_COMPRESSOR_ON.lower() in hp_status.lower()
+        # Compressor in mandatory minimum off time - this is NOT fake heating
+        compressor_off_time = BSB_HP_OFF_TIME_ACTIVE.lower() in hp_status.lower()
 
         if dhw_charging and not compressor_running:
+            # If compressor is in mandatory off time, this is normal - reset tracking
+            if compressor_off_time:
+                if self._bsb_dhw_charging_no_compressor_since is not None:
+                    self._log_action("BSB-LAN: Compressor in mandatory off time - not fake heating")
+                self._bsb_dhw_charging_no_compressor_since = None
+                return False
+
             # Start tracking
             if self._bsb_dhw_charging_no_compressor_since is None:
                 self._bsb_dhw_charging_no_compressor_since = datetime.now()

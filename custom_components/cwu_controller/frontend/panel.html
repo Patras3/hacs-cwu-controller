@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=7.5.0">
+    <link rel="stylesheet" href="styles.css?v=7.6.0">
 </head>
 <body>
     <div class="container">
@@ -391,6 +391,32 @@
                     <div class="session-comparison">
                         <span class="mdi mdi-history"></span>
                         <span>vs 1h ago: <strong id="session-vs-1h">--</strong></span>
+                    </div>
+
+                    <!-- Heat Pump Data (from BSB-LAN) -->
+                    <div class="session-pump-data" id="session-pump-data">
+                        <div class="pump-data-header">
+                            <span class="mdi mdi-heat-pump"></span>
+                            <span>Heat Pump</span>
+                        </div>
+                        <div class="pump-data-grid">
+                            <div class="pump-data-item">
+                                <span class="pump-label">CWU (pump)</span>
+                                <span class="pump-value" id="session-pump-cwu">--°C</span>
+                            </div>
+                            <div class="pump-data-item">
+                                <span class="pump-label">Flow</span>
+                                <span class="pump-value" id="session-pump-flow">--°C</span>
+                            </div>
+                            <div class="pump-data-item">
+                                <span class="pump-label">Return</span>
+                                <span class="pump-value" id="session-pump-return">--°C</span>
+                            </div>
+                            <div class="pump-data-item delta">
+                                <span class="pump-label">ΔT</span>
+                                <span class="pump-value" id="session-pump-delta">--°C</span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Cycle Timer (merged from separate card) -->
@@ -846,6 +872,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=7.5.0"></script>
+    <script src="panel.js?v=7.6.0"></script>
 </body>
 </html>
