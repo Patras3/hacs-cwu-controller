@@ -3263,6 +3263,29 @@ body {
     white-space: nowrap;
 }
 
+/* BSB Control Source Indicator */
+.bsb-control-source {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+.bsb-control-source .mdi {
+    font-size: 14px;
+    color: var(--accent-green);
+}
+
+.bsb-control-source .mdi-cloud {
+    color: var(--accent-orange);
+}
+
 /* BSB Responsive */
 @media (max-width: 600px) {
     .bsb-temps-grid {

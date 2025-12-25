@@ -4,9 +4,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from aiohttp import web
 from homeassistant.components import frontend
-from homeassistant.components.http import HomeAssistantView, StaticPathConfig
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -94,23 +93,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-class BsbLanApiView(HomeAssistantView):
-    """API endpoint for BSB-LAN data - fetched on-demand by frontend."""
-
-    url = "/api/cwu_controller/bsb_lan"
-    name = "api:cwu_controller:bsb_lan"
-    requires_auth = True
-
-    def __init__(self, coordinator: CWUControllerCoordinator) -> None:
-        """Initialize the view."""
-        self._coordinator = coordinator
-
-    async def get(self, request: web.Request) -> web.Response:
-        """Handle GET request - fetch BSB-LAN data."""
-        result = await self._coordinator.async_fetch_bsb_lan()
-        return web.json_response(result)
-
-
 async def _async_register_services(hass: HomeAssistant, coordinator: CWUControllerCoordinator) -> None:
     """Register services for CWU Controller."""
 
@@ -148,6 +130,3 @@ async def _async_register_services(hass: HomeAssistant, coordinator: CWUControll
     hass.services.async_register(DOMAIN, "enable", handle_enable)
     hass.services.async_register(DOMAIN, "disable", handle_disable)
     hass.services.async_register(DOMAIN, "set_mode", handle_set_mode)
-
-    # Register BSB-LAN API view
-    hass.http.register_view(BsbLanApiView(coordinator))

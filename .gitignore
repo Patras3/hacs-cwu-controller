@@ -40,3 +40,4 @@ htmlcov/
 
 # Local development
 *.log
+*.Zone.Identifier

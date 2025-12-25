@@ -1,11 +1,12 @@
 /**
- * CWU Controller Panel JavaScript v7.2
+ * CWU Controller Panel JavaScript v7.3
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
  * v7.0: Mobile-first redesign - Quick stats widgets at top (Power, CWU Temp+State, Mini Power Chart)
  * v7.1: Added BSB-LAN heat pump status widget with live data from pump
  * v7.2: Fixed BSB-LAN - now fetches on-demand via dedicated API endpoint (not in background)
+ * v7.3: BSB-LAN refactor - uses coordinator sensor entities instead of API requests
  */
 
 // Configuration
@@ -33,6 +34,16 @@ const ENTITIES = {
     floorHeating: 'binary_sensor.cwu_controller_floor_heating',
     fakeHeating: 'binary_sensor.cwu_controller_fake_heating_detected',
     manualOverride: 'binary_sensor.cwu_controller_manual_override',
+    // BSB-LAN sensors (fetched via coordinator, not direct API)
+    bsbDhwStatus: 'sensor.cwu_controller_bsb_dhw_status',
+    bsbHpStatus: 'sensor.cwu_controller_bsb_hp_status',
+    bsbCwuTemp: 'sensor.cwu_controller_bsb_cwu_temp',
+    bsbFlowTemp: 'sensor.cwu_controller_bsb_flow_temp',
+    bsbReturnTemp: 'sensor.cwu_controller_bsb_return_temp',
+    bsbDeltaT: 'sensor.cwu_controller_bsb_delta_t',
+    bsbOutsideTemp: 'sensor.cwu_controller_bsb_outside_temp',
+    bsbAvailable: 'binary_sensor.cwu_controller_bsb_lan_available',
+    controlSource: 'sensor.cwu_controller_control_source',
 };
 
 const EXTERNAL_ENTITIES = {
@@ -121,7 +132,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v7.1 initializing...');
+    console.log('CWU Controller Panel v7.3 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
@@ -132,15 +143,10 @@ async function init() {
     await updateQuickPowerChart();
     await fetchCwuTemp1hAgo();
 
-    // Fetch BSB-LAN data on-demand (only when panel is open)
-    refreshBsbLan();
-
     updateTimer = setInterval(refreshData, CONFIG.updateInterval);
     chartUpdateTimer = setInterval(updateAllChartData, CONFIG.chartUpdateInterval);
     // Update quick chart more frequently for real-time feel
     setInterval(updateQuickPowerChart, 30000);
-    // Refresh BSB-LAN data every 30 seconds (only when panel is open)
-    setInterval(refreshBsbLan, 30000);
 
     updateLastUpdateTime();
     setInterval(updateLastUpdateTime, 1000);
@@ -499,6 +505,34 @@ async function refreshData() {
         if (pumpOutlet) currentData.pumpOutlet = parseFloat(pumpOutlet.state);
         if (cwuInlet) currentData.cwuInlet = parseFloat(cwuInlet.state);
         if (floorInlet) currentData.floorInlet = parseFloat(floorInlet.state);
+
+        // Fetch BSB-LAN sensor data (from coordinator, not direct API)
+        const [bsbDhwStatus, bsbHpStatus, bsbCwuTemp, bsbFlowTemp, bsbReturnTemp, bsbDeltaT, bsbOutsideTemp, bsbAvailable, controlSource] = await Promise.all([
+            fetchState(ENTITIES.bsbDhwStatus),
+            fetchState(ENTITIES.bsbHpStatus),
+            fetchState(ENTITIES.bsbCwuTemp),
+            fetchState(ENTITIES.bsbFlowTemp),
+            fetchState(ENTITIES.bsbReturnTemp),
+            fetchState(ENTITIES.bsbDeltaT),
+            fetchState(ENTITIES.bsbOutsideTemp),
+            fetchState(ENTITIES.bsbAvailable),
+            fetchState(ENTITIES.controlSource),
+        ]);
+
+        // Update BSB-LAN display with sensor data
+        const bsbData = {
+            dhw_status: bsbDhwStatus?.state || '---',
+            hp_status: bsbHpStatus?.state || '---',
+            cwu_temp: parseFloat(bsbCwuTemp?.state) || 0,
+            flow_temp: parseFloat(bsbFlowTemp?.state) || 0,
+            return_temp: parseFloat(bsbReturnTemp?.state) || 0,
+            delta_t: parseFloat(bsbDeltaT?.state) || null,
+            outside_temp: parseFloat(bsbOutsideTemp?.state) || 0,
+            available: bsbAvailable?.state === 'on',
+            control_source: controlSource?.state || 'unknown',
+        };
+        currentData.bsbLan = bsbData;
+        updateBsbLanDisplay(bsbData);
 
         document.getElementById('connection-state').textContent = 'Connected';
         document.getElementById('connection-state').style.color = '#68d391';
@@ -1838,82 +1872,38 @@ function updateLastUpdateTime() {
 }
 
 /**
- * BSB-LAN Functions - Fetches data on-demand from dedicated API endpoint
- * Only called when frontend is active, not in background
+ * BSB-LAN Display Functions - Uses coordinator sensor entities (updated every 60s)
+ * No direct API calls - data comes from refreshData() via HA sensor entities
  */
-let bsbLanFetching = false;
-
-async function refreshBsbLan() {
-    if (bsbLanFetching) return;
-
+function updateBsbLanDisplay(bsbData) {
     const contentEl = document.getElementById('bsb-lan-content');
     const statusEl = document.getElementById('bsb-lan-status');
     if (!contentEl) return;
 
-    // Show loading state
-    contentEl.innerHTML = `
-        <div class="bsb-loading">
-            <span class="mdi mdi-loading mdi-spin"></span>
-            <span>Fetching BSB-LAN data...</span>
-        </div>
-    `;
-
-    bsbLanFetching = true;
-    try {
-        const token = getFreshToken();
-        if (!token) {
-            throw new Error('No access token available');
-        }
-        const response = await fetch('/api/cwu_controller/bsb_lan', {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result.error) {
-            showBsbLanError(result.error);
-            if (statusEl) {
-                statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
-            }
-            return;
-        }
-
-        if (result.data) {
-            updateBsbLanDisplay(result.data);
-            if (statusEl) {
-                statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
-            }
-        }
-    } catch (error) {
-        console.error('BSB-LAN fetch error:', error);
-        showBsbLanError(error.message);
+    // Handle unavailable or missing data
+    if (!bsbData || !bsbData.available) {
+        const reason = bsbData?.control_source === 'ha_cloud' ? 'Using HA Cloud fallback' : 'BSB-LAN unavailable';
+        contentEl.innerHTML = `
+            <div class="bsb-error">
+                <span class="mdi mdi-lan-disconnect"></span>
+                <span>${reason}</span>
+            </div>
+        `;
         if (statusEl) {
-            statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
+            statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-orange);"></span>';
         }
-    } finally {
-        bsbLanFetching = false;
+        return;
     }
-}
 
-function updateBsbLanDisplay(bsbData) {
-    const contentEl = document.getElementById('bsb-lan-content');
-    if (!contentEl || !bsbData) return;
-
-    // Parse values from backend
+    // Parse values from sensor data
     const dhwStatus = bsbData.dhw_status || '---';
     const hpStatus = bsbData.hp_status || '---';
     const flowTemp = bsbData.flow_temp || 0;
     const returnTemp = bsbData.return_temp || 0;
     const cwuTemp = bsbData.cwu_temp || 0;
     const outsideTemp = bsbData.outside_temp || 0;
-    const deltaT = bsbData.delta_t !== null ? bsbData.delta_t : (flowTemp - returnTemp);
+    const deltaT = bsbData.delta_t !== null && !isNaN(bsbData.delta_t) ? bsbData.delta_t : (flowTemp - returnTemp);
+    const controlSource = bsbData.control_source || 'unknown';
 
     // Delta T interpretation
     let deltaTClass = 'normal';
@@ -1931,6 +1921,10 @@ function updateBsbLanDisplay(bsbData) {
         deltaTClass = 'high';
         deltaTDesc = 'High';
     }
+
+    // Control source indicator
+    const sourceIcon = controlSource === 'bsb_lan' ? 'mdi-lan-connect' : 'mdi-cloud';
+    const sourceLabel = controlSource === 'bsb_lan' ? 'BSB-LAN' : 'HA Cloud';
 
     contentEl.innerHTML = `
         <div class="bsb-status-row">
@@ -1968,20 +1962,16 @@ function updateBsbLanDisplay(bsbData) {
                 <span class="bsb-temp-desc">${deltaTDesc}</span>
             </div>
         </div>
-    `;
-}
-
-function showBsbLanError(message) {
-    const contentEl = document.getElementById('bsb-lan-content');
-    if (!contentEl) return;
-
-    contentEl.innerHTML = `
-        <div class="bsb-error">
-            <span class="mdi mdi-alert-circle"></span>
-            <span>Connection failed: ${message}</span>
-            <button class="btn btn-sm" onclick="refreshBsbLan()">Retry</button>
+        <div class="bsb-control-source">
+            <span class="mdi ${sourceIcon}"></span>
+            <span>Control: ${sourceLabel}</span>
         </div>
     `;
+
+    // Update status indicator
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
+    }
 }
 
 /**

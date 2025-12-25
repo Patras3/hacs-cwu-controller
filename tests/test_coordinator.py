@@ -515,17 +515,17 @@ class TestFakeHeatingDetection:
     Fake heating is detected when:
     - Water heater is in active mode (heat_pump/performance)
     - CWU heating has been active for 10+ minutes
-    - No power spike >= 100W in the last 10 minutes
+    - No power spike >= 200W (POWER_SPIKE_THRESHOLD) in the last 10 minutes
     """
 
     def test_no_fake_heating_high_power(self, mock_coordinator):
         """Test no fake heating detected when power spike exists."""
         now = datetime.now()
         mock_coordinator._cwu_heating_start = now - timedelta(minutes=15)
-        # Power readings with a spike above 100W
+        # Power readings with a spike above 200W (POWER_SPIKE_THRESHOLD)
         mock_coordinator._recent_power_readings = [
             (now - timedelta(minutes=9), 50.0),
-            (now - timedelta(minutes=7), 150.0),  # Spike above threshold
+            (now - timedelta(minutes=7), 250.0),  # Spike above 200W threshold
             (now - timedelta(minutes=5), 50.0),
             (now - timedelta(minutes=3), 45.0),
             (now - timedelta(minutes=1), 40.0),

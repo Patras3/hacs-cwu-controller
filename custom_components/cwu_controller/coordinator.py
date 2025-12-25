@@ -81,9 +81,24 @@ from .const import (
     ENERGY_TRACKING_INTERVAL,
     ENERGY_DELTA_ANOMALY_THRESHOLD,
     # BSB-LAN
-    BSB_LAN_HOST,
-    BSB_LAN_PARAMS,
-    BSB_LAN_TIMEOUT,
+    CONF_BSB_LAN_HOST,
+    DEFAULT_BSB_LAN_HOST,
+    BSB_LAN_READ_TIMEOUT,
+    BSB_LAN_WRITE_TIMEOUT,
+    BSB_LAN_FAILURES_THRESHOLD,
+    BSB_LAN_READ_PARAMS,
+    BSB_LAN_PARAM_CWU_MODE,
+    BSB_LAN_PARAM_FLOOR_MODE,
+    BSB_CWU_MODE_OFF,
+    BSB_CWU_MODE_ON,
+    BSB_FLOOR_MODE_PROTECTION,
+    BSB_FLOOR_MODE_AUTOMATIC,
+    BSB_DHW_STATUS_CHARGING,
+    BSB_DHW_STATUS_CHARGING_ELECTRIC,
+    BSB_HP_COMPRESSOR_ON,
+    CONTROL_SOURCE_BSB_LAN,
+    CONTROL_SOURCE_HA_CLOUD,
+    BSB_FAKE_HEATING_DETECTION_TIME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,6 +107,134 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}_energy_data"
 ENERGY_SAVE_INTERVAL = 300  # Save every 5 minutes
+
+
+class BSBLanClient:
+    """BSB-LAN communication client with health tracking."""
+
+    def __init__(self, host: str) -> None:
+        """Initialize BSB-LAN client."""
+        self.host = host
+
+        # Health tracking
+        self._consecutive_failures: int = 0
+        self._last_success: datetime | None = None
+        self._last_failure: datetime | None = None
+        self._is_available: bool = True
+
+    @property
+    def is_available(self) -> bool:
+        """Return if BSB-LAN is considered available."""
+        return self._is_available and self._consecutive_failures < BSB_LAN_FAILURES_THRESHOLD
+
+    async def async_read_parameters(self, params: str | None = None) -> dict[str, Any]:
+        """Read multiple parameters in one batch request.
+
+        Args:
+            params: Comma-separated parameter IDs (e.g., "8003,8006,8830").
+                   If None, uses default BSB_LAN_READ_PARAMS.
+
+        Returns:
+            Raw JSON response from BSB-LAN or empty dict on failure.
+        """
+        if params is None:
+            params = BSB_LAN_READ_PARAMS
+
+        url = f"http://{self.host}/JQ={params}"
+        try:
+            timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        self._handle_success()
+                        return data
+                    else:
+                        self._handle_failure(Exception(f"HTTP {response.status}"))
+                        return {}
+        except asyncio.TimeoutError:
+            self._handle_failure(Exception("Timeout"))
+            return {}
+        except aiohttp.ClientError as e:
+            self._handle_failure(e)
+            return {}
+        except Exception as e:
+            self._handle_failure(e)
+            return {}
+
+    async def async_write_parameter(self, param: int, value: int) -> bool:
+        """Write a single parameter value.
+
+        Args:
+            param: Parameter ID (e.g., 1600 for CWU mode).
+            value: Value to set.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Note:
+            BSB-LAN returns HTTP 200 even on errors, with error message in HTML body.
+            We check for "ERROR" in response to detect failures.
+        """
+        url = f"http://{self.host}/S{param}={value}"
+        try:
+            timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        # BSB-LAN returns HTML - check for error message in body
+                        body = await response.text()
+                        if "ERROR" in body:
+                            self._handle_failure(Exception(f"BSB-LAN set failed for {param}={value}"))
+                            return False
+                        self._handle_success()
+                        return True
+                    else:
+                        self._handle_failure(Exception(f"HTTP {response.status}"))
+                        return False
+        except asyncio.TimeoutError:
+            self._handle_failure(Exception("Timeout"))
+            return False
+        except aiohttp.ClientError as e:
+            self._handle_failure(e)
+            return False
+        except Exception as e:
+            self._handle_failure(e)
+            return False
+
+    async def async_set_cwu_mode(self, mode: int) -> bool:
+        """Set CWU mode (0=Off, 1=On, 2=Eco)."""
+        return await self.async_write_parameter(BSB_LAN_PARAM_CWU_MODE, mode)
+
+    async def async_set_floor_mode(self, mode: int) -> bool:
+        """Set floor heating mode (0=Protection, 1=Automatic)."""
+        return await self.async_write_parameter(BSB_LAN_PARAM_FLOOR_MODE, mode)
+
+    def _handle_success(self) -> None:
+        """Called after successful communication."""
+        self._consecutive_failures = 0
+        self._last_success = datetime.now()
+        if not self._is_available:
+            self._is_available = True
+            _LOGGER.info("BSB-LAN connection restored")
+
+    def _handle_failure(self, error: Exception) -> None:
+        """Called after failed communication."""
+        self._consecutive_failures += 1
+        self._last_failure = datetime.now()
+        _LOGGER.warning(
+            "BSB-LAN failure %d/%d: %s",
+            self._consecutive_failures,
+            BSB_LAN_FAILURES_THRESHOLD,
+            error
+        )
+        if self._consecutive_failures >= BSB_LAN_FAILURES_THRESHOLD:
+            if self._is_available:
+                self._is_available = False
+                _LOGGER.error(
+                    "BSB-LAN marked unavailable after %d consecutive failures",
+                    self._consecutive_failures
+                )
 
 
 class CWUControllerCoordinator(DataUpdateCoordinator):
@@ -147,6 +290,19 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Operating mode
         self._operating_mode: str = config.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)
+
+        # BSB-LAN client for direct heat pump control
+        bsb_host = config.get(CONF_BSB_LAN_HOST, DEFAULT_BSB_LAN_HOST)
+        self._bsb_client = BSBLanClient(bsb_host)
+
+        # BSB-LAN cached data (updated every coordinator update)
+        self._bsb_lan_data: dict[str, Any] = {}
+
+        # Control source tracking (bsb_lan or ha_cloud)
+        self._control_source: str = CONTROL_SOURCE_BSB_LAN
+
+        # BSB-LAN fake heating detection
+        self._bsb_dhw_charging_no_compressor_since: datetime | None = None
 
         # Energy tracking (kWh accumulated) - split by tariff type
         # Today's accumulated energy
@@ -235,6 +391,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "total_cheap": self._energy_cwu_cheap_yesterday + self._energy_floor_cheap_yesterday,
             "total_expensive": self._energy_cwu_expensive_yesterday + self._energy_floor_expensive_yesterday,
         }
+
+    @property
+    def bsb_lan_data(self) -> dict[str, Any]:
+        """Return cached BSB-LAN data."""
+        return self._bsb_lan_data
+
+    @property
+    def bsb_lan_available(self) -> bool:
+        """Return if BSB-LAN is available."""
+        return self._bsb_client.is_available
+
+    @property
+    def control_source(self) -> str:
+        """Return current control source (bsb_lan or ha_cloud)."""
+        return self._control_source
 
     async def async_load_energy_data(self) -> None:
         """Load persisted energy data from storage.
@@ -697,7 +868,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             return False
 
     async def _async_set_climate(self, turn_on: bool) -> bool:
-        """Turn climate on or off."""
+        """Turn climate on or off via HA cloud (fallback method)."""
         entity_id = self.config.get("climate")
         if not entity_id:
             return False
@@ -710,11 +881,160 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 {"entity_id": entity_id},
                 blocking=True,
             )
-            self._log_action(f"Climate {'ON' if turn_on else 'OFF'}")
+            self._log_action(f"Climate {'ON' if turn_on else 'OFF'} (HA cloud)")
             return True
         except Exception as e:
             _LOGGER.error("Failed to control climate: %s", e)
             return False
+
+    # -------------------------------------------------------------------------
+    # Unified control methods - BSB-LAN primary with HA cloud fallback
+    # -------------------------------------------------------------------------
+
+    async def _async_set_cwu_on(self) -> bool:
+        """Turn CWU heating on - tries BSB-LAN first, falls back to HA cloud."""
+        # Try BSB-LAN first
+        if self._bsb_client.is_available:
+            if await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_ON):
+                self._control_source = CONTROL_SOURCE_BSB_LAN
+                self._log_action("CWU ON (BSB-LAN)")
+                return True
+            # BSB-LAN failed, continue to fallback
+
+        # Fallback to HA cloud
+        success = await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+        if success:
+            self._control_source = CONTROL_SOURCE_HA_CLOUD
+            self._log_action("CWU ON (HA cloud fallback)")
+        return success
+
+    async def _async_set_cwu_off(self) -> bool:
+        """Turn CWU heating off - tries BSB-LAN first, falls back to HA cloud."""
+        # Try BSB-LAN first
+        if self._bsb_client.is_available:
+            if await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_OFF):
+                self._control_source = CONTROL_SOURCE_BSB_LAN
+                self._log_action("CWU OFF (BSB-LAN)")
+                return True
+
+        # Fallback to HA cloud
+        success = await self._async_set_water_heater_mode(WH_MODE_OFF)
+        if success:
+            self._control_source = CONTROL_SOURCE_HA_CLOUD
+            self._log_action("CWU OFF (HA cloud fallback)")
+        return success
+
+    async def _async_set_floor_on(self) -> bool:
+        """Turn floor heating on - tries BSB-LAN first, falls back to HA cloud."""
+        # Try BSB-LAN first
+        if self._bsb_client.is_available:
+            if await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_AUTOMATIC):
+                self._control_source = CONTROL_SOURCE_BSB_LAN
+                self._log_action("Floor ON (BSB-LAN)")
+                return True
+
+        # Fallback to HA cloud
+        success = await self._async_set_climate(True)
+        if success:
+            self._control_source = CONTROL_SOURCE_HA_CLOUD
+        return success
+
+    async def _async_set_floor_off(self) -> bool:
+        """Turn floor heating off - tries BSB-LAN first, falls back to HA cloud."""
+        # Try BSB-LAN first
+        if self._bsb_client.is_available:
+            if await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_PROTECTION):
+                self._control_source = CONTROL_SOURCE_BSB_LAN
+                self._log_action("Floor OFF (BSB-LAN)")
+                return True
+
+        # Fallback to HA cloud
+        success = await self._async_set_climate(False)
+        if success:
+            self._control_source = CONTROL_SOURCE_HA_CLOUD
+        return success
+
+    # -------------------------------------------------------------------------
+    # BSB-LAN data fetching and temperature methods
+    # -------------------------------------------------------------------------
+
+    async def _async_refresh_bsb_lan_data(self) -> None:
+        """Refresh BSB-LAN data for control decisions and sensors."""
+        raw_data = await self._bsb_client.async_read_parameters()
+        if not raw_data:
+            self._bsb_lan_data = {}
+            return
+
+        self._bsb_lan_data = {
+            "floor_mode": raw_data.get("700", {}).get("desc", "---"),
+            "cwu_mode": raw_data.get("1600", {}).get("desc", "---"),
+            "hc1_status": raw_data.get("8000", {}).get("desc", "---"),
+            "dhw_status": raw_data.get("8003", {}).get("desc", "---"),
+            "hp_status": raw_data.get("8006", {}).get("desc", "---"),
+            "flow_temp": self._parse_bsb_value(raw_data.get("8412", {})),
+            "return_temp": self._parse_bsb_value(raw_data.get("8410", {})),
+            "cwu_temp": self._parse_bsb_value(raw_data.get("8830", {})),
+            "outside_temp": self._parse_bsb_value(raw_data.get("8700", {})),
+        }
+
+        # Calculate delta T
+        if self._bsb_lan_data["flow_temp"] is not None and self._bsb_lan_data["return_temp"] is not None:
+            self._bsb_lan_data["delta_t"] = self._bsb_lan_data["flow_temp"] - self._bsb_lan_data["return_temp"]
+        else:
+            self._bsb_lan_data["delta_t"] = None
+
+    def _get_cwu_temperature(self) -> float | None:
+        """Get CWU temperature from BSB-LAN (preferred) or external sensor.
+
+        BSB-LAN parameter 8830 is the primary source.
+        Falls back to external sensor if BSB-LAN unavailable or no data.
+        """
+        # Try BSB-LAN first (preferred)
+        if self._bsb_lan_data:
+            bsb_temp = self._bsb_lan_data.get("cwu_temp")
+            if bsb_temp is not None:
+                return bsb_temp
+
+        # Fallback to external sensor
+        return self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+
+    def _detect_fake_heating_bsb(self) -> bool:
+        """Detect fake heating using BSB-LAN status (more accurate).
+
+        Fake heating detected when:
+        1. DHW status shows "Charging electric" = broken heater scenario
+        2. DHW status shows "Charging" but compressor not running for 5+ minutes
+        """
+        if not self._bsb_lan_data:
+            return False
+
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+        hp_status = self._bsb_lan_data.get("hp_status", "")
+
+        # Immediate detection: electric heater is charging (broken heater mode)
+        if BSB_DHW_STATUS_CHARGING_ELECTRIC.lower() in dhw_status.lower():
+            self._log_action("BSB-LAN: Detected electric heater charging (broken heater)")
+            return True
+
+        # DHW charging but compressor not running
+        dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_status.lower()
+        compressor_running = BSB_HP_COMPRESSOR_ON.lower() in hp_status.lower()
+
+        if dhw_charging and not compressor_running:
+            # Start tracking
+            if self._bsb_dhw_charging_no_compressor_since is None:
+                self._bsb_dhw_charging_no_compressor_since = datetime.now()
+
+            # Check if threshold reached
+            elapsed = (datetime.now() - self._bsb_dhw_charging_no_compressor_since).total_seconds() / 60
+            if elapsed >= BSB_FAKE_HEATING_DETECTION_TIME:
+                self._log_action(f"BSB-LAN: DHW charging but no compressor for {elapsed:.1f} min")
+                return True
+        else:
+            # Reset tracking
+            self._bsb_dhw_charging_no_compressor_since = None
+
+        return False
 
     async def _async_send_notification(self, title: str, message: str) -> None:
         """Send notification."""
@@ -1078,11 +1398,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._log_action("Controller disabled - entering safe mode")
 
         # Enter safe mode - turn on both floor and CWU, let heat pump decide
-        # Add delay between commands to avoid cloud API issues
-        await self._async_set_climate(True)
+        await self._async_set_floor_on()
         self._log_action("Floor heating enabled, waiting 60s...")
         await asyncio.sleep(60)
-        await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+        await self._async_set_cwu_on()
         self._log_action("Safe mode active - heat pump in control")
 
     async def async_force_cwu(self, duration_minutes: int = 60) -> None:
@@ -1092,24 +1411,24 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # First turn off everything with delays between commands
         self._log_action("Force CWU: Stopping CWU...")
-        await self._async_set_water_heater_mode(WH_MODE_OFF)
+        await self._async_set_cwu_off()
         self._log_action("Waiting 30s...")
         await asyncio.sleep(30)
 
         self._log_action("Force CWU: Stopping floor heating...")
-        await self._async_set_climate(False)
+        await self._async_set_floor_off()
 
         # Wait for pump to settle
         self._log_action("Waiting 60s for pump to settle...")
         await asyncio.sleep(60)
 
         # Now enable CWU
-        await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+        await self._async_set_cwu_on()
 
         self._change_state(STATE_HEATING_CWU)
         self._cwu_heating_start = datetime.now()
-        # Set session start temp for UI tracking
-        cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        # Set session start temp for UI tracking (BSB-LAN preferred)
+        cwu_temp = self._get_cwu_temperature()
         self._cwu_session_start_temp = cwu_temp if cwu_temp is not None else self._last_known_cwu_temp
         self._log_action(f"Force CWU for {duration_minutes} minutes")
 
@@ -1120,19 +1439,19 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # First turn off everything with delays between commands
         self._log_action("Force Floor: Stopping CWU...")
-        await self._async_set_water_heater_mode(WH_MODE_OFF)
+        await self._async_set_cwu_off()
         self._log_action("Waiting 30s...")
         await asyncio.sleep(30)
 
         self._log_action("Force Floor: Stopping floor heating...")
-        await self._async_set_climate(False)
+        await self._async_set_floor_off()
 
         # Wait for pump to settle
         self._log_action("Waiting 60s for pump to settle...")
         await asyncio.sleep(60)
 
         # Now enable floor heating
-        await self._async_set_climate(True)
+        await self._async_set_floor_on()
 
         self._change_state(STATE_HEATING_FLOOR)
         self._log_action(f"Force floor heating for {duration_minutes} minutes")
@@ -1167,43 +1486,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         await self._async_set_climate(False)
         await self._async_send_notification("CWU Controller Test", "Floor heating turned OFF")
 
-    async def async_fetch_bsb_lan(self) -> dict[str, Any]:
-        """Fetch data from BSB-LAN heat pump controller.
-
-        Returns dict with either 'data' key (success) or 'error' key (failure).
-        Called on-demand by the frontend API endpoint.
-        """
-        url = f"http://{BSB_LAN_HOST}/JQ={BSB_LAN_PARAMS}"
-        try:
-            timeout = aiohttp.ClientTimeout(total=BSB_LAN_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        raw_data = await response.json()
-                        bsb_data = {
-                            "dhw_status": raw_data.get("8003", {}).get("desc", "---"),
-                            "hp_status": raw_data.get("8006", {}).get("desc", "---"),
-                            "flow_temp": self._parse_bsb_value(raw_data.get("8412", {})),
-                            "return_temp": self._parse_bsb_value(raw_data.get("8410", {})),
-                            "cwu_temp": self._parse_bsb_value(raw_data.get("8830", {})),
-                            "outside_temp": self._parse_bsb_value(raw_data.get("8700", {})),
-                        }
-                        # Calculate delta T
-                        if bsb_data["flow_temp"] is not None and bsb_data["return_temp"] is not None:
-                            bsb_data["delta_t"] = bsb_data["flow_temp"] - bsb_data["return_temp"]
-                        else:
-                            bsb_data["delta_t"] = None
-                        return {"data": bsb_data}
-                    else:
-                        return {"error": f"HTTP {response.status}"}
-        except asyncio.TimeoutError:
-            return {"error": "Timeout"}
-        except aiohttp.ClientError as e:
-            return {"error": str(e)}
-        except Exception as e:
-            _LOGGER.debug("BSB-LAN fetch error: %s", e)
-            return {"error": str(e)}
-
     def _parse_bsb_value(self, data: dict) -> float | None:
         """Parse BSB-LAN value from response."""
         try:
@@ -1219,8 +1501,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         now = datetime.now()
         current_hour = now.hour
 
-        # Get sensor values
-        cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        # Fetch BSB-LAN data first (primary data source)
+        await self._async_refresh_bsb_lan_data()
+
+        # Get CWU temperature (BSB-LAN preferred, fallback to external sensor)
+        cwu_temp = self._get_cwu_temperature()
+
+        # Get other sensor values
         salon_temp = self._get_sensor_value(self.config.get("salon_temp_sensor"))
         bedroom_temp = self._get_sensor_value(self.config.get("bedroom_temp_sensor"))
         kids_temp = self._get_sensor_value(self.config.get("kids_room_temp_sensor"))
@@ -1267,9 +1554,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
 
         # Detect fake heating (only in broken_heater mode)
+        # Use BSB-LAN detection (more accurate) with power-based fallback
         fake_heating = False
         if self._operating_mode == MODE_BROKEN_HEATER:
-            fake_heating = self._detect_fake_heating(power, wh_state)
+            if self._bsb_lan_data:
+                fake_heating = self._detect_fake_heating_bsb()
+            else:
+                # Fallback to power-based detection
+                fake_heating = self._detect_fake_heating(power, wh_state)
 
         # Update energy tracking
         self._update_energy_tracking()
@@ -1370,6 +1662,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Tariff rates (for sensors)
             "tariff_cheap_rate": self.get_tariff_cheap_rate(),
             "tariff_expensive_rate": self.get_tariff_expensive_rate(),
+            # BSB-LAN data
+            "bsb_lan": self._bsb_lan_data,
+            "bsb_lan_available": self._bsb_client.is_available,
+            "control_source": self._control_source,
         }
 
         if self._fake_heating_detected_at:
@@ -1398,8 +1694,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._change_state(STATE_FAKE_HEATING_DETECTED)
                 self._fake_heating_detected_at = datetime.now()
                 # Stop all heating
-                await self._async_set_water_heater_mode(WH_MODE_OFF)
-                await self._async_set_climate(False)
+                await self._async_set_cwu_off()
+                await self._async_set_floor_off()
                 await self._async_send_notification(
                     "CWU Controller Alert (Manual Mode)",
                     f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
@@ -1413,7 +1709,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
                 if elapsed >= FAKE_HEATING_RESTART_WAIT:
                     # Just restart CWU - everything is already stopped
-                    await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+                    await self._async_set_cwu_on()
                     self._fake_heating_detected_at = None
                     self._change_state(STATE_HEATING_CWU)
                     self._cwu_heating_start = now  # Reset heating start for next detection
@@ -1527,7 +1823,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
             self._fake_heating_detected_at = datetime.now()
             self._low_power_start = None  # Reset to prevent duplicate detection
-            await self._async_set_water_heater_mode(WH_MODE_OFF)
+            await self._async_set_cwu_off()
             await self._async_send_notification(
                 "CWU Controller Alert",
                 f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
@@ -1542,7 +1838,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if elapsed >= FAKE_HEATING_RESTART_WAIT:
                 self._change_state(STATE_FAKE_HEATING_RESTARTING)
                 self._log_action("Fake heating wait complete - restarting CWU...")
-                await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+                await self._async_set_cwu_on()
                 self._low_power_start = None
                 self._fake_heating_detected_at = None
                 self._change_state(STATE_HEATING_CWU)
@@ -1554,13 +1850,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if self._is_pause_complete():
                 self._pause_start = None
                 # Resume CWU heating - start new session
-                await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+                await self._async_set_cwu_on()
                 self._change_state(STATE_HEATING_CWU)
                 self._cwu_heating_start = datetime.now()
-                # Get session start temp - from cache or fetch directly
-                cwu_start_temp = self._last_known_cwu_temp
+                # Get session start temp (BSB-LAN preferred)
+                cwu_start_temp = self._get_cwu_temperature()
                 if cwu_start_temp is None:
-                    cwu_start_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+                    cwu_start_temp = self._last_known_cwu_temp
                 self._cwu_session_start_temp = cwu_start_temp
                 self._log_action(f"Pause complete, starting new CWU session (temp: {cwu_start_temp}°C)")
             return
@@ -1570,8 +1866,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._change_state(STATE_PAUSE)
             self._pause_start = datetime.now()
             self._cwu_heating_start = None
-            await self._async_set_water_heater_mode(WH_MODE_OFF)
-            await self._async_set_climate(False)
+            await self._async_set_cwu_off()
+            await self._async_set_floor_off()
             self._log_action(f"CWU cycle limit reached, pausing for {CWU_PAUSE_TIME} minutes")
             await self._async_send_notification(
                 "CWU Controller",
@@ -1787,21 +2083,20 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         try:
             self._log_action("Switching to CWU heating...")
 
-            # First turn off floor heating
-            await self._async_set_climate(False)
+            # First turn off floor heating (unified method with BSB-LAN + fallback)
+            await self._async_set_floor_off()
             self._log_action("Floor heating off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
-            # Then enable CWU
-            await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
-            self._log_action("CWU heating enabled")
+            # Then enable CWU (unified method with BSB-LAN + fallback)
+            await self._async_set_cwu_on()
         finally:
             self._transition_in_progress = False
 
-        # Track session start - get current temp from sensor if not cached
-        cwu_temp = self._last_known_cwu_temp
+        # Track session start - get current temp (BSB-LAN preferred)
+        cwu_temp = self._get_cwu_temperature()
         if cwu_temp is None:
-            cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+            cwu_temp = self._last_known_cwu_temp
         self._cwu_session_start_temp = cwu_temp
 
     async def _switch_to_floor(self) -> None:
@@ -1814,14 +2109,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         try:
             self._log_action("Switching to floor heating...")
 
-            # First turn off CWU
-            await self._async_set_water_heater_mode(WH_MODE_OFF)
+            # First turn off CWU (unified method with BSB-LAN + fallback)
+            await self._async_set_cwu_off()
             self._log_action("CWU off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
-            # Then enable floor heating
-            await self._async_set_climate(True)
-            self._log_action("Floor heating enabled")
+            # Then enable floor heating (unified method with BSB-LAN + fallback)
+            await self._async_set_floor_on()
 
             # Clear CWU session
             self._cwu_session_start_temp = None
@@ -1843,11 +2137,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._log_action("Entering safe mode - enabling both floor and CWU")
 
             # Turn on both - let heat pump decide
-            # Add delay between commands to avoid cloud API issues
-            await self._async_set_climate(True)
+            # Add delay between commands
+            await self._async_set_floor_on()
             self._log_action("Floor heating enabled, waiting 60s...")
             await asyncio.sleep(60)
-            await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+            await self._async_set_cwu_on()
 
             self._log_action("Safe mode active - heat pump in control")
         finally:

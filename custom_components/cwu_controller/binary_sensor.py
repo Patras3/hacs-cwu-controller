@@ -27,6 +27,7 @@ async def async_setup_entry(
         FloorHeatingBinarySensor(coordinator, entry),
         FakeHeatingBinarySensor(coordinator, entry),
         ManualOverrideBinarySensor(coordinator, entry),
+        BsbLanAvailableBinarySensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -51,7 +52,7 @@ class CWUControllerBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "3.1.6",
+            "sw_version": "4.0.0",
         }
 
 
@@ -122,3 +123,36 @@ class ManualOverrideBinarySensor(CWUControllerBaseBinarySensor):
         if self.coordinator.data is None:
             return False
         return self.coordinator.data.get("manual_override", False)
+
+
+class BsbLanAvailableBinarySensor(CWUControllerBaseBinarySensor):
+    """Binary sensor showing if BSB-LAN is available."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_lan_available", "BSB-LAN Available")
+        self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+        self._attr_icon = "mdi:lan-connect"
+
+    @property
+    def is_on(self) -> bool:
+        """Return if BSB-LAN is available."""
+        if self.coordinator.data is None:
+            return False
+        bsb_lan = self.coordinator.data.get("bsb_lan", {})
+        return bsb_lan.get("available", False)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra state attributes."""
+        if self.coordinator.data is None:
+            return {}
+        bsb_lan = self.coordinator.data.get("bsb_lan", {})
+        attrs = {}
+        if bsb_lan.get("last_success"):
+            attrs["last_success"] = bsb_lan["last_success"]
+        if bsb_lan.get("last_failure"):
+            attrs["last_failure"] = bsb_lan["last_failure"]
+        if bsb_lan.get("consecutive_failures") is not None:
+            attrs["consecutive_failures"] = bsb_lan["consecutive_failures"]
+        return attrs

@@ -46,6 +46,9 @@ from .const import (
     MODE_WINTER,
     MODE_SUMMER,
     OPERATING_MODES,
+    # BSB-LAN
+    CONF_BSB_LAN_HOST,
+    DEFAULT_BSB_LAN_HOST,
 )
 
 
@@ -233,6 +236,10 @@ class CWUControllerOptionsFlow(config_entries.OptionsFlow):
         data_schema = vol.Schema({
             vol.Required(CONF_OPERATING_MODE, default=data.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=mode_options, mode=selector.SelectSelectorMode.DROPDOWN)
+            ),
+            # BSB-LAN configuration
+            vol.Required(CONF_BSB_LAN_HOST, default=data.get(CONF_BSB_LAN_HOST, DEFAULT_BSB_LAN_HOST)): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
             ),
             # Temperature thresholds
             vol.Required(CONF_CWU_TARGET_TEMP, default=data.get(CONF_CWU_TARGET_TEMP, DEFAULT_CWU_TARGET_TEMP)): selector.NumberSelector(

@@ -136,6 +136,42 @@ WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progr
 WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
 
 # BSB-LAN Heat Pump Integration
-BSB_LAN_HOST: Final = "192.168.50.219"
-BSB_LAN_PARAMS: Final = "8003,8006,8412,8410,8830,8700"
-BSB_LAN_TIMEOUT: Final = 5  # seconds
+CONF_BSB_LAN_HOST: Final = "bsb_lan_host"
+DEFAULT_BSB_LAN_HOST: Final = "192.168.50.219"
+BSB_LAN_READ_TIMEOUT: Final = 5  # seconds for reads
+BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
+BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before fallback to HA cloud
+
+# BSB-LAN Parameters for reading
+BSB_LAN_READ_PARAMS: Final = "700,1600,8000,8003,8006,8412,8410,8830,8700"
+
+# BSB-LAN Control Parameters (write)
+BSB_LAN_PARAM_CWU_MODE: Final = 1600  # 0=Off, 1=On, 2=Eco
+BSB_LAN_PARAM_FLOOR_MODE: Final = 700  # 0=Protection, 1=Automatic, 2=Reduced, 3=Comfort
+
+# BSB-LAN CWU Modes (parameter 1600)
+BSB_CWU_MODE_OFF: Final = 0
+BSB_CWU_MODE_ON: Final = 1
+BSB_CWU_MODE_ECO: Final = 2
+
+# BSB-LAN Floor Modes (parameter 700)
+BSB_FLOOR_MODE_PROTECTION: Final = 0
+BSB_FLOOR_MODE_AUTOMATIC: Final = 1
+BSB_FLOOR_MODE_REDUCED: Final = 2
+BSB_FLOOR_MODE_COMFORT: Final = 3
+
+# BSB-LAN DHW Status values (from 8003)
+BSB_DHW_STATUS_OFF: Final = "Off"
+BSB_DHW_STATUS_READY: Final = "Ready"
+BSB_DHW_STATUS_CHARGING: Final = "Charging"
+BSB_DHW_STATUS_CHARGING_ELECTRIC: Final = "Charging electric"  # Broken heater!
+
+# BSB-LAN Compressor status indicators (from 8006)
+BSB_HP_COMPRESSOR_ON: Final = "Compressor"  # substring match
+
+# Control source tracking
+CONTROL_SOURCE_BSB_LAN: Final = "bsb_lan"
+CONTROL_SOURCE_HA_CLOUD: Final = "ha_cloud"
+
+# BSB-LAN fake heating detection
+BSB_FAKE_HEATING_DETECTION_TIME: Final = 5  # Minutes of "charging but no compressor" before detection

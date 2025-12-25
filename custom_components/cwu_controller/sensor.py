@@ -42,6 +42,15 @@ async def async_setup_entry(
         FloorEnergyCostTodaySensor(coordinator, entry),
         # Tariff sensor
         CurrentTariffRateSensor(coordinator, entry),
+        # BSB-LAN sensors
+        BsbDhwStatusSensor(coordinator, entry),
+        BsbHpStatusSensor(coordinator, entry),
+        BsbCwuTempSensor(coordinator, entry),
+        BsbFlowTempSensor(coordinator, entry),
+        BsbReturnTempSensor(coordinator, entry),
+        BsbDeltaTSensor(coordinator, entry),
+        BsbOutsideTempSensor(coordinator, entry),
+        ControlSourceSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -66,7 +75,7 @@ class CWUControllerBaseSensor(CoordinatorEntity, SensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "3.1.6",
+            "sw_version": "4.0.0",
         }
 
 
@@ -459,4 +468,197 @@ class CurrentTariffRateSensor(CWUControllerBaseSensor):
             "tariff_type": "cheap" if is_cheap else "expensive",
             "is_cheap_tariff": is_cheap,
             "is_cwu_heating_window": self.coordinator.data.get("is_cwu_heating_window", False),
+        }
+
+
+# -----------------------------------------------------------------------------
+# BSB-LAN Sensors
+# -----------------------------------------------------------------------------
+
+class BsbDhwStatusSensor(CWUControllerBaseSensor):
+    """Sensor showing DHW (CWU) status from BSB-LAN."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_dhw_status", "BSB DHW Status")
+        self._attr_icon = "mdi:water-boiler"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return DHW status."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("dhw_status", "---")
+
+
+class BsbHpStatusSensor(CWUControllerBaseSensor):
+    """Sensor showing heat pump status from BSB-LAN."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_hp_status", "BSB Heat Pump Status")
+        self._attr_icon = "mdi:heat-pump"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return HP status."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("hp_status", "---")
+
+
+class BsbCwuTempSensor(CWUControllerBaseSensor):
+    """Sensor showing CWU temperature from BSB-LAN (param 8830)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_cwu_temp", "BSB CWU Temperature")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:water-thermometer"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return CWU temperature."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("cwu_temp")
+
+
+class BsbFlowTempSensor(CWUControllerBaseSensor):
+    """Sensor showing flow temperature from BSB-LAN (param 8412)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_flow_temp", "BSB Flow Temperature")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-chevron-up"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return flow temperature."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("flow_temp")
+
+
+class BsbReturnTempSensor(CWUControllerBaseSensor):
+    """Sensor showing return temperature from BSB-LAN (param 8410)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_return_temp", "BSB Return Temperature")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-chevron-down"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return return temperature."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("return_temp")
+
+
+class BsbDeltaTSensor(CWUControllerBaseSensor):
+    """Sensor showing delta T (flow - return) from BSB-LAN."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_delta_t", "BSB Delta T")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-lines"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return delta T."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("delta_t")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes with interpretation."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        delta = bsb.get("delta_t")
+        if delta is None:
+            return {"interpretation": "unknown"}
+
+        if delta >= 3.0 and delta <= 5.0:
+            interpretation = "good"
+        elif delta > 0.5 and delta < 3.0:
+            interpretation = "weak"
+        elif delta <= 0.5:
+            interpretation = "bad"
+        else:
+            interpretation = "high"
+
+        return {
+            "interpretation": interpretation,
+            "flow_temp": bsb.get("flow_temp"),
+            "return_temp": bsb.get("return_temp"),
+        }
+
+
+class BsbOutsideTempSensor(CWUControllerBaseSensor):
+    """Sensor showing outside temperature from BSB-LAN (param 8700)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_outside_temp", "BSB Outside Temperature")
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:home-thermometer-outline"
+        self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | None:
+        """Return outside temperature."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("outside_temp")
+
+
+class ControlSourceSensor(CWUControllerBaseSensor):
+    """Sensor showing current control source (BSB-LAN or HA Cloud)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "control_source", "Control Source")
+        self._attr_icon = "mdi:remote"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return control source."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("control_source", "unknown")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "bsb_lan_available": self.coordinator.data.get("bsb_lan_available", False),
         }
