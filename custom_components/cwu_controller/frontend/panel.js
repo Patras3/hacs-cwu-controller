@@ -1898,8 +1898,8 @@ function updateBsbLanDisplay(data) {
     const contentEl = document.getElementById('bsb-lan-content');
     if (!contentEl) return;
 
-    // Parse values
-    const dhwStatus = data['8003']?.desc || 'Unknown';
+    // Parse values - show raw from API without interpretation
+    const dhwStatus = data['8003']?.desc || '---';
     const hpStatus = data['8006']?.desc || '---';
     const flowTemp = parseFloat(data['8412']?.value) || 0;
     const returnTemp = parseFloat(data['8410']?.value) || 0;
@@ -1907,37 +1907,7 @@ function updateBsbLanDisplay(data) {
     const outsideTemp = parseFloat(data['8700']?.value) || 0;
     const deltaT = flowTemp - returnTemp;
 
-    // Determine states
-    const isCompressorOn = hpStatus.toLowerCase().includes('compressor');
-    const isElectricHeating = dhwStatus.toLowerCase().includes('electric');
-    const isFrostProtection = hpStatus.toLowerCase().includes('frost');
-    const isReady = dhwStatus.toLowerCase().includes('ready');
-    const isCharging = dhwStatus.toLowerCase().includes('charging');
-
-    // Determine status class and icon
-    let statusClass = 'idle';
-    let statusIcon = 'mdi-power-sleep';
-    let statusText = 'Idle';
-
-    if (isCompressorOn && isCharging) {
-        statusClass = 'heating';
-        statusIcon = 'mdi-fire';
-        statusText = 'HP Heating';
-    } else if (isElectricHeating) {
-        statusClass = 'electric';
-        statusIcon = 'mdi-lightning-bolt';
-        statusText = 'Electric';
-    } else if (isFrostProtection) {
-        statusClass = 'defrost';
-        statusIcon = 'mdi-snowflake-melt';
-        statusText = 'Defrost';
-    } else if (isReady) {
-        statusClass = 'ready';
-        statusIcon = 'mdi-check-circle';
-        statusText = 'Ready';
-    }
-
-    // Delta T interpretation
+    // Delta T interpretation (this is just math, keep it)
     let deltaTClass = 'normal';
     let deltaTDesc = '';
     if (deltaT >= 3 && deltaT <= 5) {
@@ -1956,9 +1926,15 @@ function updateBsbLanDisplay(data) {
 
     contentEl.innerHTML = `
         <div class="bsb-status-row">
-            <div class="bsb-main-status ${statusClass}">
-                <span class="mdi ${statusIcon}"></span>
-                <span class="bsb-status-text">${statusText}</span>
+            <div class="bsb-raw-statuses">
+                <div class="bsb-raw-status">
+                    <span class="bsb-raw-label">DHW:</span>
+                    <span class="bsb-raw-value">${dhwStatus}</span>
+                </div>
+                <div class="bsb-raw-status">
+                    <span class="bsb-raw-label">HP:</span>
+                    <span class="bsb-raw-value">${hpStatus}</span>
+                </div>
             </div>
             <div class="bsb-outside-temp">
                 <span class="mdi mdi-thermometer"></span>
@@ -1982,16 +1958,6 @@ function updateBsbLanDisplay(data) {
                 <span class="bsb-temp-label">ΔT</span>
                 <span class="bsb-temp-value">${deltaT >= 0 ? '+' : ''}${deltaT.toFixed(1)}°C</span>
                 <span class="bsb-temp-desc">${deltaTDesc}</span>
-            </div>
-        </div>
-        <div class="bsb-details">
-            <div class="bsb-detail-item">
-                <span class="bsb-detail-label">DHW:</span>
-                <span class="bsb-detail-value">${dhwStatus}</span>
-            </div>
-            <div class="bsb-detail-item">
-                <span class="bsb-detail-label">HP:</span>
-                <span class="bsb-detail-value">${hpStatus || '---'}</span>
             </div>
         </div>
     `;

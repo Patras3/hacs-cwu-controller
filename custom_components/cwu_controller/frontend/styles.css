@@ -3120,6 +3120,32 @@ body {
     color: var(--accent-cyan);
 }
 
+/* BSB Raw Statuses (direct from API) */
+.bsb-raw-statuses {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+
+.bsb-raw-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.bsb-raw-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    min-width: 35px;
+}
+
+.bsb-raw-value {
+    color: var(--accent-purple);
+    font-weight: 600;
+}
+
 /* BSB Temps Grid */
 .bsb-temps-grid {
     display: grid;
