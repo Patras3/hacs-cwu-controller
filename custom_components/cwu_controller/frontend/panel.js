@@ -1,10 +1,11 @@
 /**
- * CWU Controller Panel JavaScript v7.1
+ * CWU Controller Panel JavaScript v7.2
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
  * v7.0: Mobile-first redesign - Quick stats widgets at top (Power, CWU Temp+State, Mini Power Chart)
  * v7.1: Added BSB-LAN heat pump status widget with live data from pump
+ * v7.2: Fixed BSB-LAN - now fetches on-demand via dedicated API endpoint (not in background)
  */
 
 // Configuration
@@ -131,10 +132,15 @@ async function init() {
     await updateQuickPowerChart();
     await fetchCwuTemp1hAgo();
 
+    // Fetch BSB-LAN data on-demand (only when panel is open)
+    refreshBsbLan();
+
     updateTimer = setInterval(refreshData, CONFIG.updateInterval);
     chartUpdateTimer = setInterval(updateAllChartData, CONFIG.chartUpdateInterval);
     // Update quick chart more frequently for real-time feel
     setInterval(updateQuickPowerChart, 30000);
+    // Refresh BSB-LAN data every 30 seconds (only when panel is open)
+    setInterval(refreshBsbLan, 30000);
 
     updateLastUpdateTime();
     setInterval(updateLastUpdateTime, 1000);
@@ -1832,41 +1838,69 @@ function updateLastUpdateTime() {
 }
 
 /**
- * BSB-LAN Functions - Data comes from backend (coordinator.py) via HA API
+ * BSB-LAN Functions - Fetches data on-demand from dedicated API endpoint
+ * Only called when frontend is active, not in background
  */
-function refreshBsbLan() {
-    // Data is fetched by backend, we just update display from currentData.attributes
-    updateBsbLanDisplay();
-}
+let bsbLanFetching = false;
 
-function updateBsbLanDisplay() {
+async function refreshBsbLan() {
+    if (bsbLanFetching) return;
+
     const contentEl = document.getElementById('bsb-lan-content');
     const statusEl = document.getElementById('bsb-lan-status');
     if (!contentEl) return;
 
-    const attrs = currentData.attributes || {};
-    const bsbData = attrs.bsb_lan_data;
-    const bsbError = attrs.bsb_lan_error;
+    // Show loading state
+    contentEl.innerHTML = `
+        <div class="bsb-loading">
+            <span class="mdi mdi-loading mdi-spin"></span>
+            <span>Fetching BSB-LAN data...</span>
+        </div>
+    `;
 
-    // Check for error
-    if (bsbError) {
-        showBsbLanError(bsbError);
+    bsbLanFetching = true;
+    try {
+        const response = await fetch('/api/cwu_controller/bsb_lan', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+            showBsbLanError(result.error);
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
+            }
+            return;
+        }
+
+        if (result.data) {
+            updateBsbLanDisplay(result.data);
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
+            }
+        }
+    } catch (error) {
+        console.error('BSB-LAN fetch error:', error);
+        showBsbLanError(error.message);
         if (statusEl) {
             statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
         }
-        return;
+    } finally {
+        bsbLanFetching = false;
     }
+}
 
-    // Check if data exists
-    if (!bsbData) {
-        contentEl.innerHTML = `
-            <div class="bsb-loading">
-                <span class="mdi mdi-loading mdi-spin"></span>
-                <span>Waiting for BSB-LAN data...</span>
-            </div>
-        `;
-        return;
-    }
+function updateBsbLanDisplay(bsbData) {
+    const contentEl = document.getElementById('bsb-lan-content');
+    if (!contentEl || !bsbData) return;
 
     // Parse values from backend
     const dhwStatus = bsbData.dhw_status || '---';
@@ -1875,13 +1909,9 @@ function updateBsbLanDisplay() {
     const returnTemp = bsbData.return_temp || 0;
     const cwuTemp = bsbData.cwu_temp || 0;
     const outsideTemp = bsbData.outside_temp || 0;
-    const deltaT = bsbData.delta_t || (flowTemp - returnTemp);
+    const deltaT = bsbData.delta_t !== null ? bsbData.delta_t : (flowTemp - returnTemp);
 
-    if (statusEl) {
-        statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
-    }
-
-    // Delta T interpretation (this is just math, keep it)
+    // Delta T interpretation
     let deltaTClass = 'normal';
     let deltaTDesc = '';
     if (deltaT >= 3 && deltaT <= 5) {
