@@ -1336,19 +1336,27 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if fake_heating:
                 self._change_state(STATE_FAKE_HEATING_DETECTED)
                 self._fake_heating_detected_at = datetime.now()
+                # Stop all heating
                 await self._async_set_water_heater_mode(WH_MODE_OFF)
+                await self._async_set_climate(False)
                 await self._async_send_notification(
                     "CWU Controller Alert (Manual Mode)",
                     f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
                     f"CWU temp: {cwu_temp}°C. Restarting in {FAKE_HEATING_RESTART_WAIT} min..."
                 )
-                self._log_action(f"Manual mode: Fake heating detected - CWU OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+                self._log_action(f"Manual mode: Fake heating detected - all OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
 
         # Handle fake heating restart in manual mode
         if self._manual_override and self._current_state == STATE_FAKE_HEATING_DETECTED:
             if self._fake_heating_detected_at:
                 elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
                 if elapsed >= FAKE_HEATING_RESTART_WAIT:
+                    # Full restart sequence: stop all, wait, start CWU
+                    self._log_action("Manual mode: Restarting CWU after fake heating...")
+                    await self._async_set_water_heater_mode(WH_MODE_OFF)
+                    await self._async_set_climate(False)
+                    self._log_action("Waiting 60s for pump to settle...")
+                    await asyncio.sleep(60)
                     await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
                     self._fake_heating_detected_at = None
                     self._change_state(STATE_HEATING_CWU)
