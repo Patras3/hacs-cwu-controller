@@ -627,3 +627,102 @@ class TestBSBLanDataRefresh:
             await mock_coordinator._async_refresh_bsb_lan_data()
 
             assert mock_coordinator._bsb_lan_data.get("delta_t") is None
+
+
+class TestWinterModeWithUnavailableTemp:
+    """Tests for winter mode behavior when CWU temperature is unavailable.
+
+    This is a critical scenario that can happen when:
+    1. BSB-LAN ESP is still booting after HA restart
+    2. External HA sensor is unavailable (zigbee hub not ready)
+    3. Both sources return None
+
+    The controller should enable both floor+CWU (safe mode) and let
+    the heat pump decide what to heat.
+    """
+
+    @pytest.fixture
+    def mock_coordinator(self):
+        """Create mock coordinator in winter mode."""
+        hass = MagicMock()
+        hass.services = MagicMock()
+        hass.states = MagicMock()
+
+        config = {
+            "cwu_temp_sensor": "sensor.cwu_temp_external",
+        }
+        coordinator = CWUControllerCoordinator(hass, config)
+        coordinator._bsb_client = BSBLanClient("192.168.1.100")
+        coordinator._operating_mode = "winter"
+        return coordinator
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_when_temp_unavailable_during_window(self, mock_coordinator):
+        """Test that safe mode (both floor+CWU) is enabled during window when temp unknown."""
+        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE
+
+        mock_coordinator._current_state = STATE_IDLE
+        mock_coordinator._bsb_lan_data = {}  # No BSB-LAN data
+
+        # Mock external sensor also unavailable
+        mock_coordinator.hass.states.get.return_value = None
+
+        # Mock is_winter_cwu_heating_window to return True
+        with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
+            with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
+                await mock_coordinator._run_winter_mode_logic(
+                    cwu_urgency=2,  # medium
+                    floor_urgency=1,  # low
+                    cwu_temp=None,  # CRITICAL: temp unavailable
+                    salon_temp=20.0,
+                )
+
+                # Should have entered safe mode (both floor+CWU enabled)
+                mock_safe.assert_called_once()
+                assert mock_coordinator._current_state == STATE_SAFE_MODE
+
+    @pytest.mark.asyncio
+    async def test_stays_in_safe_mode_when_temp_remains_unavailable(self, mock_coordinator):
+        """Test that safe mode continues if temp remains unavailable."""
+        from custom_components.cwu_controller.const import STATE_SAFE_MODE
+
+        mock_coordinator._current_state = STATE_SAFE_MODE
+        mock_coordinator._bsb_lan_data = {}
+
+        mock_coordinator.hass.states.get.return_value = None
+
+        with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
+            with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
+                await mock_coordinator._run_winter_mode_logic(
+                    cwu_urgency=2,
+                    floor_urgency=1,
+                    cwu_temp=None,
+                    salon_temp=20.0,
+                )
+
+                # Should NOT call enter_safe_mode again (already in safe mode)
+                mock_safe.assert_not_called()
+                # Should stay in safe mode
+                assert mock_coordinator._current_state == STATE_SAFE_MODE
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_when_temp_unavailable_outside_window(self, mock_coordinator):
+        """Test that safe mode is also used outside window when temp unavailable."""
+        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE
+
+        mock_coordinator._current_state = STATE_IDLE
+        mock_coordinator._bsb_lan_data = {}
+        mock_coordinator.hass.states.get.return_value = None
+
+        with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=False):
+            with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
+                await mock_coordinator._run_winter_mode_logic(
+                    cwu_urgency=2,
+                    floor_urgency=1,
+                    cwu_temp=None,  # temp unavailable
+                    salon_temp=20.0,
+                )
+
+                # Should enter safe mode (pump decides)
+                mock_safe.assert_called_once()
+                assert mock_coordinator._current_state == STATE_SAFE_MODE

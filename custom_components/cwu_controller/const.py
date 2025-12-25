@@ -141,6 +141,7 @@ DEFAULT_BSB_LAN_HOST: Final = "192.168.50.219"
 BSB_LAN_READ_TIMEOUT: Final = 5  # seconds for reads
 BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
 BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before fallback to HA cloud
+BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
 # BSB-LAN Parameters for reading
 BSB_LAN_READ_PARAMS: Final = "700,1600,8000,8003,8006,8412,8410,8830,8700"

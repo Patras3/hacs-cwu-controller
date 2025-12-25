@@ -83,12 +83,6 @@ from .const import (
     # BSB-LAN
     CONF_BSB_LAN_HOST,
     DEFAULT_BSB_LAN_HOST,
-    BSB_LAN_READ_TIMEOUT,
-    BSB_LAN_WRITE_TIMEOUT,
-    BSB_LAN_FAILURES_THRESHOLD,
-    BSB_LAN_READ_PARAMS,
-    BSB_LAN_PARAM_CWU_MODE,
-    BSB_LAN_PARAM_FLOOR_MODE,
     BSB_CWU_MODE_OFF,
     BSB_CWU_MODE_ON,
     BSB_FLOOR_MODE_PROTECTION,
@@ -99,7 +93,9 @@ from .const import (
     CONTROL_SOURCE_BSB_LAN,
     CONTROL_SOURCE_HA_CLOUD,
     BSB_FAKE_HEATING_DETECTION_TIME,
+    BSB_LAN_STATE_VERIFY_INTERVAL,
 )
+from .bsb_lan import BSBLanClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,134 +103,6 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}_energy_data"
 ENERGY_SAVE_INTERVAL = 300  # Save every 5 minutes
-
-
-class BSBLanClient:
-    """BSB-LAN communication client with health tracking."""
-
-    def __init__(self, host: str) -> None:
-        """Initialize BSB-LAN client."""
-        self.host = host
-
-        # Health tracking
-        self._consecutive_failures: int = 0
-        self._last_success: datetime | None = None
-        self._last_failure: datetime | None = None
-        self._is_available: bool = True
-
-    @property
-    def is_available(self) -> bool:
-        """Return if BSB-LAN is considered available."""
-        return self._is_available and self._consecutive_failures < BSB_LAN_FAILURES_THRESHOLD
-
-    async def async_read_parameters(self, params: str | None = None) -> dict[str, Any]:
-        """Read multiple parameters in one batch request.
-
-        Args:
-            params: Comma-separated parameter IDs (e.g., "8003,8006,8830").
-                   If None, uses default BSB_LAN_READ_PARAMS.
-
-        Returns:
-            Raw JSON response from BSB-LAN or empty dict on failure.
-        """
-        if params is None:
-            params = BSB_LAN_READ_PARAMS
-
-        url = f"http://{self.host}/JQ={params}"
-        try:
-            timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        self._handle_success()
-                        return data
-                    else:
-                        self._handle_failure(Exception(f"HTTP {response.status}"))
-                        return {}
-        except asyncio.TimeoutError:
-            self._handle_failure(Exception("Timeout"))
-            return {}
-        except aiohttp.ClientError as e:
-            self._handle_failure(e)
-            return {}
-        except Exception as e:
-            self._handle_failure(e)
-            return {}
-
-    async def async_write_parameter(self, param: int, value: int) -> bool:
-        """Write a single parameter value.
-
-        Args:
-            param: Parameter ID (e.g., 1600 for CWU mode).
-            value: Value to set.
-
-        Returns:
-            True if successful, False otherwise.
-
-        Note:
-            BSB-LAN returns HTTP 200 even on errors, with error message in HTML body.
-            We check for "ERROR" in response to detect failures.
-        """
-        url = f"http://{self.host}/S{param}={value}"
-        try:
-            timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        # BSB-LAN returns HTML - check for error message in body
-                        body = await response.text()
-                        if "ERROR" in body:
-                            self._handle_failure(Exception(f"BSB-LAN set failed for {param}={value}"))
-                            return False
-                        self._handle_success()
-                        return True
-                    else:
-                        self._handle_failure(Exception(f"HTTP {response.status}"))
-                        return False
-        except asyncio.TimeoutError:
-            self._handle_failure(Exception("Timeout"))
-            return False
-        except aiohttp.ClientError as e:
-            self._handle_failure(e)
-            return False
-        except Exception as e:
-            self._handle_failure(e)
-            return False
-
-    async def async_set_cwu_mode(self, mode: int) -> bool:
-        """Set CWU mode (0=Off, 1=On, 2=Eco)."""
-        return await self.async_write_parameter(BSB_LAN_PARAM_CWU_MODE, mode)
-
-    async def async_set_floor_mode(self, mode: int) -> bool:
-        """Set floor heating mode (0=Protection, 1=Automatic)."""
-        return await self.async_write_parameter(BSB_LAN_PARAM_FLOOR_MODE, mode)
-
-    def _handle_success(self) -> None:
-        """Called after successful communication."""
-        self._consecutive_failures = 0
-        self._last_success = datetime.now()
-        if not self._is_available:
-            self._is_available = True
-            _LOGGER.info("BSB-LAN connection restored")
-
-    def _handle_failure(self, error: Exception) -> None:
-        """Called after failed communication."""
-        self._consecutive_failures += 1
-        self._last_failure = datetime.now()
-        _LOGGER.warning(
-            "BSB-LAN failure %d/%d: %s",
-            self._consecutive_failures,
-            BSB_LAN_FAILURES_THRESHOLD,
-            error
-        )
-        if self._consecutive_failures >= BSB_LAN_FAILURES_THRESHOLD:
-            if self._is_available:
-                self._is_available = False
-                _LOGGER.error(
-                    "BSB-LAN marked unavailable after %d consecutive failures",
-                    self._consecutive_failures
-                )
 
 
 class CWUControllerCoordinator(DataUpdateCoordinator):
@@ -329,6 +197,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._last_energy_save: datetime | None = None
         self._energy_data_loaded: bool = False
+
+        # State verification - periodically check pump state matches expected
+        self._last_state_verify: datetime | None = None
 
         # Register shutdown handler to save data
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_save_on_shutdown)
@@ -900,12 +771,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._log_action("CWU ON (BSB-LAN)")
                 return True
             # BSB-LAN failed, continue to fallback
+            _LOGGER.warning("BSB-LAN CWU ON failed, trying HA cloud fallback")
+        else:
+            _LOGGER.info("BSB-LAN unavailable for CWU ON, using HA cloud")
 
         # Fallback to HA cloud
         success = await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
         if success:
             self._control_source = CONTROL_SOURCE_HA_CLOUD
             self._log_action("CWU ON (HA cloud fallback)")
+        else:
+            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn CWU ON!")
         return success
 
     async def _async_set_cwu_off(self) -> bool:
@@ -916,12 +792,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._control_source = CONTROL_SOURCE_BSB_LAN
                 self._log_action("CWU OFF (BSB-LAN)")
                 return True
+            _LOGGER.warning("BSB-LAN CWU OFF failed, trying HA cloud fallback")
+        else:
+            _LOGGER.info("BSB-LAN unavailable for CWU OFF, using HA cloud")
 
         # Fallback to HA cloud
         success = await self._async_set_water_heater_mode(WH_MODE_OFF)
         if success:
             self._control_source = CONTROL_SOURCE_HA_CLOUD
             self._log_action("CWU OFF (HA cloud fallback)")
+        else:
+            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn CWU OFF!")
         return success
 
     async def _async_set_floor_on(self) -> bool:
@@ -932,11 +813,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._control_source = CONTROL_SOURCE_BSB_LAN
                 self._log_action("Floor ON (BSB-LAN)")
                 return True
+            _LOGGER.warning("BSB-LAN Floor ON failed, trying HA cloud fallback")
+        else:
+            _LOGGER.info("BSB-LAN unavailable for Floor ON, using HA cloud")
 
         # Fallback to HA cloud
         success = await self._async_set_climate(True)
         if success:
             self._control_source = CONTROL_SOURCE_HA_CLOUD
+            self._log_action("Floor ON (HA cloud fallback)")
+        else:
+            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn Floor ON!")
         return success
 
     async def _async_set_floor_off(self) -> bool:
@@ -947,11 +834,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._control_source = CONTROL_SOURCE_BSB_LAN
                 self._log_action("Floor OFF (BSB-LAN)")
                 return True
+            _LOGGER.warning("BSB-LAN Floor OFF failed, trying HA cloud fallback")
+        else:
+            _LOGGER.info("BSB-LAN unavailable for Floor OFF, using HA cloud")
 
         # Fallback to HA cloud
         success = await self._async_set_climate(False)
         if success:
             self._control_source = CONTROL_SOURCE_HA_CLOUD
+            self._log_action("Floor OFF (HA cloud fallback)")
+        else:
+            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn Floor OFF!")
         return success
 
     # -------------------------------------------------------------------------
@@ -1035,6 +928,121 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._bsb_dhw_charging_no_compressor_since = None
 
         return False
+
+    # -------------------------------------------------------------------------
+    # State Verification - ensure pump state matches expected
+    # -------------------------------------------------------------------------
+
+    async def _verify_pump_state(self) -> None:
+        """Verify pump state matches expected and fix if needed.
+
+        Called periodically (every 5 minutes) to ensure the heat pump
+        is in the correct state. This catches cases where:
+        - BSB-LAN command was sent but pump didn't respond
+        - Someone manually changed pump settings
+        - Network issues caused command to be lost
+        """
+        now = datetime.now()
+
+        # Skip if not enough time passed since last verify
+        if self._last_state_verify is not None:
+            minutes_since_verify = (now - self._last_state_verify).total_seconds() / 60
+            if minutes_since_verify < BSB_LAN_STATE_VERIFY_INTERVAL:
+                return
+
+        # Skip if BSB-LAN not available or no data
+        if not self._bsb_client.is_available or not self._bsb_lan_data:
+            return
+
+        # Skip if controller is disabled or in manual override
+        if not self._enabled or self._manual_override:
+            return
+
+        # Skip if transition is in progress (states are changing)
+        if self._transition_in_progress:
+            return
+
+        self._last_state_verify = now
+
+        # Get current BSB-LAN state
+        actual_cwu_mode = self._bsb_lan_data.get("cwu_mode", "")
+        actual_floor_mode = self._bsb_lan_data.get("floor_mode", "")
+
+        # Determine expected state based on current controller state
+        expected_cwu_on, expected_floor_on = self._get_expected_pump_state()
+
+        # Compare and fix if needed
+        cwu_mismatch = False
+        floor_mismatch = False
+
+        # CWU: "On" or "Eco" means on, "Off" means off
+        actual_cwu_on = actual_cwu_mode.lower() in ("on", "eco", "1")
+        if expected_cwu_on != actual_cwu_on:
+            cwu_mismatch = True
+
+        # Floor: "Automatic" means on, "Protection" means off
+        actual_floor_on = actual_floor_mode.lower() in ("automatic", "1")
+        if expected_floor_on != actual_floor_on:
+            floor_mismatch = True
+
+        if cwu_mismatch or floor_mismatch:
+            _LOGGER.warning(
+                "Pump state mismatch detected! State: %s, "
+                "Expected: CWU=%s Floor=%s, Actual: CWU=%s Floor=%s",
+                self._current_state,
+                "ON" if expected_cwu_on else "OFF",
+                "ON" if expected_floor_on else "OFF",
+                actual_cwu_mode,
+                actual_floor_mode,
+            )
+
+            # Fix the state
+            if cwu_mismatch:
+                if expected_cwu_on:
+                    await self._async_set_cwu_on()
+                    self._log_action("State verify: Fixed CWU → ON")
+                else:
+                    await self._async_set_cwu_off()
+                    self._log_action("State verify: Fixed CWU → OFF")
+
+            if floor_mismatch:
+                if expected_floor_on:
+                    await self._async_set_floor_on()
+                    self._log_action("State verify: Fixed Floor → ON")
+                else:
+                    await self._async_set_floor_off()
+                    self._log_action("State verify: Fixed Floor → OFF")
+
+    def _get_expected_pump_state(self) -> tuple[bool, bool]:
+        """Get expected CWU and Floor state based on current controller state.
+
+        Returns:
+            Tuple of (cwu_should_be_on, floor_should_be_on)
+        """
+        state = self._current_state
+
+        if state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            # CWU heating: CWU on, floor off
+            return (True, False)
+
+        if state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR):
+            # Floor heating: CWU off, floor on
+            return (False, True)
+
+        if state == STATE_SAFE_MODE:
+            # Safe mode: both on (pump decides)
+            return (True, True)
+
+        if state in (STATE_IDLE, STATE_PAUSE, STATE_FAKE_HEATING_DETECTED):
+            # Idle/pause/fake heating detected: both off
+            return (False, False)
+
+        if state == STATE_FAKE_HEATING_RESTARTING:
+            # Restarting after fake heating: CWU on, floor off
+            return (True, False)
+
+        # Default: both off
+        return (False, False)
 
     async def _async_send_notification(self, title: str, message: str) -> None:
         """Send notification."""
@@ -1730,6 +1738,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             climate_state,
         )
 
+        # Periodic state verification (every 5 minutes)
+        # Ensures pump state matches expected, fixes if needed
+        await self._verify_pump_state()
+
         data["controller_state"] = self._current_state
         return data
 
@@ -1823,13 +1835,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
             self._fake_heating_detected_at = datetime.now()
             self._low_power_start = None  # Reset to prevent duplicate detection
+            # Turn off BOTH CWU and floor
             await self._async_set_cwu_off()
+            await self._async_set_floor_off()
             await self._async_send_notification(
                 "CWU Controller Alert",
                 f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
                 f"CWU temp: {cwu_temp}°C. Waiting {FAKE_HEATING_RESTART_WAIT} min before restart..."
             )
-            self._log_action(f"Fake heating detected - CWU OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+            self._log_action(f"Fake heating detected - CWU+Floor OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
             return
 
         # Handle fake heating restart - wait period complete
@@ -1837,11 +1851,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             elapsed = (datetime.now() - self._fake_heating_detected_at).total_seconds() / 60
             if elapsed >= FAKE_HEATING_RESTART_WAIT:
                 self._change_state(STATE_FAKE_HEATING_RESTARTING)
-                self._log_action("Fake heating wait complete - restarting CWU...")
+                self._log_action("Fake heating wait complete - restarting CWU (floor stays off)...")
+                # Ensure floor is off, then turn on CWU only
+                await self._async_set_floor_off()
                 await self._async_set_cwu_on()
                 self._low_power_start = None
                 self._fake_heating_detected_at = None
                 self._change_state(STATE_HEATING_CWU)
+                self._cwu_heating_start = datetime.now()  # Reset for next detection cycle
                 self._log_action("CWU restarted after fake heating recovery")
             return
 
@@ -2004,8 +2021,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Handle CWU heating window (03:00-06:00 and 13:00-15:00)
         if is_heating_window:
-            # During heating window: heat CWU if below target
-            if cwu_temp is not None and cwu_temp < winter_target:
+            # During heating window: heat CWU if below target OR if temp unknown
+            # When temp is unknown, enable both floor+CWU and let heat pump decide
+            if cwu_temp is None:
+                # Temperature unknown - enable both, let pump decide (safe default)
+                if self._current_state != STATE_SAFE_MODE:
+                    self._log_action(
+                        "Winter mode: CWU temp UNKNOWN during heating window - enabling both (pump decides)"
+                    )
+                    _LOGGER.warning(
+                        "CWU temperature unavailable during heating window - enabling both floor+CWU"
+                    )
+                    await self._enter_safe_mode()
+                    self._change_state(STATE_SAFE_MODE)
+                return
+            elif cwu_temp < winter_target:
                 if self._current_state != STATE_HEATING_CWU:
                     await self._switch_to_cwu()
                     self._change_state(STATE_HEATING_CWU)
@@ -2015,7 +2045,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     )
                 # Continue heating until target reached (no session limit in winter mode)
                 return
-            elif cwu_temp is not None and cwu_temp >= winter_target:
+            else:
                 # Target reached during window - switch to floor
                 if self._current_state == STATE_HEATING_CWU:
                     self._log_action(
@@ -2026,8 +2056,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     self._cwu_heating_start = None
                 return
 
+        # Outside heating window: if temp unknown, enable both (pump decides)
+        if cwu_temp is None:
+            if self._current_state != STATE_SAFE_MODE:
+                self._log_action(
+                    "Winter mode: CWU temp UNKNOWN outside window - enabling both (pump decides)"
+                )
+                _LOGGER.warning(
+                    "CWU temperature unavailable outside heating window - enabling both floor+CWU"
+                )
+                await self._enter_safe_mode()
+                self._change_state(STATE_SAFE_MODE)
+            return
+
         # Outside heating window: only heat CWU in emergency (below threshold)
-        if cwu_temp is not None and cwu_temp < emergency_threshold:
+        if cwu_temp < emergency_threshold:
             if self._current_state not in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
                 await self._switch_to_cwu()
                 self._change_state(STATE_EMERGENCY_CWU)
@@ -2068,7 +2111,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 return
 
         # Default: heat floor (if not already heating something)
-        if self._current_state not in (STATE_HEATING_FLOOR, STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+        if self._current_state not in (STATE_HEATING_FLOOR, STATE_HEATING_CWU, STATE_EMERGENCY_CWU, STATE_SAFE_MODE):
             self._log_action("Winter mode: Default to floor heating")
             await self._switch_to_floor()
             self._change_state(STATE_HEATING_FLOOR)
