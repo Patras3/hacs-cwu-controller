@@ -1844,7 +1844,7 @@ async function refreshBsbData() {
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout - BSB-LAN is slow
 
         const response = await fetch(`${BSB_LAN_URL}/JQ=${BSB_PARAMS}`, {
             signal: controller.signal
@@ -1874,30 +1874,16 @@ async function refreshBsbData() {
  * Update BSB-LAN UI with fetched data
  */
 function updateBsbUI(data) {
-    // DHW Status (8003)
+    // DHW Status (8003) - just show the raw text
     const dhwStatusEl = document.getElementById('bsb-dhw-status');
     if (dhwStatusEl && data['8003']) {
-        const desc = data['8003'].desc || data['8003'].value || '--';
-        dhwStatusEl.textContent = desc;
-        dhwStatusEl.className = 'bsb-status-value';
-        if (desc.includes('Charging') && !desc.includes('electric')) {
-            dhwStatusEl.classList.add('active');
-        } else if (desc.includes('electric')) {
-            dhwStatusEl.classList.add('electric');
-        }
+        dhwStatusEl.textContent = data['8003'].desc || data['8003'].value || '--';
     }
 
-    // HP Status (8006)
+    // HP Status (8006) - just show the raw text
     const hpStatusEl = document.getElementById('bsb-hp-status');
     if (hpStatusEl && data['8006']) {
-        const desc = data['8006'].desc || data['8006'].value || '--';
-        hpStatusEl.textContent = desc;
-        hpStatusEl.className = 'bsb-status-value';
-        if (desc.includes('Compressor')) {
-            hpStatusEl.classList.add('active');
-        } else if (desc.includes('Frost')) {
-            hpStatusEl.classList.add('defrost');
-        }
+        hpStatusEl.textContent = data['8006'].desc || data['8006'].value || '--';
     }
 
     // Temperatures
@@ -1931,22 +1917,22 @@ function updateBsbUI(data) {
         }
     }
 
-    // Indicators
+    // Indicators - case insensitive matching
     const compressorInd = document.getElementById('bsb-compressor-indicator');
     const electricInd = document.getElementById('bsb-electric-indicator');
     const defrostInd = document.getElementById('bsb-defrost-indicator');
 
-    const hpDesc = data['8006']?.desc || '';
-    const dhwDesc = data['8003']?.desc || '';
+    const hpDesc = (data['8006']?.desc || '').toLowerCase();
+    const dhwDesc = (data['8003']?.desc || '').toLowerCase();
 
     if (compressorInd) {
-        compressorInd.classList.toggle('active', hpDesc.includes('Compressor'));
+        compressorInd.classList.toggle('active', hpDesc.includes('compressor'));
     }
     if (electricInd) {
-        electricInd.classList.toggle('active', dhwDesc.toLowerCase().includes('electric'));
+        electricInd.classList.toggle('active', dhwDesc.includes('electric'));
     }
     if (defrostInd) {
-        defrostInd.classList.toggle('active', hpDesc.includes('Frost'));
+        defrostInd.classList.toggle('active', hpDesc.includes('frost'));
     }
 
     // Last update time
