@@ -1314,6 +1314,31 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._manual_override_until = None
                 self._log_action("Manual override expired")
 
+        # Handle fake heating even in manual CWU mode
+        # (don't switch to floor, just restart CWU after wait period)
+        if self._manual_override and self._current_state == STATE_HEATING_CWU:
+            if fake_heating:
+                self._change_state(STATE_FAKE_HEATING_DETECTED)
+                self._fake_heating_detected_at = datetime.now()
+                await self._async_set_water_heater_mode(WH_MODE_OFF)
+                await self._async_send_notification(
+                    "CWU Controller Alert (Manual Mode)",
+                    f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
+                    f"CWU temp: {cwu_temp}°C. Restarting in {FAKE_HEATING_RESTART_WAIT} min..."
+                )
+                self._log_action(f"Manual mode: Fake heating detected - CWU OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+
+        # Handle fake heating restart in manual mode
+        if self._manual_override and self._current_state == STATE_FAKE_HEATING_DETECTED:
+            if self._fake_heating_detected_at:
+                elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
+                if elapsed >= FAKE_HEATING_RESTART_WAIT:
+                    await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+                    self._fake_heating_detected_at = None
+                    self._change_state(STATE_HEATING_CWU)
+                    self._cwu_heating_start = now  # Reset heating start for next detection
+                    self._log_action("Manual mode: CWU restarted after fake heating")
+
         if self._manual_override:
             return data
 
