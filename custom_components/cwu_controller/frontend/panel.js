@@ -492,7 +492,10 @@ async function refreshData() {
             fetchState(EXTERNAL_ENTITIES.floorInlet),
         ]);
 
-        if (cwuTemp) currentData.cwuTemp = parseFloat(cwuTemp.state);
+        // CWU temp: HA entity preferred, BSB-LAN fallback (set after BSB data loaded)
+        if (cwuTemp && cwuTemp.state !== 'unavailable' && cwuTemp.state !== 'unknown') {
+            currentData.cwuTemp = parseFloat(cwuTemp.state);
+        }
         if (salonTemp) currentData.salonTemp = parseFloat(salonTemp.state);
         if (bedroomTemp) currentData.bedroomTemp = parseFloat(bedroomTemp.state);
         if (kidsTemp) currentData.kidsTemp = parseFloat(kidsTemp.state);
@@ -533,6 +536,11 @@ async function refreshData() {
         };
         currentData.bsbLan = bsbData;
         updateBsbLanDisplay(bsbData);
+
+        // Fallback: if HA CWU temp not available, use BSB-LAN
+        if (currentData.cwuTemp === undefined && bsbData.cwu_temp > 0) {
+            currentData.cwuTemp = bsbData.cwu_temp;
+        }
 
         document.getElementById('connection-state').textContent = 'Connected';
         document.getElementById('connection-state').style.color = '#68d391';
@@ -826,7 +834,7 @@ async function updateCwuSessionCard() {
         sessionEnergyKwh = await calculateSessionEnergy(sessionStartTime);
     }
 
-    const currentTemp = currentData.cwuTemp || sessionStartTemp;
+    const currentTemp = currentData.cwuTemp || currentData.bsbLan?.cwu_temp || sessionStartTemp;
     const tempChange = currentTemp - sessionStartTemp;
     const durationMin = heatingMinutes;
     const targetTemp = currentData.cwuTargetTemp || 45;

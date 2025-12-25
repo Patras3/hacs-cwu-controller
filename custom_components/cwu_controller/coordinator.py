@@ -878,19 +878,23 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._bsb_lan_data["delta_t"] = None
 
     def _get_cwu_temperature(self) -> float | None:
-        """Get CWU temperature from BSB-LAN (preferred) or external sensor.
+        """Get CWU temperature from HA entity (preferred) or BSB-LAN fallback.
 
-        BSB-LAN parameter 8830 is the primary source.
-        Falls back to external sensor if BSB-LAN unavailable or no data.
+        External HA sensor (cwu_temp_sensor) is the primary source.
+        Falls back to BSB-LAN parameter 8830 if HA sensor unavailable.
         """
-        # Try BSB-LAN first (preferred)
+        # Try HA entity first (preferred)
+        ha_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        if ha_temp is not None:
+            return ha_temp
+
+        # Fallback to BSB-LAN
         if self._bsb_lan_data:
             bsb_temp = self._bsb_lan_data.get("cwu_temp")
             if bsb_temp is not None:
                 return bsb_temp
 
-        # Fallback to external sensor
-        return self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+        return None
 
     def _detect_fake_heating_bsb(self) -> bool:
         """Detect fake heating using BSB-LAN status (more accurate).
