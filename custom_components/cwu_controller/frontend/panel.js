@@ -19,14 +19,6 @@ const CONFIG = {
     cycleInterval: 7, // minutes between peaks
 };
 
-// BSB-LAN Configuration
-const BSB_LAN = {
-    baseUrl: 'http://192.168.50.219',
-    params: '8003,8006,8412,8410,8830,8700',
-    timeout: 5000,
-    refreshInterval: 30000, // 30 seconds
-};
-
 // Entity IDs
 const ENTITIES = {
     state: 'sensor.cwu_controller_state',
@@ -138,10 +130,6 @@ async function init() {
     await updateAllChartData();
     await updateQuickPowerChart();
     await fetchCwuTemp1hAgo();
-
-    // Initialize BSB-LAN (async, don't block)
-    refreshBsbLan();
-    setInterval(refreshBsbLan, BSB_LAN.refreshInterval);
 
     updateTimer = setInterval(refreshData, CONFIG.updateInterval);
     chartUpdateTimer = setInterval(updateAllChartData, CONFIG.chartUpdateInterval);
@@ -591,6 +579,7 @@ async function updateUI() {
     const attrs = currentData.attributes || {};
 
     updateQuickStats();
+    updateBsbLanDisplay();
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
@@ -1843,69 +1832,54 @@ function updateLastUpdateTime() {
 }
 
 /**
- * BSB-LAN Functions
+ * BSB-LAN Functions - Data comes from backend (coordinator.py) via HA API
  */
-let bsbLanData = null;
-let bsbLanLastUpdate = null;
+function refreshBsbLan() {
+    // Data is fetched by backend, we just update display from currentData.attributes
+    updateBsbLanDisplay();
+}
 
-async function refreshBsbLan() {
+function updateBsbLanDisplay() {
     const contentEl = document.getElementById('bsb-lan-content');
     const statusEl = document.getElementById('bsb-lan-status');
-    const refreshIcon = document.getElementById('bsb-refresh-icon');
-
     if (!contentEl) return;
 
-    // Show loading state on refresh button
-    if (refreshIcon) {
-        refreshIcon.classList.add('mdi-spin');
-    }
+    const attrs = currentData.attributes || {};
+    const bsbData = attrs.bsb_lan_data;
+    const bsbError = attrs.bsb_lan_error;
 
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), BSB_LAN.timeout);
-
-        const response = await fetch(`${BSB_LAN.baseUrl}/JQ=${BSB_LAN.params}`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        bsbLanData = data;
-        bsbLanLastUpdate = new Date();
-
-        updateBsbLanDisplay(data);
-
-        if (statusEl) {
-            statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
-        }
-    } catch (error) {
-        console.error('BSB-LAN fetch error:', error);
-        showBsbLanError(error.name === 'AbortError' ? 'Timeout' : error.message);
-
+    // Check for error
+    if (bsbError) {
+        showBsbLanError(bsbError);
         if (statusEl) {
             statusEl.innerHTML = '<span class="mdi mdi-alert-circle" style="color: var(--accent-red);"></span>';
         }
-    } finally {
-        if (refreshIcon) {
-            refreshIcon.classList.remove('mdi-spin');
-        }
+        return;
     }
-}
 
-function updateBsbLanDisplay(data) {
-    const contentEl = document.getElementById('bsb-lan-content');
-    if (!contentEl) return;
+    // Check if data exists
+    if (!bsbData) {
+        contentEl.innerHTML = `
+            <div class="bsb-loading">
+                <span class="mdi mdi-loading mdi-spin"></span>
+                <span>Waiting for BSB-LAN data...</span>
+            </div>
+        `;
+        return;
+    }
 
-    // Parse values - show raw from API without interpretation
-    const dhwStatus = data['8003']?.desc || '---';
-    const hpStatus = data['8006']?.desc || '---';
-    const flowTemp = parseFloat(data['8412']?.value) || 0;
-    const returnTemp = parseFloat(data['8410']?.value) || 0;
-    const cwuTemp = parseFloat(data['8830']?.value) || 0;
-    const outsideTemp = parseFloat(data['8700']?.value) || 0;
-    const deltaT = flowTemp - returnTemp;
+    // Parse values from backend
+    const dhwStatus = bsbData.dhw_status || '---';
+    const hpStatus = bsbData.hp_status || '---';
+    const flowTemp = bsbData.flow_temp || 0;
+    const returnTemp = bsbData.return_temp || 0;
+    const cwuTemp = bsbData.cwu_temp || 0;
+    const outsideTemp = bsbData.outside_temp || 0;
+    const deltaT = bsbData.delta_t || (flowTemp - returnTemp);
+
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="mdi mdi-check-circle" style="color: var(--accent-green);"></span>';
+    }
 
     // Delta T interpretation (this is just math, keep it)
     let deltaTClass = 'normal';

@@ -134,3 +134,8 @@ WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below targe
 WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
 WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progress (3h)
 WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
+
+# BSB-LAN Heat Pump Integration
+BSB_LAN_HOST: Final = "192.168.50.219"
+BSB_LAN_PARAMS: Final = "8003,8006,8412,8410,8830,8700"
+BSB_LAN_TIMEOUT: Final = 5  # seconds

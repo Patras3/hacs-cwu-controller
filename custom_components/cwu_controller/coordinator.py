@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+import aiohttp
+
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
@@ -78,6 +80,10 @@ from .const import (
     DEFAULT_ENERGY_SENSOR,
     ENERGY_TRACKING_INTERVAL,
     ENERGY_DELTA_ANOMALY_THRESHOLD,
+    # BSB-LAN
+    BSB_LAN_HOST,
+    BSB_LAN_PARAMS,
+    BSB_LAN_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -162,6 +168,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._meter_tracking_date: datetime | None = None  # Date of current tracking period
 
         self._last_daily_report_date: datetime | None = None
+
+        # BSB-LAN data cache
+        self._bsb_lan_data: dict[str, Any] | None = None
+        self._bsb_lan_last_update: datetime | None = None
+        self._bsb_lan_error: str | None = None
 
         # Persistence - data will be loaded async after init
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
@@ -1137,10 +1148,57 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         await self._async_set_climate(False)
         await self._async_send_notification("CWU Controller Test", "Floor heating turned OFF")
 
+    async def _async_fetch_bsb_lan(self) -> None:
+        """Fetch data from BSB-LAN heat pump controller."""
+        url = f"http://{BSB_LAN_HOST}/JQ={BSB_LAN_PARAMS}"
+        try:
+            timeout = aiohttp.ClientTimeout(total=BSB_LAN_TIMEOUT)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        self._bsb_lan_data = {
+                            "dhw_status": data.get("8003", {}).get("desc", "---"),
+                            "hp_status": data.get("8006", {}).get("desc", "---"),
+                            "flow_temp": self._parse_bsb_value(data.get("8412", {})),
+                            "return_temp": self._parse_bsb_value(data.get("8410", {})),
+                            "cwu_temp": self._parse_bsb_value(data.get("8830", {})),
+                            "outside_temp": self._parse_bsb_value(data.get("8700", {})),
+                        }
+                        # Calculate delta T
+                        if self._bsb_lan_data["flow_temp"] is not None and self._bsb_lan_data["return_temp"] is not None:
+                            self._bsb_lan_data["delta_t"] = self._bsb_lan_data["flow_temp"] - self._bsb_lan_data["return_temp"]
+                        else:
+                            self._bsb_lan_data["delta_t"] = None
+                        self._bsb_lan_last_update = datetime.now()
+                        self._bsb_lan_error = None
+                    else:
+                        self._bsb_lan_error = f"HTTP {response.status}"
+        except asyncio.TimeoutError:
+            self._bsb_lan_error = "Timeout"
+        except aiohttp.ClientError as e:
+            self._bsb_lan_error = str(e)
+        except Exception as e:
+            self._bsb_lan_error = str(e)
+            _LOGGER.debug("BSB-LAN fetch error: %s", e)
+
+    def _parse_bsb_value(self, data: dict) -> float | None:
+        """Parse BSB-LAN value from response."""
+        try:
+            value = data.get("value")
+            if value is not None:
+                return float(value)
+        except (ValueError, TypeError):
+            pass
+        return None
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data and run control logic."""
         now = datetime.now()
         current_hour = now.hour
+
+        # Fetch BSB-LAN data (non-blocking, runs in background)
+        asyncio.create_task(self._async_fetch_bsb_lan())
 
         # Get sensor values
         cwu_temp = self._get_sensor_value(self.config.get("cwu_temp_sensor"))
@@ -1293,6 +1351,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Tariff rates (for sensors)
             "tariff_cheap_rate": self.get_tariff_cheap_rate(),
             "tariff_expensive_rate": self.get_tariff_expensive_rate(),
+            # BSB-LAN heat pump data
+            "bsb_lan_data": self._bsb_lan_data,
+            "bsb_lan_error": self._bsb_lan_error,
+            "bsb_lan_last_update": self._bsb_lan_last_update.isoformat() if self._bsb_lan_last_update else None,
         }
 
         if self._fake_heating_detected_at:
