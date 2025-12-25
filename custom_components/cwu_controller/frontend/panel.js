@@ -1860,9 +1860,13 @@ async function refreshBsbLan() {
 
     bsbLanFetching = true;
     try {
+        const token = getFreshToken();
+        if (!token) {
+            throw new Error('No access token available');
+        }
         const response = await fetch('/api/cwu_controller/bsb_lan', {
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
