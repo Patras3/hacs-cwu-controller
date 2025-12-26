@@ -75,7 +75,7 @@ class CWUControllerBaseSensor(CoordinatorEntity, SensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.4",
+            "sw_version": "4.0.5",
         }
 
 
@@ -153,6 +153,22 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             # Tariff rates
             "tariff_cheap_rate": data.get("tariff_cheap_rate"),
             "tariff_expensive_rate": data.get("tariff_expensive_rate"),
+            # Manual override
+            "manual_override_until": data.get("manual_override_until"),
+            # Anti-oscillation (broken_heater mode)
+            "hold_time_remaining": data.get("hold_time_remaining", 0),
+            "can_switch_to_cwu": data.get("can_switch_to_cwu", True),
+            "can_switch_to_floor": data.get("can_switch_to_floor", True),
+            "switch_blocked_reason": data.get("switch_blocked_reason", ""),
+            # HP status (broken_heater mode)
+            "hp_ready": data.get("hp_ready", True),
+            "hp_ready_reason": data.get("hp_ready_reason", "OK"),
+            # Max temp detection (broken_heater mode)
+            "max_temp_achieved": data.get("max_temp_achieved"),
+            "electric_fallback_count": data.get("electric_fallback_count", 0),
+            "max_temp_detected": data.get("max_temp_detected", False),
+            # Night floor window (broken_heater mode)
+            "is_night_floor_window": data.get("is_night_floor_window", False),
         }
 
 
@@ -259,7 +275,7 @@ class CWUHeatingTimeSensor(CWUControllerBaseSensor):
 
 
 class CWUTargetTempSensor(CWUControllerBaseSensor):
-    """Sensor showing CWU target temperature from config."""
+    """Sensor showing CWU target temperature (effective, with BSB offset if applicable)."""
 
     def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
         """Initialize sensor."""
@@ -270,10 +286,11 @@ class CWUTargetTempSensor(CWUControllerBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """Return target temperature."""
+        """Return effective target temperature (with BSB offset if using BSB sensor)."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.get("cwu_target_temp", 45.0)
+        # Return effective target (includes BSB offset when applicable)
+        return self.coordinator.data.get("cwu_target_temp_effective", 45.0)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -281,7 +298,10 @@ class CWUTargetTempSensor(CWUControllerBaseSensor):
         if self.coordinator.data is None:
             return {}
         return {
+            "cwu_target_temp_base": self.coordinator.data.get("cwu_target_temp"),
             "cwu_min_temp": self.coordinator.data.get("cwu_min_temp"),
+            "cwu_min_temp_effective": self.coordinator.data.get("cwu_min_temp_effective"),
+            "bsb_offset_active": self.coordinator.data.get("bsb_offset_active", False),
             "salon_target_temp": self.coordinator.data.get("salon_target_temp"),
         }
 

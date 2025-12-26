@@ -143,6 +143,14 @@ BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
 BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before fallback to HA cloud
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
+# BSB-LAN CWU Temperature Offsets
+# BSB 8830 sensor is at bottom of tank, HA sensor is higher (middle)
+# BSB reads ~10°C lower than HA for same actual water state
+# When using BSB for temp reading, thresholds must be adjusted
+BSB_CWU_TARGET_OFFSET: Final = 10.0  # Add to target when using BSB temp reading
+BSB_CWU_MIN_OFFSET: Final = 0.0      # Add to min temp (0 for now, may adjust later)
+BSB_CWU_CRITICAL_OFFSET: Final = 0.0  # Add to critical temp (0 for now, may adjust later)
+
 # BSB-LAN Parameters for reading
 BSB_LAN_READ_PARAMS: Final = "700,1600,8000,8003,8006,8412,8410,8830,8700"
 
@@ -177,3 +185,40 @@ CONTROL_SOURCE_HA_CLOUD: Final = "ha_cloud"
 
 # BSB-LAN fake heating detection
 BSB_FAKE_HEATING_DETECTION_TIME: Final = 5  # Minutes of "charging but no compressor" before detection
+
+# =============================================================================
+# BROKEN HEATER MODE - Refactored Constants
+# =============================================================================
+
+# Time-of-Day Floor Window (podłogówka tylko w tym oknie jeśli CWU OK)
+BROKEN_HEATER_FLOOR_WINDOW_START: Final = 3   # 03:00
+BROKEN_HEATER_FLOOR_WINDOW_END: Final = 6     # 06:00
+
+# Anti-Oscillation: Minimum Hold Times (z HP status check)
+MIN_CWU_HEATING_TIME: Final = 15    # 15 min min na CWU przed przełączeniem
+MIN_FLOOR_HEATING_TIME: Final = 20  # 20 min min na floor przed przełączeniem
+
+# Max Temp Detection (pompa nie daje rady więcej)
+MAX_TEMP_DETECTION_WINDOW: Final = 30        # 30 min obserwacji flow temp
+MAX_TEMP_FLOW_STAGNATION: Final = 2.0        # Flow temp nie rośnie o >2°C = stagnacja
+MAX_TEMP_ELECTRIC_FALLBACK_COUNT: Final = 2  # 2x "Charging electric" = max osiągnięty
+MAX_TEMP_ACCEPTABLE_DROP: Final = 5.0        # Spadek o 5°C od max = OK
+MAX_TEMP_CRITICAL_THRESHOLD: Final = 38.0    # Poniżej 38°C spadek nieakceptowalny
+
+# Rapid Drop Detection (pobór CWU - kąpiel)
+CWU_RAPID_DROP_THRESHOLD: Final = 5.0   # 5°C spadek = ktoś się kąpie
+CWU_RAPID_DROP_WINDOW: Final = 15       # w ciągu 15 min
+CWU_RAPID_DROP_IGNORE_ABOVE: Final = 45.0  # Ignoruj rapid drop gdy temp > 45°C (droga strefa ~3.6kW)
+
+# HP Status Check before restart
+HP_RESTART_MIN_WAIT: Final = 5  # 5 min min czekania po fake heating
+HP_STATUS_DEFROSTING: Final = "Defrost"  # substring - HP rozmraża
+HP_STATUS_OVERRUN: Final = "Overrun"     # substring - dobieg pompy
+
+# DHW Status Check
+DHW_STATUS_CHARGED: Final = "charged"  # substring - pompa osiągnęła cel (case insensitive)
+
+# Outside Temp Thresholds (info only, nie zmieniamy targetu)
+OUTSIDE_TEMP_COLD: Final = 0      # < 0°C - pompa mniej wydajna
+OUTSIDE_TEMP_VERY_COLD: Final = -5
+OUTSIDE_TEMP_EXTREME: Final = -10

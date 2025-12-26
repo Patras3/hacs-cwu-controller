@@ -95,6 +95,26 @@ from .const import (
     CONTROL_SOURCE_HA_CLOUD,
     BSB_FAKE_HEATING_DETECTION_TIME,
     BSB_LAN_STATE_VERIFY_INTERVAL,
+    BSB_CWU_TARGET_OFFSET,
+    BSB_CWU_MIN_OFFSET,
+    BSB_CWU_CRITICAL_OFFSET,
+    # Broken heater mode refactored constants
+    BROKEN_HEATER_FLOOR_WINDOW_START,
+    BROKEN_HEATER_FLOOR_WINDOW_END,
+    MIN_CWU_HEATING_TIME,
+    MIN_FLOOR_HEATING_TIME,
+    MAX_TEMP_DETECTION_WINDOW,
+    MAX_TEMP_FLOW_STAGNATION,
+    MAX_TEMP_ELECTRIC_FALLBACK_COUNT,
+    MAX_TEMP_ACCEPTABLE_DROP,
+    MAX_TEMP_CRITICAL_THRESHOLD,
+    CWU_RAPID_DROP_THRESHOLD,
+    CWU_RAPID_DROP_WINDOW,
+    CWU_RAPID_DROP_IGNORE_ABOVE,
+    HP_RESTART_MIN_WAIT,
+    HP_STATUS_DEFROSTING,
+    HP_STATUS_OVERRUN,
+    DHW_STATUS_CHARGED,
 )
 from .bsb_lan import BSBLanClient
 
@@ -172,6 +192,22 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # BSB-LAN fake heating detection
         self._bsb_dhw_charging_no_compressor_since: datetime | None = None
+
+        # Anti-oscillation: last mode switch timestamp
+        self._last_mode_switch: datetime | None = None
+
+        # Max temp detection (pompa nie daje rady więcej)
+        self._max_temp_achieved: float | None = None  # Najwyższa osiągnięta temp
+        self._max_temp_at: datetime | None = None  # Kiedy zaczęliśmy sprawdzać
+        self._electric_fallback_count: int = 0  # Ile razy "Charging electric"
+        self._flow_temp_at_max_check: float | None = None  # Flow temp na początku okna
+
+        # Rapid drop detection (pobór CWU - kąpiel)
+        self._cwu_temp_history_bsb: list[tuple[datetime, float]] = []  # Historia temp BSB 8830
+
+        # HP wait for ready (po fake heating)
+        self._hp_waiting_for_ready: bool = False
+        self._hp_waiting_since: datetime | None = None
 
         # Energy tracking (kWh accumulated) - split by tariff type
         # Today's accumulated energy
@@ -488,9 +524,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         return False
 
     def get_winter_cwu_target(self) -> float:
-        """Get CWU target temperature for winter mode (base + offset, max 55°C)."""
+        """Get CWU target temperature for winter mode.
+
+        Applies winter offset (+5°C) and BSB offset (+10°C if using BSB sensor).
+        Capped at WINTER_CWU_MAX_TEMP (55°C) - compressor limit.
+        """
         base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        return min(base_target + WINTER_CWU_TARGET_OFFSET, WINTER_CWU_MAX_TEMP)
+        target = base_target + WINTER_CWU_TARGET_OFFSET + self._get_bsb_offset()
+        return min(target, WINTER_CWU_MAX_TEMP)
 
     def get_winter_cwu_emergency_threshold(self) -> float:
         """Get temperature below which CWU heating is forced outside windows."""
@@ -571,15 +612,40 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._log_action("Started in idle state after restart")
             _LOGGER.info("CWU Controller: Starting in idle state")
 
+    def _is_using_bsb_temp(self) -> bool:
+        """Check if we're using BSB sensor for CWU temperature."""
+        return self._bsb_lan_data is not None and self._bsb_lan_data.get("cwu_temp") is not None
+
+    def _get_bsb_offset(self) -> float:
+        """Get BSB target offset if using BSB sensor, otherwise 0."""
+        if self._is_using_bsb_temp():
+            return BSB_CWU_TARGET_OFFSET
+        return 0.0
+
+    def _get_min_temp(self) -> float:
+        """Get CWU min temperature, adjusted for sensor source."""
+        base = self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP)
+        if self._is_using_bsb_temp():
+            return base + BSB_CWU_MIN_OFFSET
+        return base
+
+    def _get_critical_temp(self) -> float:
+        """Get CWU critical temperature, adjusted for sensor source."""
+        base = self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
+        if self._is_using_bsb_temp():
+            return base + BSB_CWU_CRITICAL_OFFSET
+        return base
+
     def _calculate_cwu_urgency(self, cwu_temp: float | None, current_hour: int) -> int:
         """Calculate CWU heating urgency."""
         if cwu_temp is None:
             # Sensor unavailable - assume medium urgency
             return URGENCY_MEDIUM
 
-        target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        min_temp = self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP)
-        critical = self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
+        # Get thresholds adjusted for BSB offset (if using BSB sensor)
+        target = self._get_target_temp()
+        min_temp = self._get_min_temp()
+        critical = self._get_critical_temp()
 
         # Evening/bath time - more aggressive
         if current_hour >= BATH_TIME_HOUR:
@@ -1614,11 +1680,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "fake_heating": fake_heating,
             "enabled": self._enabled,
             "manual_override": self._manual_override,
+            "manual_override_until": self._manual_override_until.isoformat() if self._manual_override_until else None,
             "cwu_heating_minutes": 0,
             "state_history": self._state_history[-20:],
             "action_history": self._action_history[-20:],
             "cwu_target_temp": self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP),
+            "cwu_target_temp_effective": self._get_target_temp(),  # Adjusted for BSB offset
             "cwu_min_temp": self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP),
+            "cwu_min_temp_effective": self._get_min_temp(),  # Adjusted for BSB offset
+            "bsb_offset_active": self._get_bsb_offset() > 0,
             "salon_target_temp": self.config.get("salon_target_temp", DEFAULT_SALON_TARGET_TEMP),
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
@@ -1685,6 +1755,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "bsb_lan": self._bsb_lan_data,
             "bsb_lan_available": self._bsb_client.is_available,
             "control_source": self._control_source,
+            # Anti-oscillation data (broken_heater mode)
+            "last_mode_switch": self._last_mode_switch.isoformat() if self._last_mode_switch else None,
+            "hold_time_remaining": self._get_hold_time_remaining(),
+            "can_switch_to_cwu": self._can_switch_mode(self._current_state, STATE_HEATING_CWU)[0] if self._operating_mode == MODE_BROKEN_HEATER else True,
+            "can_switch_to_floor": self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)[0] if self._operating_mode == MODE_BROKEN_HEATER else True,
+            "switch_blocked_reason": self._get_switch_blocked_reason(),
+            # HP status (broken_heater mode)
+            "hp_ready": self._is_hp_ready_for_cwu()[0] if self._operating_mode == MODE_BROKEN_HEATER else True,
+            "hp_ready_reason": self._is_hp_ready_for_cwu()[1] if self._operating_mode == MODE_BROKEN_HEATER else "OK",
+            # Max temp tracking (broken_heater mode)
+            "max_temp_achieved": self._max_temp_achieved,
+            "electric_fallback_count": self._electric_fallback_count,
+            "max_temp_detected": self._max_temp_achieved is not None,
+            # Night floor window (broken_heater mode)
+            "is_night_floor_window": BROKEN_HEATER_FLOOR_WINDOW_START <= now.hour < BROKEN_HEATER_FLOOR_WINDOW_END if self._operating_mode == MODE_BROKEN_HEATER else False,
         }
 
         if self._fake_heating_detected_at:
@@ -1717,22 +1802,36 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 await self._async_set_floor_off()
                 await self._async_send_notification(
                     "CWU Controller Alert (Manual Mode)",
-                    f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
-                    f"CWU temp: {cwu_temp}°C. Restarting in {FAKE_HEATING_RESTART_WAIT} min..."
+                    f"Fake heating detected! Pump trying electric heater (broken). "
+                    f"CWU temp: {cwu_temp}°C. Waiting {HP_RESTART_MIN_WAIT}+ min for HP ready..."
                 )
-                self._log_action(f"Manual mode: Fake heating detected - all OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+                self._log_action(f"Manual mode: Fake heating detected - all OFF, waiting {HP_RESTART_MIN_WAIT}+ min")
 
-        # Handle fake heating restart in manual mode
+        # Handle fake heating restart in manual mode (with HP ready check)
         if self._manual_override and self._current_state == STATE_FAKE_HEATING_DETECTED:
             if self._fake_heating_detected_at:
                 elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
-                if elapsed >= FAKE_HEATING_RESTART_WAIT:
-                    # Just restart CWU - everything is already stopped
-                    await self._async_set_cwu_on()
-                    self._fake_heating_detected_at = None
-                    self._change_state(STATE_HEATING_CWU)
-                    self._cwu_heating_start = now  # Reset heating start for next detection
-                    self._log_action("Manual mode: CWU restarted after fake heating")
+
+                # Wait minimum time before checking HP
+                if elapsed < HP_RESTART_MIN_WAIT:
+                    return data  # Still waiting
+
+                # Check if HP is ready
+                hp_ready, hp_reason = self._is_hp_ready_for_cwu()
+                if not hp_ready:
+                    # Log every 2 minutes while waiting
+                    if int(elapsed) % 2 == 0 and int(elapsed) != int(elapsed - 1):
+                        self._log_action(f"Manual mode: Waiting for HP ready - {hp_reason}")
+                    return data  # Keep waiting
+
+                # HP ready - restart CWU
+                await self._async_set_cwu_on()
+                self._fake_heating_detected_at = None
+                self._change_state(STATE_HEATING_CWU)
+                self._cwu_heating_start = now  # Reset heating start for next detection
+                self._last_mode_switch = now  # For anti-oscillation
+                self._reset_max_temp_tracking()  # Reset max temp for new session
+                self._log_action(f"Manual mode: HP ready - CWU restarted after {elapsed:.1f} min wait")
 
         if self._manual_override:
             return data
@@ -1831,6 +1930,258 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             cwu_urgency, floor_urgency, fake_heating, cwu_temp, salon_temp
         )
 
+    # =========================================================================
+    # BROKEN HEATER MODE - Helper Methods (Refactored)
+    # =========================================================================
+
+    def _is_hp_ready_for_cwu(self) -> tuple[bool, str]:
+        """Check if heat pump is ready to start CWU heating.
+
+        Returns False during:
+        - Compressor off time min active (mandatory rest)
+        - Defrosting active
+        - Overrun active (pump circulation)
+        """
+        if not self._bsb_lan_data:
+            # BSB-LAN unavailable - assume ready (fallback mode)
+            return (True, "BSB unavailable, assuming ready")
+
+        hp_status = self._bsb_lan_data.get("hp_status", "")
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+
+        # Compressor mandatory rest period
+        if BSB_HP_OFF_TIME_ACTIVE.lower() in hp_status.lower():
+            return (False, "HP: Compressor off time")
+
+        # Defrosting
+        if HP_STATUS_DEFROSTING.lower() in hp_status.lower():
+            return (False, "HP: Defrosting")
+
+        # Overrun (pump circulation after heating)
+        if HP_STATUS_OVERRUN.lower() in hp_status.lower():
+            return (False, "HP: Overrun")
+        if HP_STATUS_OVERRUN.lower() in dhw_status.lower():
+            return (False, "DHW: Overrun")
+
+        return (True, "HP ready")
+
+    def _can_switch_mode(self, from_state: str, to_state: str) -> tuple[bool, str]:
+        """Check if mode switch is allowed (anti-oscillation + HP check).
+
+        Returns:
+            Tuple of (allowed: bool, reason: str)
+        """
+        now = datetime.now()
+
+        # Check minimum hold times
+        if self._last_mode_switch is not None:
+            elapsed = (now - self._last_mode_switch).total_seconds() / 60
+
+            if from_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU) and elapsed < MIN_CWU_HEATING_TIME:
+                return (False, f"CWU hold: {MIN_CWU_HEATING_TIME - elapsed:.0f}min left")
+
+            if from_state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR) and elapsed < MIN_FLOOR_HEATING_TIME:
+                return (False, f"Floor hold: {MIN_FLOOR_HEATING_TIME - elapsed:.0f}min left")
+
+        # HP check before switching TO CWU
+        if to_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            hp_ready, hp_reason = self._is_hp_ready_for_cwu()
+            if not hp_ready:
+                return (False, hp_reason)
+
+        return (True, "OK")
+
+    def _get_hold_time_remaining(self) -> float:
+        """Get remaining hold time in minutes before mode switch is allowed.
+
+        Returns:
+            Remaining minutes (0 if no hold active)
+        """
+        if self._last_mode_switch is None:
+            return 0.0
+
+        elapsed = (datetime.now() - self._last_mode_switch).total_seconds() / 60
+
+        # Check which hold time applies based on current state
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            remaining = MIN_CWU_HEATING_TIME - elapsed
+        elif self._current_state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR):
+            remaining = MIN_FLOOR_HEATING_TIME - elapsed
+        else:
+            return 0.0
+
+        return max(0.0, remaining)
+
+    def _get_switch_blocked_reason(self) -> str:
+        """Get reason why mode switch is blocked (or empty if not blocked).
+
+        Returns:
+            Reason string (empty if switch is allowed)
+        """
+        # Check hold time first
+        hold_remaining = self._get_hold_time_remaining()
+        if hold_remaining > 0:
+            if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+                return f"CWU hold: {hold_remaining:.0f}min left"
+            elif self._current_state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR):
+                return f"Floor hold: {hold_remaining:.0f}min left"
+
+        # Check HP status if trying to switch to CWU
+        hp_ready, hp_reason = self._is_hp_ready_for_cwu()
+        if not hp_ready:
+            return hp_reason
+
+        return ""
+
+    def _detect_max_temp_achieved(self) -> bool:
+        """Detect if pump reached max temp for current outside temperature.
+
+        Criteria:
+        1. Flow temp (8412) not rising significantly for 30 min
+        2. Pump tried electric heater 2+ times (Charging electric)
+        3. Remember this temp as max
+
+        Returns True if max temp detected (should switch to floor).
+        """
+        if not self._bsb_lan_data:
+            return False
+
+        flow_temp = self._bsb_lan_data.get("flow_temp")
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+        cwu_temp = self._bsb_lan_data.get("cwu_temp")
+
+        # Count "Charging electric" occurrences
+        if "electric" in dhw_status.lower():
+            self._electric_fallback_count += 1
+            _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count}")
+
+        # Initialize flow temp tracking
+        if self._flow_temp_at_max_check is None:
+            self._flow_temp_at_max_check = flow_temp
+            self._max_temp_at = datetime.now()
+            return False
+
+        if flow_temp is None or self._flow_temp_at_max_check is None:
+            return False
+
+        flow_rise = flow_temp - self._flow_temp_at_max_check
+        elapsed = (datetime.now() - self._max_temp_at).total_seconds() / 60 if self._max_temp_at else 0
+
+        if elapsed >= MAX_TEMP_DETECTION_WINDOW:
+            # Check if flow stagnated AND electric fallback happened
+            if flow_rise < MAX_TEMP_FLOW_STAGNATION and self._electric_fallback_count >= MAX_TEMP_ELECTRIC_FALLBACK_COUNT:
+                # Max reached
+                self._max_temp_achieved = cwu_temp
+                self._log_action(
+                    f"Max temp detected: {cwu_temp}°C (flow stagnant +{flow_rise:.1f}°C, electric x{self._electric_fallback_count})"
+                )
+                return True
+
+            # Reset for next window
+            self._flow_temp_at_max_check = flow_temp
+            self._max_temp_at = datetime.now()
+            self._electric_fallback_count = 0
+
+        return False
+
+    def _is_cwu_temp_acceptable(self, cwu_temp: float | None) -> bool:
+        """Check if current CWU temp is acceptable.
+
+        If we achieved max (e.g. 45°C), drop to 40°C is OK.
+        But if max was 38°C, drop to 33°C is NOT acceptable.
+
+        Note: Thresholds are adjusted for BSB offset when using BSB sensor.
+        """
+        if cwu_temp is None:
+            return False
+
+        # Absolute minimum (adjusted for BSB offset - uses critical offset, not target offset)
+        critical_threshold = MAX_TEMP_CRITICAL_THRESHOLD
+        if self._is_using_bsb_temp():
+            critical_threshold += BSB_CWU_CRITICAL_OFFSET
+        if cwu_temp < critical_threshold:
+            return False
+
+        # If we have recorded max
+        if self._max_temp_achieved is not None:
+            drop = self._max_temp_achieved - cwu_temp
+            if drop <= MAX_TEMP_ACCEPTABLE_DROP:  # <= 5°C from max
+                return True
+            return False
+
+        # No max recorded - use standard target (already BSB-adjusted)
+        target = self._get_target_temp()
+        return cwu_temp >= target - 3.0  # 3°C margin
+
+    def _detect_rapid_drop(self) -> tuple[bool, float]:
+        """Detect rapid CWU temperature drop (hot water usage / bath).
+
+        Uses BSB 8830 (bottom of tank) for fast detection.
+
+        Returns:
+            Tuple of (drop_detected: bool, drop_amount: float)
+        """
+        if not self._bsb_lan_data:
+            return (False, 0.0)
+
+        cwu_temp = self._bsb_lan_data.get("cwu_temp")
+        if cwu_temp is None:
+            return (False, 0.0)
+
+        now = datetime.now()
+        self._cwu_temp_history_bsb.append((now, cwu_temp))
+
+        # Keep only last CWU_RAPID_DROP_WINDOW minutes
+        cutoff = now - timedelta(minutes=CWU_RAPID_DROP_WINDOW)
+        self._cwu_temp_history_bsb = [(t, temp) for t, temp in self._cwu_temp_history_bsb if t > cutoff]
+
+        if len(self._cwu_temp_history_bsb) < 2:
+            return (False, 0.0)
+
+        # Get max temp in window
+        max_temp = max(temp for _, temp in self._cwu_temp_history_bsb)
+        drop = max_temp - cwu_temp
+
+        if drop >= CWU_RAPID_DROP_THRESHOLD:  # >= 5°C
+            self._log_action(f"Rapid CWU drop detected: {drop:.1f}°C in {CWU_RAPID_DROP_WINDOW}min (bath?)")
+            return (True, drop)
+
+        return (False, drop)
+
+    def _is_pump_charged(self) -> bool:
+        """Check if pump reports CWU is charged (reached target).
+
+        DHW status contains 'Charged' when pump finished heating.
+        """
+        if not self._bsb_lan_data:
+            return False
+
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+        return DHW_STATUS_CHARGED in dhw_status.lower()
+
+    def _get_target_temp(self) -> float:
+        """Get CWU target temperature, adjusted for sensor source.
+
+        BSB 8830 sensor is at bottom of tank, reads ~10°C lower than HA sensor.
+        When using BSB for temp reading, target must be +10°C higher.
+
+        Returns:
+            Target temp adjusted for current sensor source.
+        """
+        base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
+        return base_target + self._get_bsb_offset()
+
+    def _reset_max_temp_tracking(self) -> None:
+        """Reset max temp tracking for new CWU session."""
+        self._max_temp_achieved = None
+        self._max_temp_at = None
+        self._electric_fallback_count = 0
+        self._flow_temp_at_max_check = None
+
+    # =========================================================================
+    # BROKEN HEATER MODE - Main Logic (Refactored)
+    # =========================================================================
+
     async def _run_broken_heater_mode_logic(
         self,
         cwu_urgency: int,
@@ -1839,49 +2190,84 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         cwu_temp: float | None,
         salon_temp: float | None,
     ) -> None:
-        """Run control logic for broken heater mode (original behavior)."""
+        """Run control logic for broken heater mode (refactored).
 
-        # Handle fake heating detection - first detection
+        Strategy:
+        - CWU priority almost all day (except 03:00-06:00)
+        - Night window 03:00-06:00: floor if CWU is OK
+        - Respect HP states (Compressor off time, Defrosting, Overrun)
+        - Anti-oscillation via minimum hold times
+        - Max temp detection - give pump a break when it can't heat more
+        - Rapid CWU drop detection - interrupt floor for hot water emergency
+        """
+        now = datetime.now()
+        current_hour = now.hour
+
+        # =====================================================================
+        # Phase 1: Handle fake heating detection (first detection)
+        # =====================================================================
         if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             self._change_state(STATE_FAKE_HEATING_DETECTED)
-            self._fake_heating_detected_at = datetime.now()
+            self._fake_heating_detected_at = now
             self._low_power_start = None  # Reset to prevent duplicate detection
             # Turn off BOTH CWU and floor
             await self._async_set_cwu_off()
             await self._async_set_floor_off()
             await self._async_send_notification(
                 "CWU Controller Alert",
-                f"Fake heating detected! No power spike >{POWER_SPIKE_THRESHOLD}W for {FAKE_HEATING_DETECTION_TIME}+ minutes. "
-                f"CWU temp: {cwu_temp}°C. Waiting {FAKE_HEATING_RESTART_WAIT} min before restart..."
+                f"Fake heating detected! Pump tried to use broken heater. "
+                f"CWU temp: {cwu_temp}°C. Waiting {HP_RESTART_MIN_WAIT} min + HP ready check..."
             )
-            self._log_action(f"Fake heating detected - CWU+Floor OFF, waiting {FAKE_HEATING_RESTART_WAIT} min")
+            self._log_action(f"Fake heating detected - CWU+Floor OFF, waiting {HP_RESTART_MIN_WAIT} min + HP ready")
             return
 
-        # Handle fake heating restart - wait period complete
+        # =====================================================================
+        # Phase 2: Handle fake heating recovery (wait + HP ready check)
+        # =====================================================================
         if self._current_state == STATE_FAKE_HEATING_DETECTED and self._fake_heating_detected_at:
-            elapsed = (datetime.now() - self._fake_heating_detected_at).total_seconds() / 60
-            if elapsed >= FAKE_HEATING_RESTART_WAIT:
-                self._change_state(STATE_FAKE_HEATING_RESTARTING)
-                self._log_action("Fake heating wait complete - restarting CWU (floor stays off)...")
-                # Ensure floor is off, then turn on CWU only
-                await self._async_set_floor_off()
-                await self._async_set_cwu_on()
-                self._low_power_start = None
-                self._fake_heating_detected_at = None
-                self._change_state(STATE_HEATING_CWU)
-                self._cwu_heating_start = datetime.now()  # Reset for next detection cycle
-                self._log_action("CWU restarted after fake heating recovery")
+            elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
+
+            # Wait minimum time
+            if elapsed < HP_RESTART_MIN_WAIT:
+                return
+
+            # Check HP status before restarting
+            hp_ready, hp_reason = self._is_hp_ready_for_cwu()
+            if not hp_ready:
+                # Log only every 2 minutes to avoid spam
+                if int(elapsed) % 2 == 0:
+                    self._log_action(f"Fake heating recovery waiting: {hp_reason}")
+                return
+
+            # HP ready - restart CWU
+            self._change_state(STATE_FAKE_HEATING_RESTARTING)
+            self._log_action("HP ready - restarting CWU after fake heating")
+            await self._async_set_floor_off()
+            await self._async_set_cwu_on()
+            self._low_power_start = None
+            self._fake_heating_detected_at = None
+            self._change_state(STATE_HEATING_CWU)
+            self._cwu_heating_start = now
+            self._last_mode_switch = now
+            self._reset_max_temp_tracking()
+            # Set session start temp
+            cwu_start_temp = self._get_cwu_temperature()
+            self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
+            self._log_action(f"CWU restarted after fake heating (temp: {self._cwu_session_start_temp}°C)")
             return
 
-        # Handle pause state
+        # =====================================================================
+        # Phase 3: Handle pause state (3h limit)
+        # =====================================================================
         if self._current_state == STATE_PAUSE:
             if self._is_pause_complete():
                 self._pause_start = None
                 # Resume CWU heating - start new session
                 await self._async_set_cwu_on()
                 self._change_state(STATE_HEATING_CWU)
-                self._cwu_heating_start = datetime.now()
-                # Get session start temp (BSB-LAN preferred)
+                self._cwu_heating_start = now
+                self._last_mode_switch = now
+                self._reset_max_temp_tracking()
                 cwu_start_temp = self._get_cwu_temperature()
                 if cwu_start_temp is None:
                     cwu_start_temp = self._last_known_cwu_temp
@@ -1889,10 +2275,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._log_action(f"Pause complete, starting new CWU session (temp: {cwu_start_temp}°C)")
             return
 
-        # Check 3-hour CWU limit
+        # =====================================================================
+        # Phase 4: Check 3-hour CWU limit
+        # =====================================================================
         if self._current_state == STATE_HEATING_CWU and self._should_restart_cwu_cycle():
             self._change_state(STATE_PAUSE)
-            self._pause_start = datetime.now()
+            self._pause_start = now
             self._cwu_heating_start = None
             await self._async_set_cwu_off()
             await self._async_set_floor_off()
@@ -1904,76 +2292,196 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             )
             return
 
-        # Emergency handling
+        # =====================================================================
+        # Phase 5: Rapid drop detection (bath/shower) - highest priority
+        # =====================================================================
+        drop_detected, drop_amount = self._detect_rapid_drop()
+        if drop_detected and self._current_state == STATE_HEATING_FLOOR:
+            # Get current CWU temp (prefer BSB for accuracy)
+            current_cwu_temp = (
+                self._bsb_lan_data.get("cwu_temp") if self._bsb_lan_data
+                else cwu_temp  # fallback to HA sensor
+            )
+
+            # Ignore rapid drop if temp is still high (above 45°C)
+            # Heating above 45°C is expensive (~3.6kW), let it drop naturally
+            if current_cwu_temp is not None and current_cwu_temp > CWU_RAPID_DROP_IGNORE_ABOVE:
+                self._log_action(
+                    f"Rapid drop {drop_amount:.1f}°C detected but ignored - "
+                    f"temp {current_cwu_temp:.1f}°C > {CWU_RAPID_DROP_IGNORE_ABOVE}°C (expensive zone)"
+                )
+                # Don't return - continue to other phases
+            else:
+                # Temp is low enough, react to rapid drop
+                can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_EMERGENCY_CWU)
+                if can_switch:
+                    self._log_action(f"Rapid CWU drop {drop_amount:.1f}°C - emergency switch to CWU")
+                    await self._switch_to_cwu()
+                    self._change_state(STATE_EMERGENCY_CWU)
+                    self._cwu_heating_start = now
+                    self._last_mode_switch = now
+                    self._reset_max_temp_tracking()
+                    await self._async_send_notification(
+                        "CWU Drop Detected",
+                        f"Hot water usage detected ({drop_amount:.1f}°C drop). "
+                        f"Temp at {current_cwu_temp:.1f}°C - starting emergency CWU heating."
+                    )
+                else:
+                    self._log_action(f"Rapid drop detected but switch blocked: {reason}")
+                return
+
+        # =====================================================================
+        # Phase 6: Max temp detection (pump can't heat more)
+        # =====================================================================
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            if self._detect_max_temp_achieved():
+                can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
+                if can_switch:
+                    self._log_action(f"Max temp {self._max_temp_achieved}°C reached - switching to floor")
+                    await self._switch_to_floor()
+                    self._change_state(STATE_HEATING_FLOOR)
+                    self._cwu_heating_start = None
+                    self._last_mode_switch = now
+                    await self._async_send_notification(
+                        "CWU Max Temp Reached",
+                        f"Pump reached maximum achievable temp: {self._max_temp_achieved}°C. "
+                        f"Switching to floor heating."
+                    )
+                else:
+                    self._log_action(f"Max temp reached but switch blocked: {reason}")
+                return
+
+        # =====================================================================
+        # Phase 7: Night window 03:00-06:00 - floor if CWU OK
+        # =====================================================================
+        if BROKEN_HEATER_FLOOR_WINDOW_START <= current_hour < BROKEN_HEATER_FLOOR_WINDOW_END:
+            if self._is_cwu_temp_acceptable(cwu_temp) and cwu_urgency < URGENCY_CRITICAL:
+                if self._current_state != STATE_HEATING_FLOOR:
+                    can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
+                    if can_switch:
+                        self._log_action(f"Night window: CWU OK ({cwu_temp}°C), switching to floor")
+                        await self._switch_to_floor()
+                        self._change_state(STATE_HEATING_FLOOR)
+                        self._cwu_heating_start = None
+                        self._last_mode_switch = now
+                    else:
+                        _LOGGER.debug(f"Night window floor switch blocked: {reason}")
+                return
+            # CWU not acceptable in night window - continue to normal logic
+
+        # =====================================================================
+        # Phase 8: Emergency handling (critical urgencies)
+        # =====================================================================
         if cwu_urgency == URGENCY_CRITICAL and floor_urgency != URGENCY_CRITICAL:
             if self._current_state != STATE_EMERGENCY_CWU:
-                await self._switch_to_cwu()
-                self._change_state(STATE_EMERGENCY_CWU)
-                await self._async_send_notification(
-                    "CWU Emergency!",
-                    f"CWU critically low: {cwu_temp}°C! Switching to CWU heating."
-                )
+                can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_CWU)
+                if can_switch:
+                    await self._switch_to_cwu()
+                    self._change_state(STATE_EMERGENCY_CWU)
+                    self._cwu_heating_start = now
+                    self._last_mode_switch = now
+                    self._reset_max_temp_tracking()
+                    await self._async_send_notification(
+                        "CWU Emergency!",
+                        f"CWU critically low: {cwu_temp}°C! Switching to emergency CWU heating."
+                    )
+                else:
+                    self._log_action(f"CWU emergency delayed: {reason}")
             return
 
         if floor_urgency == URGENCY_CRITICAL and cwu_urgency != URGENCY_CRITICAL:
             if self._current_state != STATE_EMERGENCY_FLOOR:
-                await self._switch_to_floor()
-                self._change_state(STATE_EMERGENCY_FLOOR)
-                await self._async_send_notification(
-                    "Floor Emergency!",
-                    f"Room too cold: Salon {salon_temp}°C! Switching to floor heating."
-                )
+                can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_FLOOR)
+                if can_switch:
+                    await self._switch_to_floor()
+                    self._change_state(STATE_EMERGENCY_FLOOR)
+                    self._cwu_heating_start = None
+                    self._last_mode_switch = now
+                    await self._async_send_notification(
+                        "Floor Emergency!",
+                        f"Room too cold: Salon {salon_temp}°C! Switching to floor heating."
+                    )
+                else:
+                    self._log_action(f"Floor emergency delayed: {reason}")
             return
 
-        # Both critical - alternate every 30 minutes
+        # Both critical - alternate every 45 minutes (longer than before)
         if cwu_urgency == URGENCY_CRITICAL and floor_urgency == URGENCY_CRITICAL:
-            minutes_in_state = (datetime.now() - self._last_state_change).total_seconds() / 60
-            if minutes_in_state >= 30:
+            minutes_in_state = (now - self._last_state_change).total_seconds() / 60
+            if minutes_in_state >= 45:
                 if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
                     await self._switch_to_floor()
                     self._change_state(STATE_EMERGENCY_FLOOR)
+                    self._last_mode_switch = now
                 else:
                     await self._switch_to_cwu()
                     self._change_state(STATE_EMERGENCY_CWU)
+                    self._cwu_heating_start = now
+                    self._last_mode_switch = now
+                    self._reset_max_temp_tracking()
             return
 
-        # Normal decision logic
-        if cwu_urgency >= URGENCY_HIGH and floor_urgency <= URGENCY_LOW:
-            # CWU needs attention, floor is fine
-            if self._current_state != STATE_HEATING_CWU:
-                await self._switch_to_cwu()
-                self._change_state(STATE_HEATING_CWU)
-                self._cwu_heating_start = datetime.now()
+        # =====================================================================
+        # Phase 9: Normal operation - CWU priority (daytime)
+        # =====================================================================
+        target = self._get_target_temp()
+
+        # Currently heating floor - check if should resume CWU
+        if self._current_state == STATE_HEATING_FLOOR:
+            should_resume = False
+            resume_reason = ""
+
+            if cwu_temp is not None and cwu_temp < target - 3.0:
+                should_resume = True
+                resume_reason = f"temp {cwu_temp}°C < target-3 ({target - 3.0}°C)"
+            elif cwu_urgency >= URGENCY_HIGH:
+                should_resume = True
+                resume_reason = f"urgency HIGH ({cwu_urgency})"
+            elif not self._is_cwu_temp_acceptable(cwu_temp):
+                should_resume = True
+                resume_reason = f"temp {cwu_temp}°C not acceptable"
+
+            if should_resume:
+                can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
+                if can_switch:
+                    self._log_action(f"Resuming CWU: {resume_reason}")
+                    await self._switch_to_cwu()
+                    self._change_state(STATE_HEATING_CWU)
+                    self._cwu_heating_start = now
+                    self._last_mode_switch = now
+                    self._reset_max_temp_tracking()
+                    # Set session start temp
+                    cwu_start_temp = self._get_cwu_temperature()
+                    self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
+                else:
+                    _LOGGER.debug(f"CWU resume blocked: {reason}")
             return
 
-        if floor_urgency >= URGENCY_HIGH and cwu_urgency <= URGENCY_LOW:
-            # Floor needs attention, CWU is fine
-            if self._current_state != STATE_HEATING_FLOOR:
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-                self._cwu_heating_start = None
+        # Currently heating CWU - check if should switch to floor
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            # Check if pump reports "Charged" (reached target)
+            if self._is_pump_charged():
+                can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
+                if can_switch:
+                    self._log_action(f"Pump reports Charged ({cwu_temp}°C), switching to floor")
+                    await self._switch_to_floor()
+                    self._change_state(STATE_HEATING_FLOOR)
+                    self._cwu_heating_start = None
+                    self._last_mode_switch = now
+                else:
+                    _LOGGER.debug(f"Floor switch after Charged blocked: {reason}")
             return
 
-        # Medium urgencies - prefer CWU if approaching evening
-        if cwu_urgency >= URGENCY_MEDIUM and datetime.now().hour >= EVENING_PREP_HOUR:
-            if self._current_state != STATE_HEATING_CWU:
-                await self._switch_to_cwu()
-                self._change_state(STATE_HEATING_CWU)
-                self._cwu_heating_start = datetime.now()
-            return
-
-        # Default: floor heating (keep house warm)
-        if self._current_state not in (STATE_HEATING_FLOOR, STATE_IDLE):
-            # Check if CWU is at target before switching to floor
-            target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-            if cwu_temp is not None and cwu_temp >= target:
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-                self._cwu_heating_start = None
-        elif self._current_state == STATE_IDLE:
-            # Start with floor heating by default
-            await self._switch_to_floor()
-            self._change_state(STATE_HEATING_FLOOR)
+        # Idle - start with CWU (priority)
+        if self._current_state == STATE_IDLE:
+            self._log_action("Starting CWU heating (idle → CWU)")
+            await self._switch_to_cwu()
+            self._change_state(STATE_HEATING_CWU)
+            self._cwu_heating_start = now
+            self._last_mode_switch = now
+            self._reset_max_temp_tracking()
+            cwu_start_temp = self._get_cwu_temperature()
+            self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
 
     async def _run_winter_mode_logic(
         self,

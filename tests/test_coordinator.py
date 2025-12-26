@@ -15,6 +15,7 @@ from custom_components.cwu_controller.const import (
     STATE_PAUSE,
     STATE_EMERGENCY_CWU,
     STATE_EMERGENCY_FLOOR,
+    STATE_FAKE_HEATING_DETECTED,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -26,6 +27,15 @@ from custom_components.cwu_controller.const import (
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    MIN_CWU_HEATING_TIME,
+    MIN_FLOOR_HEATING_TIME,
+    CWU_RAPID_DROP_THRESHOLD,
+    CWU_RAPID_DROP_WINDOW,
+    MAX_TEMP_ACCEPTABLE_DROP,
+    MAX_TEMP_CRITICAL_THRESHOLD,
+    HP_STATUS_DEFROSTING,
+    HP_STATUS_OVERRUN,
+    BSB_HP_OFF_TIME_ACTIVE,
 )
 
 
@@ -885,3 +895,541 @@ class TestEnergyPersistence:
         assert mock_coordinator._last_meter_time is not None
         assert mock_coordinator._last_meter_state == STATE_HEATING_CWU
         assert mock_coordinator._last_meter_tariff_cheap is True
+
+
+class TestHPReadyForCWU:
+    """Tests for _is_hp_ready_for_cwu() - checks HP status before CWU restart."""
+
+    def test_hp_ready_no_bsb_data(self, mock_coordinator):
+        """Test HP is ready when no BSB data available."""
+        mock_coordinator._bsb_lan_data = None
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is True
+        assert "unavailable" in reason.lower() or "ready" in reason.lower()
+
+    def test_hp_ready_normal_status(self, mock_coordinator):
+        """Test HP is ready with normal status."""
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "Compressor",
+            "dhw_status": "Charging, nominal setpoint",
+        }
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is True
+        assert reason == "HP ready"
+
+    def test_hp_not_ready_compressor_off_time(self, mock_coordinator):
+        """Test HP not ready during compressor off time."""
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "Compressor off time min active",
+            "dhw_status": "Ready",
+        }
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is False
+        assert "off time" in reason.lower()
+
+    def test_hp_not_ready_defrosting(self, mock_coordinator):
+        """Test HP not ready during defrost cycle."""
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "Defrost active",
+            "dhw_status": "Ready",
+        }
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is False
+        assert "defrost" in reason.lower()
+
+    def test_hp_not_ready_overrun(self, mock_coordinator):
+        """Test HP not ready during overrun."""
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "Overrun active",
+            "dhw_status": "Ready",
+        }
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is False
+        assert "overrun" in reason.lower()
+
+    def test_hp_not_ready_dhw_overrun(self, mock_coordinator):
+        """Test HP not ready when DHW shows overrun."""
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "---",
+            "dhw_status": "Overrun",
+        }
+        ready, reason = mock_coordinator._is_hp_ready_for_cwu()
+        assert ready is False
+        assert "overrun" in reason.lower()
+
+
+class TestCanSwitchMode:
+    """Tests for _can_switch_mode() - anti-oscillation with hold times."""
+
+    def test_can_switch_no_previous_switch(self, mock_coordinator):
+        """Test can switch when no previous mode switch."""
+        mock_coordinator._last_mode_switch = None
+        mock_coordinator._bsb_lan_data = {"hp_status": "---", "dhw_status": "Ready"}
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
+        assert can_switch is True
+        assert reason == "OK"
+
+    def test_cannot_switch_cwu_hold_time(self, mock_coordinator):
+        """Test cannot switch from CWU before hold time."""
+        # MIN_CWU_HEATING_TIME is 15 minutes
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=10)
+        mock_coordinator._bsb_lan_data = {"hp_status": "---", "dhw_status": "Ready"}
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_CWU, STATE_HEATING_FLOOR)
+        assert can_switch is False
+        assert "cwu hold" in reason.lower()
+
+    def test_can_switch_cwu_after_hold_time(self, mock_coordinator):
+        """Test can switch from CWU after hold time."""
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=20)
+        mock_coordinator._bsb_lan_data = {"hp_status": "---", "dhw_status": "Ready"}
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_CWU, STATE_HEATING_FLOOR)
+        assert can_switch is True
+
+    def test_cannot_switch_floor_hold_time(self, mock_coordinator):
+        """Test cannot switch from floor before hold time."""
+        # MIN_FLOOR_HEATING_TIME is 20 minutes
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=15)
+        mock_coordinator._bsb_lan_data = {"hp_status": "---", "dhw_status": "Ready"}
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
+        assert can_switch is False
+        assert "floor hold" in reason.lower()
+
+    def test_can_switch_floor_after_hold_time(self, mock_coordinator):
+        """Test can switch from floor after hold time."""
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=25)
+        mock_coordinator._bsb_lan_data = {"hp_status": "---", "dhw_status": "Ready"}
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
+        assert can_switch is True
+
+    def test_cannot_switch_to_cwu_hp_not_ready(self, mock_coordinator):
+        """Test cannot switch to CWU when HP not ready."""
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=30)
+        mock_coordinator._bsb_lan_data = {
+            "hp_status": "Compressor off time min active",
+            "dhw_status": "Ready",
+        }
+        can_switch, reason = mock_coordinator._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
+        assert can_switch is False
+        assert "off time" in reason.lower()
+
+
+class TestDetectRapidDrop:
+    """Tests for _detect_rapid_drop() - detect bath/shower usage."""
+
+    def test_no_drop_no_bsb_data(self, mock_coordinator):
+        """Test no drop detected without BSB data."""
+        mock_coordinator._bsb_lan_data = None
+        detected, drop = mock_coordinator._detect_rapid_drop()
+        assert detected is False
+        assert drop == 0.0
+
+    def test_no_drop_insufficient_history(self, mock_coordinator):
+        """Test no drop detected with insufficient history."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 45.0}
+        mock_coordinator._cwu_temp_history_bsb = []
+        detected, drop = mock_coordinator._detect_rapid_drop()
+        assert detected is False
+
+    def test_rapid_drop_detected(self, mock_coordinator):
+        """Test rapid drop detected (5°C in 15 min = bath)."""
+        now = datetime.now()
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 40.0}  # Dropped from 45 to 40
+        mock_coordinator._cwu_temp_history_bsb = [
+            (now - timedelta(minutes=10), 45.0),
+            (now - timedelta(minutes=5), 43.0),
+        ]
+        mock_coordinator._log_action = MagicMock()
+        detected, drop = mock_coordinator._detect_rapid_drop()
+        assert detected is True
+        assert drop >= CWU_RAPID_DROP_THRESHOLD
+
+    def test_no_drop_gradual_decrease(self, mock_coordinator):
+        """Test no drop detected with gradual temperature decrease."""
+        now = datetime.now()
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 43.0}  # Only 2°C drop
+        mock_coordinator._cwu_temp_history_bsb = [
+            (now - timedelta(minutes=10), 45.0),
+            (now - timedelta(minutes=5), 44.0),
+        ]
+        detected, drop = mock_coordinator._detect_rapid_drop()
+        assert detected is False
+        assert drop < CWU_RAPID_DROP_THRESHOLD
+
+    def test_history_cleanup_old_entries(self, mock_coordinator):
+        """Test old history entries are cleaned up."""
+        now = datetime.now()
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 44.0}
+        # Include old entry that should be cleaned
+        mock_coordinator._cwu_temp_history_bsb = [
+            (now - timedelta(minutes=30), 50.0),  # Old - should be removed
+            (now - timedelta(minutes=5), 45.0),
+        ]
+        detected, drop = mock_coordinator._detect_rapid_drop()
+        # History should be cleaned
+        assert len(mock_coordinator._cwu_temp_history_bsb) <= 3
+
+
+class TestIsPumpCharged:
+    """Tests for _is_pump_charged() - check if DHW reached target."""
+
+    def test_pump_not_charged_no_data(self, mock_coordinator):
+        """Test pump not charged without BSB data."""
+        mock_coordinator._bsb_lan_data = None
+        assert mock_coordinator._is_pump_charged() is False
+
+    def test_pump_charged_status(self, mock_coordinator):
+        """Test pump charged when DHW status contains 'Charged'."""
+        mock_coordinator._bsb_lan_data = {"dhw_status": "Charged"}
+        assert mock_coordinator._is_pump_charged() is True
+
+    def test_pump_charged_case_insensitive(self, mock_coordinator):
+        """Test pump charged detection is case insensitive."""
+        mock_coordinator._bsb_lan_data = {"dhw_status": "CHARGED"}
+        assert mock_coordinator._is_pump_charged() is True
+
+    def test_pump_not_charged_charging(self, mock_coordinator):
+        """Test pump not charged when still charging."""
+        mock_coordinator._bsb_lan_data = {"dhw_status": "Charging, nominal setpoint"}
+        assert mock_coordinator._is_pump_charged() is False
+
+    def test_pump_not_charged_ready(self, mock_coordinator):
+        """Test pump not charged when status is Ready."""
+        mock_coordinator._bsb_lan_data = {"dhw_status": "Ready"}
+        assert mock_coordinator._is_pump_charged() is False
+
+
+class TestIsCWUTempAcceptable:
+    """Tests for _is_cwu_temp_acceptable() - check if temp within acceptable range."""
+
+    def test_temp_not_acceptable_none(self, mock_coordinator):
+        """Test temp not acceptable when None."""
+        assert mock_coordinator._is_cwu_temp_acceptable(None) is False
+
+    def test_temp_not_acceptable_below_critical(self, mock_coordinator):
+        """Test temp not acceptable below critical threshold."""
+        # MAX_TEMP_CRITICAL_THRESHOLD is 38°C
+        assert mock_coordinator._is_cwu_temp_acceptable(35.0) is False
+
+    def test_temp_acceptable_above_critical_no_max(self, mock_coordinator):
+        """Test temp acceptable above critical when no max recorded."""
+        mock_coordinator._max_temp_achieved = None
+        # Should check against target - 3°C margin
+        # Target is 45, so >= 42 is acceptable
+        assert mock_coordinator._is_cwu_temp_acceptable(43.0) is True
+
+    def test_temp_acceptable_within_max_drop(self, mock_coordinator):
+        """Test temp acceptable when within acceptable drop from max."""
+        # MAX_TEMP_ACCEPTABLE_DROP is 5°C
+        mock_coordinator._max_temp_achieved = 45.0
+        assert mock_coordinator._is_cwu_temp_acceptable(41.0) is True  # 4°C drop
+
+    def test_temp_not_acceptable_beyond_max_drop(self, mock_coordinator):
+        """Test temp not acceptable when beyond acceptable drop from max."""
+        mock_coordinator._max_temp_achieved = 45.0
+        assert mock_coordinator._is_cwu_temp_acceptable(39.0) is False  # 6°C drop
+
+    def test_temp_acceptable_at_max(self, mock_coordinator):
+        """Test temp acceptable at max achieved."""
+        mock_coordinator._max_temp_achieved = 45.0
+        assert mock_coordinator._is_cwu_temp_acceptable(45.0) is True
+
+
+class TestDetectMaxTempAchieved:
+    """Tests for _detect_max_temp_achieved() - detect when pump can't heat more."""
+
+    def test_no_detection_no_bsb_data(self, mock_coordinator):
+        """Test no max temp detection without BSB data."""
+        mock_coordinator._bsb_lan_data = None
+        assert mock_coordinator._detect_max_temp_achieved() is False
+
+    def test_no_detection_initial_tracking(self, mock_coordinator):
+        """Test no detection on initial tracking setup."""
+        mock_coordinator._bsb_lan_data = {
+            "flow_temp": 50.0,
+            "dhw_status": "Charging, nominal setpoint",
+            "cwu_temp": 42.0,
+        }
+        mock_coordinator._flow_temp_at_max_check = None
+        mock_coordinator._max_temp_at = None
+        # First call initializes tracking
+        assert mock_coordinator._detect_max_temp_achieved() is False
+        assert mock_coordinator._flow_temp_at_max_check == 50.0
+
+    def test_electric_fallback_counted(self, mock_coordinator):
+        """Test electric fallback is counted."""
+        mock_coordinator._bsb_lan_data = {
+            "flow_temp": 50.0,
+            "dhw_status": "Charging electric",  # Broken heater!
+            "cwu_temp": 42.0,
+        }
+        mock_coordinator._flow_temp_at_max_check = 50.0
+        mock_coordinator._max_temp_at = datetime.now()
+        mock_coordinator._electric_fallback_count = 0
+        mock_coordinator._detect_max_temp_achieved()
+        assert mock_coordinator._electric_fallback_count == 1
+
+    def test_max_detected_stagnation_plus_electric(self, mock_coordinator):
+        """Test max temp detected with flow stagnation + electric fallback."""
+        mock_coordinator._bsb_lan_data = {
+            "flow_temp": 51.0,  # Only 1°C rise (< 2°C threshold)
+            "dhw_status": "Charging electric",
+            "cwu_temp": 43.0,
+        }
+        mock_coordinator._flow_temp_at_max_check = 50.0
+        mock_coordinator._max_temp_at = datetime.now() - timedelta(minutes=35)  # > 30 min
+        mock_coordinator._electric_fallback_count = 2  # Already 2x electric
+        mock_coordinator._log_action = MagicMock()
+
+        result = mock_coordinator._detect_max_temp_achieved()
+
+        assert result is True
+        assert mock_coordinator._max_temp_achieved == 43.0
+
+    def test_no_max_flow_still_rising(self, mock_coordinator):
+        """Test no max when flow temp still rising."""
+        mock_coordinator._bsb_lan_data = {
+            "flow_temp": 55.0,  # 5°C rise
+            "dhw_status": "Charging, nominal setpoint",
+            "cwu_temp": 44.0,
+        }
+        mock_coordinator._flow_temp_at_max_check = 50.0
+        mock_coordinator._max_temp_at = datetime.now() - timedelta(minutes=35)
+        mock_coordinator._electric_fallback_count = 0
+
+        result = mock_coordinator._detect_max_temp_achieved()
+
+        assert result is False
+
+
+class TestResetMaxTempTracking:
+    """Tests for _reset_max_temp_tracking() - reset for new session."""
+
+    def test_reset_clears_all_fields(self, mock_coordinator):
+        """Test reset clears all max temp tracking fields."""
+        mock_coordinator._max_temp_achieved = 45.0
+        mock_coordinator._max_temp_at = datetime.now()
+        mock_coordinator._electric_fallback_count = 3
+        mock_coordinator._flow_temp_at_max_check = 50.0
+
+        mock_coordinator._reset_max_temp_tracking()
+
+        assert mock_coordinator._max_temp_achieved is None
+        assert mock_coordinator._max_temp_at is None
+        assert mock_coordinator._electric_fallback_count == 0
+        assert mock_coordinator._flow_temp_at_max_check is None
+        # Note: _cwu_temp_history_bsb is NOT cleared - it's used for rapid drop detection
+
+
+class TestGetTargetTemp:
+    """Tests for _get_target_temp() - get CWU target from config."""
+
+    def test_get_target_from_config(self, mock_coordinator):
+        """Test getting target temp from configuration (no BSB offset)."""
+        mock_coordinator._bsb_lan_data = None
+        mock_coordinator.config["cwu_target_temp"] = 48.0
+        assert mock_coordinator._get_target_temp() == 48.0
+
+    def test_get_default_target(self, mock_coordinator):
+        """Test getting default target when not in config."""
+        # default_config fixture has cwu_target_temp set to DEFAULT_CWU_TARGET_TEMP (45.0)
+        # No BSB data, so no offset
+        mock_coordinator._bsb_lan_data = None
+        assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP
+
+    def test_get_target_with_bsb_offset(self, mock_coordinator):
+        """Test target adds BSB offset when BSB temp available."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
+        # Should add 10°C offset: 45 + 10 = 55
+        assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP + 10.0
+
+    def test_get_target_no_bsb_offset_when_no_cwu_temp(self, mock_coordinator):
+        """Test no BSB offset when BSB data exists but cwu_temp is None."""
+        mock_coordinator._bsb_lan_data = {"hp_status": "Compressor"}  # No cwu_temp
+        assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP
+
+
+class TestBSBOffset:
+    """Tests for BSB sensor offset logic."""
+
+    def test_bsb_offset_zero_when_no_data(self, mock_coordinator):
+        """Test BSB offset is 0 when no BSB data."""
+        mock_coordinator._bsb_lan_data = None
+        assert mock_coordinator._get_bsb_offset() == 0.0
+
+    def test_bsb_offset_zero_when_no_cwu_temp(self, mock_coordinator):
+        """Test BSB offset is 0 when BSB data has no cwu_temp."""
+        mock_coordinator._bsb_lan_data = {"hp_status": "---"}
+        assert mock_coordinator._get_bsb_offset() == 0.0
+
+    def test_bsb_offset_active_when_cwu_temp_present(self, mock_coordinator):
+        """Test BSB offset is 10°C when cwu_temp is present."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 45.0}
+        assert mock_coordinator._get_bsb_offset() == 10.0
+
+    def test_get_min_temp_with_bsb_offset(self, mock_coordinator):
+        """Test min temp with BSB (offset is 0 for now)."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
+        # Default min is 40, BSB_CWU_MIN_OFFSET is 0
+        assert mock_coordinator._get_min_temp() == 40.0
+
+    def test_get_critical_temp_with_bsb_offset(self, mock_coordinator):
+        """Test critical temp with BSB (offset is 0 for now)."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 35.0}
+        # Default critical is 35, BSB_CWU_CRITICAL_OFFSET is 0
+        assert mock_coordinator._get_critical_temp() == 35.0
+
+    def test_winter_target_capped_with_bsb(self, mock_coordinator):
+        """Test winter target is capped at 55°C even with BSB offset."""
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
+        # base 45 + winter 5 + bsb 10 = 60, but capped at 55
+        winter_target = mock_coordinator.get_winter_cwu_target()
+        assert winter_target == 55.0  # WINTER_CWU_MAX_TEMP
+
+
+class TestHoldTimeRemaining:
+    """Tests for _get_hold_time_remaining helper method."""
+
+    def test_hold_time_zero_when_no_switch(self, mock_coordinator):
+        """Test hold time is 0 when no mode switch has occurred."""
+        mock_coordinator._last_mode_switch = None
+        assert mock_coordinator._get_hold_time_remaining() == 0.0
+
+    def test_hold_time_zero_when_idle(self, mock_coordinator):
+        """Test hold time is 0 when in idle state."""
+        mock_coordinator._current_state = "idle"
+        mock_coordinator._last_mode_switch = datetime.now()
+        assert mock_coordinator._get_hold_time_remaining() == 0.0
+
+    def test_hold_time_remaining_cwu_state(self, mock_coordinator):
+        """Test hold time remaining in CWU heating state."""
+        mock_coordinator._current_state = "heating_cwu"
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=5)
+        # MIN_CWU_HEATING_TIME is 15, so 15-5=10 minutes remaining
+        remaining = mock_coordinator._get_hold_time_remaining()
+        assert 9.9 <= remaining <= 10.1
+
+    def test_hold_time_remaining_floor_state(self, mock_coordinator):
+        """Test hold time remaining in floor heating state."""
+        mock_coordinator._current_state = "heating_floor"
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=10)
+        # MIN_FLOOR_HEATING_TIME is 20, so 20-10=10 minutes remaining
+        remaining = mock_coordinator._get_hold_time_remaining()
+        assert 9.9 <= remaining <= 10.1
+
+    def test_hold_time_zero_after_elapsed(self, mock_coordinator):
+        """Test hold time is 0 after min time has elapsed."""
+        mock_coordinator._current_state = "heating_cwu"
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=20)
+        # 20 > 15 (MIN_CWU_HEATING_TIME), so 0
+        assert mock_coordinator._get_hold_time_remaining() == 0.0
+
+
+class TestSwitchBlockedReason:
+    """Tests for _get_switch_blocked_reason helper method."""
+
+    def test_no_blocked_reason_when_can_switch(self, mock_coordinator):
+        """Test empty reason when switch is allowed."""
+        mock_coordinator._current_state = "idle"
+        mock_coordinator._last_mode_switch = None
+        mock_coordinator._bsb_lan_data = {"hp_status": "Compressor"}
+        assert mock_coordinator._get_switch_blocked_reason() == ""
+
+    def test_blocked_by_cwu_hold_time(self, mock_coordinator):
+        """Test blocked reason shows CWU hold time."""
+        mock_coordinator._current_state = "heating_cwu"
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=5)
+        reason = mock_coordinator._get_switch_blocked_reason()
+        assert "CWU hold" in reason
+        assert "10" in reason or "9" in reason  # ~10 minutes left
+
+    def test_blocked_by_floor_hold_time(self, mock_coordinator):
+        """Test blocked reason shows floor hold time."""
+        mock_coordinator._current_state = "heating_floor"
+        mock_coordinator._last_mode_switch = datetime.now() - timedelta(minutes=5)
+        reason = mock_coordinator._get_switch_blocked_reason()
+        assert "Floor hold" in reason
+        assert "15" in reason or "14" in reason  # ~15 minutes left
+
+    def test_blocked_by_hp_not_ready(self, mock_coordinator):
+        """Test blocked reason shows HP status when hold time is satisfied."""
+        mock_coordinator._current_state = "idle"
+        mock_coordinator._last_mode_switch = None
+        mock_coordinator._bsb_lan_data = {"hp_status": "Compressor off time min active"}
+        reason = mock_coordinator._get_switch_blocked_reason()
+        assert "Compressor off time" in reason
+
+
+class TestRapidDropIgnoreAbove:
+    """Tests for rapid drop ignore above threshold constant."""
+
+    def test_constant_exists_and_is_45(self):
+        """Verify CWU_RAPID_DROP_IGNORE_ABOVE constant is 45.0."""
+        from custom_components.cwu_controller.const import CWU_RAPID_DROP_IGNORE_ABOVE
+        assert CWU_RAPID_DROP_IGNORE_ABOVE == 45.0
+
+    def test_constant_is_less_than_max_temp(self):
+        """Verify ignore threshold is less than typical max temp (55°C)."""
+        from custom_components.cwu_controller.const import (
+            CWU_RAPID_DROP_IGNORE_ABOVE,
+            WINTER_CWU_MAX_TEMP,
+        )
+        # 45 < 55, so there's a 10°C "expensive zone" where drops are ignored
+        assert CWU_RAPID_DROP_IGNORE_ABOVE < WINTER_CWU_MAX_TEMP
+        assert WINTER_CWU_MAX_TEMP - CWU_RAPID_DROP_IGNORE_ABOVE == 10.0
+
+    def test_constant_is_greater_than_critical(self):
+        """Verify ignore threshold is above critical temp."""
+        from custom_components.cwu_controller.const import (
+            CWU_RAPID_DROP_IGNORE_ABOVE,
+            MAX_TEMP_CRITICAL_THRESHOLD,
+        )
+        # 45 > 38, so we still react to drops when temp is getting low
+        assert CWU_RAPID_DROP_IGNORE_ABOVE > MAX_TEMP_CRITICAL_THRESHOLD
+
+    def test_rapid_drop_detected_but_temp_above_threshold(self, mock_coordinator):
+        """Test that rapid drop is detected but action should be skipped when temp > 45°C.
+
+        Note: This tests the detection part. The actual skip logic is in
+        _run_broken_heater_mode_logic() Phase 5 which is async and harder to test.
+        """
+        from custom_components.cwu_controller.const import CWU_RAPID_DROP_IGNORE_ABOVE
+
+        # Set up BSB data with temp above threshold (50°C)
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 50.0}
+        mock_coordinator._cwu_temp_history_bsb = [
+            (datetime.now() - timedelta(minutes=10), 55.0),  # Max temp 10 min ago
+            (datetime.now() - timedelta(minutes=5), 53.0),
+        ]
+
+        # Add current temp to history
+        detected, drop = mock_coordinator._detect_rapid_drop()
+
+        # Drop is detected (55 -> 50 = 5°C)
+        assert detected is True
+        assert drop >= 5.0
+
+        # But current temp (50°C) is above ignore threshold (45°C)
+        # So the Phase 5 logic would skip the emergency switch
+        assert mock_coordinator._bsb_lan_data["cwu_temp"] > CWU_RAPID_DROP_IGNORE_ABOVE
+
+    def test_rapid_drop_detected_and_temp_below_threshold(self, mock_coordinator):
+        """Test that rapid drop triggers action when temp <= 45°C."""
+        from custom_components.cwu_controller.const import CWU_RAPID_DROP_IGNORE_ABOVE
+
+        # Set up BSB data with temp at threshold (45°C)
+        mock_coordinator._bsb_lan_data = {"cwu_temp": 45.0}
+        mock_coordinator._cwu_temp_history_bsb = [
+            (datetime.now() - timedelta(minutes=10), 50.0),  # Max temp 10 min ago
+            (datetime.now() - timedelta(minutes=5), 48.0),
+        ]
+
+        # Add current temp to history
+        detected, drop = mock_coordinator._detect_rapid_drop()
+
+        # Drop is detected (50 -> 45 = 5°C)
+        assert detected is True
+        assert drop >= 5.0
+
+        # Current temp (45°C) is NOT above ignore threshold (45°C)
+        # So the Phase 5 logic would trigger the emergency switch
+        assert mock_coordinator._bsb_lan_data["cwu_temp"] <= CWU_RAPID_DROP_IGNORE_ABOVE

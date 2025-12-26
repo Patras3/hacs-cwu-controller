@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v7.6
+ * CWU Controller Panel JavaScript v8.0
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -7,6 +7,8 @@
  * v7.1: Added BSB-LAN heat pump status widget with live data from pump
  * v7.2: Fixed BSB-LAN - now fetches on-demand via dedicated API endpoint (not in background)
  * v7.3: BSB-LAN refactor - uses coordinator sensor entities instead of API requests
+ * v7.7: BSB CWU target offset (+10°C), manual override remaining time display
+ * v8.0: Anti-oscillation UI (HP ready, hold times, max temp, night window), enhanced state display
  */
 
 // Configuration
@@ -87,14 +89,14 @@ const STATE_CLASSES = {
 
 const STATE_DESCRIPTIONS = {
     'idle': 'System is monitoring, ready to act when needed',
-    'heating_cwu': 'Actively heating domestic hot water tank',
-    'heating_floor': 'Actively heating floor (underfloor heating)',
+    'heating_cwu': 'Actively heating CWU - minimum hold time before switching',
+    'heating_floor': 'Actively heating floor - minimum hold time before switching',
     'pause': 'Mandatory 10-minute pause (3h cycle limit reached)',
-    'emergency_cwu': 'Emergency! CWU temperature critically low (<35°C)',
-    'emergency_floor': 'Emergency! Room temperature critically low (<19°C)',
-    'fake_heating_detected': 'Fake heating detected - waiting before restart',
-    'fake_heating_restarting': 'Restarting CWU heating after fake heating recovery',
-    'safe_mode': 'Safe mode - heat pump controls both CWU and floor (sensor unavailable or disabled)',
+    'emergency_cwu': 'Emergency! CWU temperature critically low - priority heating',
+    'emergency_floor': 'Emergency! Room temperature critically low - priority heating',
+    'fake_heating_detected': 'Fake heating detected - waiting for HP ready',
+    'fake_heating_restarting': 'HP ready - restarting CWU heating',
+    'safe_mode': 'Safe mode - heat pump controls both CWU and floor (sensor unavailable)',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -132,7 +134,7 @@ let selectedDuration = 3; // hours
  * Initialize the panel
  */
 async function init() {
-    console.log('CWU Controller Panel v7.3 initializing...');
+    console.log('CWU Controller Panel v8.0 initializing...');
 
     document.getElementById('controller-toggle').addEventListener('change', toggleController);
 
@@ -1018,12 +1020,30 @@ function updateStateDisplay() {
     const durationEl = document.getElementById('state-duration-sm');
 
     const state = currentData.state || 'unknown';
+    const attrs = currentData.attributes || {};
     const stateName = state.replace(/_/g, ' ');
 
     const iconClass = STATE_ICONS[state] || 'mdi-help-circle';
     iconEl.className = `state-icon-sm mdi ${iconClass}`;
 
-    nameEl.textContent = stateName.charAt(0).toUpperCase() + stateName.slice(1);
+    // Show state name with context info
+    let displayName = stateName.charAt(0).toUpperCase() + stateName.slice(1);
+    const holdTimeRemaining = attrs.hold_time_remaining || 0;
+
+    // Add hold time info for heating states
+    if (holdTimeRemaining > 0 && (state === 'heating_cwu' || state === 'heating_floor')) {
+        displayName += ` (${Math.round(holdTimeRemaining)}m hold)`;
+    }
+
+    // Add HP status for fake heating states
+    if (state === 'fake_heating_detected') {
+        const hpReady = attrs.hp_ready !== false;
+        if (!hpReady) {
+            displayName += ` - ${attrs.hp_ready_reason || 'waiting'}`;
+        }
+    }
+
+    nameEl.textContent = displayName;
 
     if (stateStartTime) {
         const now = new Date();
@@ -1253,7 +1273,23 @@ function updateFakeHeatingAlert() {
 }
 
 function updateOverrideAlert() {
-    document.getElementById('override-alert').style.display = currentData.manualOverride ? 'flex' : 'none';
+    const alertEl = document.getElementById('override-alert');
+    const remainingEl = document.getElementById('override-remaining');
+
+    if (currentData.manualOverride) {
+        alertEl.style.display = 'flex';
+        // Update remaining time
+        const attrs = currentData.attributes || {};
+        const overrideUntil = attrs.manual_override_until;
+        if (overrideUntil) {
+            const remaining = getTimeRemaining(overrideUntil);
+            remainingEl.textContent = remaining || 'expiring...';
+        } else {
+            remainingEl.textContent = '--';
+        }
+    } else {
+        alertEl.style.display = 'none';
+    }
 }
 
 /**
@@ -1976,6 +2012,42 @@ function updateBsbLanDisplay(bsbData) {
     const sourceIcon = controlSource === 'bsb_lan' ? 'mdi-lan-connect' : 'mdi-cloud';
     const sourceLabel = controlSource === 'bsb_lan' ? 'BSB-LAN' : 'HA Cloud';
 
+    // Get additional controller data from attributes
+    const attrs = currentData.attributes || {};
+    const hpReady = attrs.hp_ready !== false;
+    const hpReadyReason = attrs.hp_ready_reason || 'OK';
+    const holdTimeRemaining = attrs.hold_time_remaining || 0;
+    const switchBlockedReason = attrs.switch_blocked_reason || '';
+    const maxTempAchieved = attrs.max_temp_achieved;
+    const electricFallbackCount = attrs.electric_fallback_count || 0;
+    const isNightFloorWindow = attrs.is_night_floor_window || false;
+    const operatingMode = attrs.operating_mode || 'broken_heater';
+
+    // HP ready status display
+    const hpReadyIcon = hpReady ? 'mdi-check-circle' : 'mdi-timer-sand';
+    const hpReadyClass = hpReady ? 'ready' : 'waiting';
+    const hpReadyText = hpReady ? 'Ready' : hpReadyReason;
+
+    // Hold time / switch blocked display
+    let holdDisplay = '';
+    if (holdTimeRemaining > 0) {
+        holdDisplay = `<div class="bsb-hold-time"><span class="mdi mdi-timer"></span> Hold: ${Math.round(holdTimeRemaining)}min</div>`;
+    } else if (switchBlockedReason) {
+        holdDisplay = `<div class="bsb-hold-time blocked"><span class="mdi mdi-block-helper"></span> ${switchBlockedReason}</div>`;
+    }
+
+    // Max temp achieved display
+    let maxTempDisplay = '';
+    if (maxTempAchieved !== null && maxTempAchieved !== undefined) {
+        maxTempDisplay = `<div class="bsb-max-temp"><span class="mdi mdi-thermometer-alert"></span> Max: ${maxTempAchieved.toFixed(1)}°C (electric x${electricFallbackCount})</div>`;
+    }
+
+    // Night floor window display
+    let nightWindowDisplay = '';
+    if (operatingMode === 'broken_heater' && isNightFloorWindow) {
+        nightWindowDisplay = `<div class="bsb-night-window"><span class="mdi mdi-weather-night"></span> Floor window (03:00-06:00)</div>`;
+    }
+
     contentEl.innerHTML = `
         <div class="bsb-status-row">
             <div class="bsb-raw-statuses">
@@ -2012,6 +2084,17 @@ function updateBsbLanDisplay(bsbData) {
                 <span class="bsb-temp-desc">${deltaTDesc}</span>
             </div>
         </div>
+        ${operatingMode === 'broken_heater' ? `
+        <div class="bsb-controller-status">
+            <div class="bsb-hp-ready ${hpReadyClass}">
+                <span class="mdi ${hpReadyIcon}"></span>
+                <span>HP: ${hpReadyText}</span>
+            </div>
+            ${holdDisplay}
+            ${maxTempDisplay}
+            ${nightWindowDisplay}
+        </div>
+        ` : ''}
         <div class="bsb-control-source">
             <span class="mdi ${sourceIcon}"></span>
             <span>Control: ${sourceLabel}</span>

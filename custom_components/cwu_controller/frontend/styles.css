@@ -3353,6 +3353,97 @@ body {
     color: var(--accent-orange);
 }
 
+/* BSB Controller Status Section (broken_heater mode) */
+.bsb-controller-status {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    margin-top: 12px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.bsb-hp-ready {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.bsb-hp-ready .mdi {
+    font-size: 16px;
+}
+
+.bsb-hp-ready.ready {
+    color: var(--accent-green);
+}
+
+.bsb-hp-ready.ready .mdi {
+    color: var(--accent-green);
+}
+
+.bsb-hp-ready.waiting {
+    color: var(--accent-orange);
+}
+
+.bsb-hp-ready.waiting .mdi {
+    color: var(--accent-orange);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.bsb-hold-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--accent-cyan);
+}
+
+.bsb-hold-time .mdi {
+    font-size: 14px;
+}
+
+.bsb-hold-time.blocked {
+    color: var(--accent-orange);
+}
+
+.bsb-hold-time.blocked .mdi {
+    color: var(--accent-orange);
+}
+
+.bsb-max-temp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--accent-purple);
+}
+
+.bsb-max-temp .mdi {
+    font-size: 14px;
+    color: var(--accent-purple);
+}
+
+.bsb-night-window {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--accent-blue);
+    padding: 6px 10px;
+    background: rgba(66, 153, 225, 0.15);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(66, 153, 225, 0.3);
+}
+
+.bsb-night-window .mdi {
+    font-size: 14px;
+    color: var(--accent-blue);
+}
+
 /* BSB Responsive */
 @media (max-width: 600px) {
     .bsb-temps-grid {
