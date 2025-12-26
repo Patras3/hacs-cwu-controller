@@ -208,7 +208,6 @@ MAX_TEMP_CRITICAL_THRESHOLD: Final = 38.0    # Poniżej 38°C spadek nieakceptow
 # Rapid Drop Detection (pobór CWU - kąpiel)
 CWU_RAPID_DROP_THRESHOLD: Final = 5.0   # 5°C spadek = ktoś się kąpie
 CWU_RAPID_DROP_WINDOW: Final = 15       # w ciągu 15 min
-CWU_RAPID_DROP_IGNORE_ABOVE: Final = 45.0  # Ignoruj rapid drop gdy temp > 45°C (droga strefa ~3.6kW)
 
 # HP Status Check before restart
 HP_RESTART_MIN_WAIT: Final = 5  # 5 min min czekania po fake heating

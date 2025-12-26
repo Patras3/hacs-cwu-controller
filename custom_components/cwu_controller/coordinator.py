@@ -110,7 +110,6 @@ from .const import (
     MAX_TEMP_CRITICAL_THRESHOLD,
     CWU_RAPID_DROP_THRESHOLD,
     CWU_RAPID_DROP_WINDOW,
-    CWU_RAPID_DROP_IGNORE_ABOVE,
     HP_RESTART_MIN_WAIT,
     HP_STATUS_DEFROSTING,
     HP_STATUS_OVERRUN,
@@ -2297,38 +2296,22 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # =====================================================================
         drop_detected, drop_amount = self._detect_rapid_drop()
         if drop_detected and self._current_state == STATE_HEATING_FLOOR:
-            # Get current CWU temp (prefer BSB for accuracy)
-            current_cwu_temp = (
-                self._bsb_lan_data.get("cwu_temp") if self._bsb_lan_data
-                else cwu_temp  # fallback to HA sensor
-            )
-
-            # Ignore rapid drop if temp is still high (above 45°C)
-            # Heating above 45°C is expensive (~3.6kW), let it drop naturally
-            if current_cwu_temp is not None and current_cwu_temp > CWU_RAPID_DROP_IGNORE_ABOVE:
-                self._log_action(
-                    f"Rapid drop {drop_amount:.1f}°C detected but ignored - "
-                    f"temp {current_cwu_temp:.1f}°C > {CWU_RAPID_DROP_IGNORE_ABOVE}°C (expensive zone)"
+            can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_EMERGENCY_CWU)
+            if can_switch:
+                self._log_action(f"Rapid CWU drop {drop_amount:.1f}°C - emergency switch to CWU")
+                await self._switch_to_cwu()
+                self._change_state(STATE_EMERGENCY_CWU)
+                self._cwu_heating_start = now
+                self._last_mode_switch = now
+                self._reset_max_temp_tracking()
+                await self._async_send_notification(
+                    "CWU Drop Detected",
+                    f"Hot water usage detected ({drop_amount:.1f}°C drop in {CWU_RAPID_DROP_WINDOW}min). "
+                    f"Starting emergency CWU heating."
                 )
-                # Don't return - continue to other phases
             else:
-                # Temp is low enough, react to rapid drop
-                can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_EMERGENCY_CWU)
-                if can_switch:
-                    self._log_action(f"Rapid CWU drop {drop_amount:.1f}°C - emergency switch to CWU")
-                    await self._switch_to_cwu()
-                    self._change_state(STATE_EMERGENCY_CWU)
-                    self._cwu_heating_start = now
-                    self._last_mode_switch = now
-                    self._reset_max_temp_tracking()
-                    await self._async_send_notification(
-                        "CWU Drop Detected",
-                        f"Hot water usage detected ({drop_amount:.1f}°C drop). "
-                        f"Temp at {current_cwu_temp:.1f}°C - starting emergency CWU heating."
-                    )
-                else:
-                    self._log_action(f"Rapid drop detected but switch blocked: {reason}")
-                return
+                self._log_action(f"Rapid drop detected but switch blocked: {reason}")
+            return
 
         # =====================================================================
         # Phase 6: Max temp detection (pump can't heat more)
