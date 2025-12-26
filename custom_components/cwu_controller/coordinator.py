@@ -1541,7 +1541,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Fetch BSB-LAN data first (primary data source)
         await self._async_refresh_bsb_lan_data()
 
-        # Get CWU temperature (BSB-LAN preferred, fallback to external sensor)
+        # Get CWU temperature (BSB-LAN only)
         cwu_temp = self._get_cwu_temperature()
 
         # Get other sensor values
@@ -2042,8 +2042,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         If we achieved max (e.g. 45°C), drop to 40°C is OK.
         But if max was 38°C, drop to 33°C is NOT acceptable.
-
-        Note: Thresholds are adjusted for BSB offset when using BSB sensor.
         """
         if cwu_temp is None:
             return False
@@ -2571,12 +2569,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         try:
             self._log_action("Switching to CWU heating...")
 
-            # First turn off floor heating (unified method with BSB-LAN + fallback)
+            # First turn off floor heating (BSB-LAN)
             await self._async_set_floor_off()
             self._log_action("Floor heating off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
-            # Then enable CWU (unified method with BSB-LAN + fallback)
+            # Then enable CWU (BSB-LAN)
             await self._async_set_cwu_on()
         finally:
             self._transition_in_progress = False
@@ -2597,12 +2595,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         try:
             self._log_action("Switching to floor heating...")
 
-            # First turn off CWU (unified method with BSB-LAN + fallback)
+            # First turn off CWU (BSB-LAN)
             await self._async_set_cwu_off()
             self._log_action("CWU off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
-            # Then enable floor heating (unified method with BSB-LAN + fallback)
+            # Then enable floor heating (BSB-LAN)
             await self._async_set_floor_on()
 
             # Clear CWU session

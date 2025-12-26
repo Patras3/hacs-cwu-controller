@@ -84,16 +84,6 @@ URGENCY_MEDIUM: Final = 2
 URGENCY_HIGH: Final = 3
 URGENCY_CRITICAL: Final = 4
 
-# Water heater modes
-WH_MODE_OFF: Final = "off"
-WH_MODE_HEAT_PUMP: Final = "heat_pump"
-WH_MODE_PERFORMANCE: Final = "performance"
-
-# Climate modes
-CLIMATE_OFF: Final = "off"
-CLIMATE_AUTO: Final = "auto"
-CLIMATE_HEAT: Final = "heat"
-
 # Safe mode - BSB-LAN unavailability (cloud used ONLY as last resort)
 BSB_LAN_UNAVAILABLE_TIMEOUT: Final = 15  # minutes before entering safe mode
 SAFE_MODE_WATER_HEATER: Final = "water_heater.pompa_ciepla_io_13873843_2"

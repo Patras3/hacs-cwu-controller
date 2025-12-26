@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v8.0
+ * CWU Controller Panel JavaScript v8.1
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -7,8 +7,8 @@
  * v7.1: Added BSB-LAN heat pump status widget with live data from pump
  * v7.2: Fixed BSB-LAN - now fetches on-demand via dedicated API endpoint (not in background)
  * v7.3: BSB-LAN refactor - uses coordinator sensor entities instead of API requests
- * v7.7: BSB CWU target offset (+10°C), manual override remaining time display
  * v8.0: Anti-oscillation UI (HP ready, hold times, max temp, night window), enhanced state display
+ * v8.1: BSB-LAN only refactor - removed cloud entities, CWU/floor modes from BSB-LAN exclusively
  */
 
 // Configuration

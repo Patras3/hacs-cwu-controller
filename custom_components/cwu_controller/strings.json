@@ -3,15 +3,15 @@
     "step": {
       "user": {
         "title": "CWU Controller Setup - Entities",
-        "description": "Configure the entities for CWU Controller",
+        "description": "Configure the entities for CWU Controller. BSB-LAN is the primary control source.",
         "data": {
-          "cwu_temp_sensor": "CWU Temperature Sensor",
+          "bsb_lan_host": "BSB-LAN Host (IP address)",
           "salon_temp_sensor": "Living Room Temperature Sensor",
           "bedroom_temp_sensor": "Bedroom Temperature Sensor",
           "kids_room_temp_sensor": "Kids Room Temperature Sensor",
           "power_sensor": "Heating Power Sensor",
-          "water_heater": "Water Heater Entity",
-          "climate": "Floor Heating Climate Entity",
+          "energy_sensor": "Energy Meter Sensor",
+          "workday_sensor": "Workday Sensor",
           "notify_service": "Notification Service",
           "pump_input_temp": "Heat Pump Input Temperature",
           "pump_output_temp": "Heat Pump Output Temperature",

@@ -275,7 +275,7 @@ class CWUHeatingTimeSensor(CWUControllerBaseSensor):
 
 
 class CWUTargetTempSensor(CWUControllerBaseSensor):
-    """Sensor showing CWU target temperature (effective, with BSB offset if applicable)."""
+    """Sensor showing CWU target temperature."""
 
     def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
         """Initialize sensor."""
@@ -286,11 +286,10 @@ class CWUTargetTempSensor(CWUControllerBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """Return effective target temperature (with BSB offset if using BSB sensor)."""
+        """Return target temperature from config."""
         if self.coordinator.data is None:
             return None
-        # Return effective target (includes BSB offset when applicable)
-        return self.coordinator.data.get("cwu_target_temp_effective", 45.0)
+        return self.coordinator.data.get("cwu_target_temp", 45.0)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -298,10 +297,9 @@ class CWUTargetTempSensor(CWUControllerBaseSensor):
         if self.coordinator.data is None:
             return {}
         return {
-            "cwu_target_temp_base": self.coordinator.data.get("cwu_target_temp"),
+            "cwu_target_temp": self.coordinator.data.get("cwu_target_temp"),
             "cwu_min_temp": self.coordinator.data.get("cwu_min_temp"),
-            "cwu_min_temp_effective": self.coordinator.data.get("cwu_min_temp_effective"),
-            "bsb_offset_active": self.coordinator.data.get("bsb_offset_active", False),
+            "cwu_critical_temp": self.coordinator.data.get("cwu_critical_temp"),
             "salon_target_temp": self.coordinator.data.get("salon_target_temp"),
         }
 
