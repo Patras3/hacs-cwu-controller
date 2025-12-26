@@ -166,13 +166,11 @@ def default_config():
     """Return default configuration for coordinator."""
     return {
         CONF_OPERATING_MODE: MODE_BROKEN_HEATER,
-        "cwu_temp_sensor": "sensor.cwu_temp",
+        "bsb_lan_host": "192.168.50.219",  # BSB-LAN is the only control source
         "salon_temp_sensor": "sensor.salon_temp",
         "bedroom_temp_sensor": "sensor.bedroom_temp",
         "kids_room_temp_sensor": "sensor.kids_temp",
         "power_sensor": "sensor.power",
-        "water_heater": "water_heater.cwu",
-        "climate": "climate.floor",
         "notify_service": "notify.mobile",
         "cwu_target_temp": DEFAULT_CWU_TARGET_TEMP,
         "cwu_min_temp": DEFAULT_CWU_MIN_TEMP,
@@ -180,6 +178,7 @@ def default_config():
         "salon_target_temp": DEFAULT_SALON_TARGET_TEMP,
         "salon_min_temp": DEFAULT_SALON_MIN_TEMP,
         "bedroom_min_temp": DEFAULT_BEDROOM_MIN_TEMP,
+        # NOTE: cwu_temp_sensor, water_heater, climate removed - using BSB-LAN exclusively
     }
 
 

@@ -17,8 +17,6 @@ from custom_components.cwu_controller.const import (
     BSB_FAKE_HEATING_DETECTION_TIME,
     CONTROL_SOURCE_BSB_LAN,
     CONTROL_SOURCE_HA_CLOUD,
-    WH_MODE_HEAT_PUMP,
-    WH_MODE_OFF,
 )
 
 
@@ -227,8 +225,8 @@ class TestBSBLanClient:
             assert result is True
 
 
-class TestBSBLanFallbackLogic:
-    """Tests for BSB-LAN primary with HA cloud fallback."""
+class TestBSBLanControlMethods:
+    """Tests for BSB-LAN control methods (no fallback - BSB-LAN only)."""
 
     @pytest.fixture
     def mock_coordinator(self):
@@ -238,10 +236,7 @@ class TestBSBLanFallbackLogic:
         hass.services.async_call = AsyncMock()
         hass.states = MagicMock()
 
-        config = {
-            "water_heater": "water_heater.test",
-            "climate": "climate.test",
-        }
+        config = {"bsb_lan_host": "192.168.1.100"}
 
         coordinator = CWUControllerCoordinator(hass, config)
         coordinator._bsb_client = BSBLanClient("192.168.1.100")
@@ -262,38 +257,16 @@ class TestBSBLanFallbackLogic:
             mock_bsb.assert_called_once_with(BSB_CWU_MODE_ON)
 
     @pytest.mark.asyncio
-    async def test_cwu_on_bsb_lan_unavailable_fallback(self, mock_coordinator):
-        """Test CWU on falls back to HA cloud when BSB-LAN unavailable."""
+    async def test_cwu_on_bsb_lan_unavailable_returns_false(self, mock_coordinator):
+        """Test CWU on returns False when BSB-LAN unavailable (no fallback)."""
         # Make BSB-LAN unavailable
         for _ in range(BSB_LAN_FAILURES_THRESHOLD):
             mock_coordinator._bsb_client._handle_failure(Exception("Test"))
 
-        with patch.object(mock_coordinator, "_async_set_water_heater_mode", new_callable=AsyncMock) as mock_ha:
-            mock_ha.return_value = True
+        result = await mock_coordinator._async_set_cwu_on()
 
-            result = await mock_coordinator._async_set_cwu_on()
-
-            assert result is True
-            assert mock_coordinator._control_source == CONTROL_SOURCE_HA_CLOUD
-            mock_ha.assert_called_once_with(WH_MODE_HEAT_PUMP)
-
-    @pytest.mark.asyncio
-    async def test_cwu_on_bsb_lan_fails_fallback(self, mock_coordinator):
-        """Test CWU on falls back to HA cloud when BSB-LAN call fails."""
-        mock_coordinator._bsb_client._is_available = True
-
-        with patch.object(mock_coordinator._bsb_client, "async_set_cwu_mode", new_callable=AsyncMock) as mock_bsb:
-            mock_bsb.return_value = False  # BSB-LAN call fails
-
-            with patch.object(mock_coordinator, "_async_set_water_heater_mode", new_callable=AsyncMock) as mock_ha:
-                mock_ha.return_value = True
-
-                result = await mock_coordinator._async_set_cwu_on()
-
-                assert result is True
-                assert mock_coordinator._control_source == CONTROL_SOURCE_HA_CLOUD
-                mock_bsb.assert_called_once()
-                mock_ha.assert_called_once_with(WH_MODE_HEAT_PUMP)
+        # No fallback - just returns False
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_cwu_off_bsb_lan_success(self, mock_coordinator):
@@ -310,19 +283,13 @@ class TestBSBLanFallbackLogic:
             mock_bsb.assert_called_once_with(BSB_CWU_MODE_OFF)
 
     @pytest.mark.asyncio
-    async def test_cwu_off_fallback(self, mock_coordinator):
-        """Test CWU off falls back to HA cloud."""
+    async def test_cwu_off_bsb_lan_unavailable_returns_false(self, mock_coordinator):
+        """Test CWU off returns False when BSB-LAN unavailable."""
         for _ in range(BSB_LAN_FAILURES_THRESHOLD):
             mock_coordinator._bsb_client._handle_failure(Exception("Test"))
 
-        with patch.object(mock_coordinator, "_async_set_water_heater_mode", new_callable=AsyncMock) as mock_ha:
-            mock_ha.return_value = True
-
-            result = await mock_coordinator._async_set_cwu_off()
-
-            assert result is True
-            assert mock_coordinator._control_source == CONTROL_SOURCE_HA_CLOUD
-            mock_ha.assert_called_once_with(WH_MODE_OFF)
+        result = await mock_coordinator._async_set_cwu_off()
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_floor_on_bsb_lan_success(self, mock_coordinator):
@@ -339,19 +306,13 @@ class TestBSBLanFallbackLogic:
             mock_bsb.assert_called_once_with(BSB_FLOOR_MODE_AUTOMATIC)
 
     @pytest.mark.asyncio
-    async def test_floor_on_fallback(self, mock_coordinator):
-        """Test floor on falls back to HA cloud."""
+    async def test_floor_on_bsb_lan_unavailable_returns_false(self, mock_coordinator):
+        """Test floor on returns False when BSB-LAN unavailable."""
         for _ in range(BSB_LAN_FAILURES_THRESHOLD):
             mock_coordinator._bsb_client._handle_failure(Exception("Test"))
 
-        with patch.object(mock_coordinator, "_async_set_climate", new_callable=AsyncMock) as mock_ha:
-            mock_ha.return_value = True
-
-            result = await mock_coordinator._async_set_floor_on()
-
-            assert result is True
-            assert mock_coordinator._control_source == CONTROL_SOURCE_HA_CLOUD
-            mock_ha.assert_called_once_with(True)
+        result = await mock_coordinator._async_set_floor_on()
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_floor_off_bsb_lan_success(self, mock_coordinator):
@@ -368,19 +329,13 @@ class TestBSBLanFallbackLogic:
             mock_bsb.assert_called_once_with(BSB_FLOOR_MODE_PROTECTION)
 
     @pytest.mark.asyncio
-    async def test_floor_off_fallback(self, mock_coordinator):
-        """Test floor off falls back to HA cloud."""
+    async def test_floor_off_bsb_lan_unavailable_returns_false(self, mock_coordinator):
+        """Test floor off returns False when BSB-LAN unavailable."""
         for _ in range(BSB_LAN_FAILURES_THRESHOLD):
             mock_coordinator._bsb_client._handle_failure(Exception("Test"))
 
-        with patch.object(mock_coordinator, "_async_set_climate", new_callable=AsyncMock) as mock_ha:
-            mock_ha.return_value = True
-
-            result = await mock_coordinator._async_set_floor_off()
-
-            assert result is True
-            assert mock_coordinator._control_source == CONTROL_SOURCE_HA_CLOUD
-            mock_ha.assert_called_once_with(False)
+        result = await mock_coordinator._async_set_floor_off()
+        assert result is False
 
 
 class TestBSBLanFakeHeatingDetection:
@@ -500,7 +455,7 @@ class TestBSBLanFakeHeatingDetection:
 
 
 class TestBSBLanTemperature:
-    """Tests for BSB-LAN temperature reading with fallback."""
+    """Tests for BSB-LAN temperature reading (BSB-LAN only, no fallback)."""
 
     @pytest.fixture
     def mock_coordinator(self):
@@ -508,12 +463,12 @@ class TestBSBLanTemperature:
         hass = MagicMock()
         hass.states = MagicMock()
 
-        config = {"cwu_temp_sensor": "sensor.cwu_temp_external"}
+        config = {"bsb_lan_host": "192.168.1.100"}
         coordinator = CWUControllerCoordinator(hass, config)
         coordinator._bsb_client = BSBLanClient("192.168.1.100")
         return coordinator
 
-    def test_bsb_lan_temp_preferred(self, mock_coordinator):
+    def test_bsb_lan_temp_available(self, mock_coordinator):
         """Test BSB-LAN temperature is used when available."""
         mock_coordinator._bsb_lan_data = {"cwu_temp": 45.5}
 
@@ -521,35 +476,25 @@ class TestBSBLanTemperature:
 
         assert result == 45.5
 
-    def test_external_sensor_fallback(self, mock_coordinator):
-        """Test external sensor is used when BSB-LAN unavailable."""
+    def test_bsb_lan_data_empty_returns_none(self, mock_coordinator):
+        """Test None returned when BSB-LAN data empty (no fallback)."""
         mock_coordinator._bsb_lan_data = {}
-
-        # Mock external sensor
-        mock_state = MagicMock()
-        mock_state.state = "42.3"
-        mock_coordinator.hass.states.get.return_value = mock_state
 
         result = mock_coordinator._get_cwu_temperature()
 
-        assert result == 42.3
+        assert result is None
 
-    def test_external_sensor_fallback_bsb_none(self, mock_coordinator):
-        """Test external sensor fallback when BSB-LAN returns None temp."""
+    def test_bsb_lan_temp_none_returns_none(self, mock_coordinator):
+        """Test None returned when BSB-LAN returns None temp (no fallback)."""
         mock_coordinator._bsb_lan_data = {"cwu_temp": None}
 
-        mock_state = MagicMock()
-        mock_state.state = "41.0"
-        mock_coordinator.hass.states.get.return_value = mock_state
-
         result = mock_coordinator._get_cwu_temperature()
 
-        assert result == 41.0
+        assert result is None
 
-    def test_no_data_available(self, mock_coordinator):
-        """Test None returned when no data available."""
-        mock_coordinator._bsb_lan_data = {}
-        mock_coordinator.hass.states.get.return_value = None
+    def test_no_bsb_lan_data_returns_none(self, mock_coordinator):
+        """Test None returned when no BSB-LAN data available."""
+        mock_coordinator._bsb_lan_data = None
 
         result = mock_coordinator._get_cwu_temperature()
 
@@ -634,8 +579,7 @@ class TestWinterModeWithUnavailableTemp:
 
     This is a critical scenario that can happen when:
     1. BSB-LAN ESP is still booting after HA restart
-    2. External HA sensor is unavailable (zigbee hub not ready)
-    3. Both sources return None
+    2. BSB-LAN is unreachable due to network issues
 
     The controller should enable both floor+CWU (safe mode) and let
     the heat pump decide what to heat.
@@ -649,7 +593,7 @@ class TestWinterModeWithUnavailableTemp:
         hass.states = MagicMock()
 
         config = {
-            "cwu_temp_sensor": "sensor.cwu_temp_external",
+            "bsb_lan_host": "192.168.1.100",
         }
         coordinator = CWUControllerCoordinator(hass, config)
         coordinator._bsb_client = BSBLanClient("192.168.1.100")
@@ -664,20 +608,17 @@ class TestWinterModeWithUnavailableTemp:
         mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._bsb_lan_data = {}  # No BSB-LAN data
 
-        # Mock external sensor also unavailable
-        mock_coordinator.hass.states.get.return_value = None
-
         # Mock is_winter_cwu_heating_window to return True
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
                 await mock_coordinator._run_winter_mode_logic(
                     cwu_urgency=2,  # medium
                     floor_urgency=1,  # low
-                    cwu_temp=None,  # CRITICAL: temp unavailable
+                    cwu_temp=None,  # CRITICAL: temp unavailable (BSB-LAN down)
                     salon_temp=20.0,
                 )
 
-                # Should have entered safe mode (both floor+CWU enabled)
+                # Should have entered safe mode (both floor+CWU enabled via cloud)
                 mock_safe.assert_called_once()
                 assert mock_coordinator._current_state == STATE_SAFE_MODE
 
@@ -688,8 +629,6 @@ class TestWinterModeWithUnavailableTemp:
 
         mock_coordinator._current_state = STATE_SAFE_MODE
         mock_coordinator._bsb_lan_data = {}
-
-        mock_coordinator.hass.states.get.return_value = None
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
@@ -712,17 +651,16 @@ class TestWinterModeWithUnavailableTemp:
 
         mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._bsb_lan_data = {}
-        mock_coordinator.hass.states.get.return_value = None
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=False):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
                 await mock_coordinator._run_winter_mode_logic(
                     cwu_urgency=2,
                     floor_urgency=1,
-                    cwu_temp=None,  # temp unavailable
+                    cwu_temp=None,  # BSB-LAN temp unavailable
                     salon_temp=20.0,
                 )
 
-                # Should enter safe mode (pump decides)
+                # Should enter safe mode (pump decides via cloud)
                 mock_safe.assert_called_once()
                 assert mock_coordinator._current_state == STATE_SAFE_MODE

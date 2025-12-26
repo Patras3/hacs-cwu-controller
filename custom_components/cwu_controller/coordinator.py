@@ -41,15 +41,8 @@ from .const import (
     FAKE_HEATING_DETECTION_TIME,
     FAKE_HEATING_RESTART_WAIT,
     SENSOR_UNAVAILABLE_GRACE,
-    CWU_SENSOR_UNAVAILABLE_TIMEOUT,
     EVENING_PREP_HOUR,
     BATH_TIME_HOUR,
-    WH_MODE_OFF,
-    WH_MODE_HEAT_PUMP,
-    WH_MODE_PERFORMANCE,
-    CLIMATE_OFF,
-    CLIMATE_AUTO,
-    CLIMATE_HEAT,
     DEFAULT_CWU_TARGET_TEMP,
     DEFAULT_CWU_MIN_TEMP,
     DEFAULT_CWU_CRITICAL_TEMP,
@@ -95,9 +88,10 @@ from .const import (
     CONTROL_SOURCE_HA_CLOUD,
     BSB_FAKE_HEATING_DETECTION_TIME,
     BSB_LAN_STATE_VERIFY_INTERVAL,
-    BSB_CWU_TARGET_OFFSET,
-    BSB_CWU_MIN_OFFSET,
-    BSB_CWU_CRITICAL_OFFSET,
+    BSB_LAN_UNAVAILABLE_TIMEOUT,
+    SAFE_MODE_WATER_HEATER,
+    SAFE_MODE_CLIMATE,
+    SAFE_MODE_DELAY,
     # Broken heater mode refactored constants
     BROKEN_HEATER_FLOOR_WINDOW_START,
     BROKEN_HEATER_FLOOR_WINDOW_END,
@@ -159,7 +153,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Sensor tracking
         self._last_known_cwu_temp: float | None = None
         self._last_known_salon_temp: float | None = None
-        self._cwu_temp_unavailable_since: datetime | None = None
         self._last_cwu_temp_for_trend: float | None = None
         self._last_cwu_temp_time: datetime | None = None
 
@@ -236,6 +229,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # State verification - periodically check pump state matches expected
         self._last_state_verify: datetime | None = None
+
+        # BSB-LAN unavailability tracking for safe mode
+        self._bsb_lan_unavailable_since: datetime | None = None
 
         # Register shutdown handler to save data
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_save_on_shutdown)
@@ -525,11 +521,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def get_winter_cwu_target(self) -> float:
         """Get CWU target temperature for winter mode.
 
-        Applies winter offset (+5°C) and BSB offset (+10°C if using BSB sensor).
-        Capped at WINTER_CWU_MAX_TEMP (55°C) - compressor limit.
+        Applies winter offset (+5°C), capped at WINTER_CWU_MAX_TEMP (55°C).
         """
         base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        target = base_target + WINTER_CWU_TARGET_OFFSET + self._get_bsb_offset()
+        target = base_target + WINTER_CWU_TARGET_OFFSET
         return min(target, WINTER_CWU_MAX_TEMP)
 
     def get_winter_cwu_emergency_threshold(self) -> float:
@@ -588,11 +583,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Detect initial state after HA restart based on device states."""
         _LOGGER.info("CWU Controller: Detecting initial state after startup...")
 
-        # Check if CWU heating is active (water heater in heat_pump mode with power)
-        cwu_active = wh_state == WH_MODE_HEAT_PUMP and power is not None and power > POWER_IDLE_THRESHOLD
+        # Check if CWU heating is active (BSB CWU mode "On" with power)
+        # wh_state is now BSB cwu_mode like "On", "Off", etc.
+        cwu_mode_active = wh_state and wh_state.lower() == "on"
+        cwu_active = cwu_mode_active and power is not None and power > POWER_IDLE_THRESHOLD
 
-        # Check if floor heating is active
-        floor_active = climate_state in (CLIMATE_HEAT, CLIMATE_AUTO)
+        # Check if floor heating is active (BSB floor mode "Automatic" or "Comfort")
+        # climate_state is now BSB floor_mode like "Automatic", "Protection", etc.
+        floor_active = climate_state and climate_state.lower() in ("automatic", "comfort")
 
         if cwu_active:
             self._current_state = STATE_HEATING_CWU
@@ -611,37 +609,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._log_action("Started in idle state after restart")
             _LOGGER.info("CWU Controller: Starting in idle state")
 
-    def _is_using_bsb_temp(self) -> bool:
-        """Check if we're using BSB sensor for CWU temperature."""
-        return self._bsb_lan_data is not None and self._bsb_lan_data.get("cwu_temp") is not None
-
-    def _get_bsb_offset(self) -> float:
-        """Get BSB target offset if using BSB sensor, otherwise 0."""
-        if self._is_using_bsb_temp():
-            return BSB_CWU_TARGET_OFFSET
-        return 0.0
-
     def _get_min_temp(self) -> float:
-        """Get CWU min temperature, adjusted for sensor source."""
-        base = self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP)
-        if self._is_using_bsb_temp():
-            return base + BSB_CWU_MIN_OFFSET
-        return base
+        """Get CWU min temperature from config."""
+        return self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP)
 
     def _get_critical_temp(self) -> float:
-        """Get CWU critical temperature, adjusted for sensor source."""
-        base = self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
-        if self._is_using_bsb_temp():
-            return base + BSB_CWU_CRITICAL_OFFSET
-        return base
+        """Get CWU critical temperature from config."""
+        return self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
 
     def _calculate_cwu_urgency(self, cwu_temp: float | None, current_hour: int) -> int:
         """Calculate CWU heating urgency."""
         if cwu_temp is None:
-            # Sensor unavailable - assume medium urgency
+            # BSB-LAN unavailable - assume medium urgency
             return URGENCY_MEDIUM
 
-        # Get thresholds adjusted for BSB offset (if using BSB sensor)
+        # Get thresholds from config (no offsets - single source)
         target = self._get_target_temp()
         min_temp = self._get_min_temp()
         critical = self._get_critical_temp()
@@ -706,7 +688,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Detect if pump thinks it's heating but not actually heating CWU.
 
         Detects fake heating when:
-        - Water heater is in active mode (heat_pump or performance)
+        - Water heater is in active mode (BSB CWU mode "On")
         - CWU heating has been active for at least FAKE_HEATING_DETECTION_TIME
         - No power spike >= POWER_SPIKE_THRESHOLD (200W) in the last 10 minutes
 
@@ -717,8 +699,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if power is None or wh_state is None:
             return False
 
-        # Water heater should be in an active mode
-        if wh_state not in (WH_MODE_HEAT_PUMP, WH_MODE_PERFORMANCE):
+        # Water heater should be in an active mode (BSB mode "On")
+        if not wh_state or wh_state.lower() != "on":
             return False
 
         # Need to be in CWU heating state for at least FAKE_HEATING_DETECTION_TIME
@@ -785,132 +767,104 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         temp_increase = current_temp - self._cwu_session_start_temp
         return temp_increase < WINTER_CWU_MIN_TEMP_INCREASE
 
-    async def _async_set_water_heater_mode(self, mode: str) -> bool:
-        """Set water heater operation mode."""
-        entity_id = self.config.get("water_heater")
-        if not entity_id:
-            return False
+    # -------------------------------------------------------------------------
+    # Safe mode cloud methods (used ONLY when BSB-LAN unavailable 15+ minutes)
+    # -------------------------------------------------------------------------
 
+    async def _async_safe_mode_cwu_on(self) -> bool:
+        """Turn CWU on via cloud (safe mode only).
+
+        Always sends command even if already on (cloud state unreliable).
+        """
         try:
             await self.hass.services.async_call(
                 "water_heater",
                 SERVICE_SET_OPERATION_MODE,
-                {"entity_id": entity_id, "operation_mode": mode},
+                {"entity_id": SAFE_MODE_WATER_HEATER, "operation_mode": "heat_pump"},
                 blocking=True,
             )
-            self._log_action(f"Set water heater to {mode}")
+            self._log_action("Safe mode: CWU ON (cloud)")
             return True
         except Exception as e:
-            _LOGGER.error("Failed to set water heater mode: %s", e)
+            _LOGGER.error("Safe mode CWU ON failed: %s", e)
             return False
 
-    async def _async_set_climate(self, turn_on: bool) -> bool:
-        """Turn climate on or off via HA cloud (fallback method)."""
-        entity_id = self.config.get("climate")
-        if not entity_id:
-            return False
+    async def _async_safe_mode_floor_on(self) -> bool:
+        """Turn floor on via cloud (safe mode only).
 
+        Always sends command even if already on (cloud state unreliable).
+        """
         try:
-            service = SERVICE_TURN_ON if turn_on else SERVICE_TURN_OFF
             await self.hass.services.async_call(
                 "climate",
-                service,
-                {"entity_id": entity_id},
+                SERVICE_TURN_ON,
+                {"entity_id": SAFE_MODE_CLIMATE},
                 blocking=True,
             )
-            self._log_action(f"Climate {'ON' if turn_on else 'OFF'} (HA cloud)")
+            self._log_action("Safe mode: Floor ON (cloud)")
             return True
         except Exception as e:
-            _LOGGER.error("Failed to control climate: %s", e)
+            _LOGGER.error("Safe mode Floor ON failed: %s", e)
             return False
 
     # -------------------------------------------------------------------------
-    # Unified control methods - BSB-LAN primary with HA cloud fallback
+    # Control methods - BSB-LAN only (no fallback in normal operation)
     # -------------------------------------------------------------------------
 
     async def _async_set_cwu_on(self) -> bool:
-        """Turn CWU heating on - tries BSB-LAN first, falls back to HA cloud."""
-        # Try BSB-LAN first
-        if self._bsb_client.is_available:
-            if await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_ON):
-                self._control_source = CONTROL_SOURCE_BSB_LAN
-                self._log_action("CWU ON (BSB-LAN)")
-                return True
-            # BSB-LAN failed, continue to fallback
-            _LOGGER.warning("BSB-LAN CWU ON failed, trying HA cloud fallback")
-        else:
-            _LOGGER.info("BSB-LAN unavailable for CWU ON, using HA cloud")
+        """Turn CWU heating on via BSB-LAN."""
+        if not self._bsb_client.is_available:
+            _LOGGER.warning("BSB-LAN unavailable - CWU ON skipped")
+            return False
 
-        # Fallback to HA cloud
-        success = await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
+        success = await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_ON)
         if success:
-            self._control_source = CONTROL_SOURCE_HA_CLOUD
-            self._log_action("CWU ON (HA cloud fallback)")
+            self._control_source = CONTROL_SOURCE_BSB_LAN
+            self._log_action("CWU ON")
         else:
-            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn CWU ON!")
+            _LOGGER.error("BSB-LAN CWU ON failed")
         return success
 
     async def _async_set_cwu_off(self) -> bool:
-        """Turn CWU heating off - tries BSB-LAN first, falls back to HA cloud."""
-        # Try BSB-LAN first
-        if self._bsb_client.is_available:
-            if await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_OFF):
-                self._control_source = CONTROL_SOURCE_BSB_LAN
-                self._log_action("CWU OFF (BSB-LAN)")
-                return True
-            _LOGGER.warning("BSB-LAN CWU OFF failed, trying HA cloud fallback")
-        else:
-            _LOGGER.info("BSB-LAN unavailable for CWU OFF, using HA cloud")
+        """Turn CWU heating off via BSB-LAN."""
+        if not self._bsb_client.is_available:
+            _LOGGER.warning("BSB-LAN unavailable - CWU OFF skipped")
+            return False
 
-        # Fallback to HA cloud
-        success = await self._async_set_water_heater_mode(WH_MODE_OFF)
+        success = await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_OFF)
         if success:
-            self._control_source = CONTROL_SOURCE_HA_CLOUD
-            self._log_action("CWU OFF (HA cloud fallback)")
+            self._control_source = CONTROL_SOURCE_BSB_LAN
+            self._log_action("CWU OFF")
         else:
-            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn CWU OFF!")
+            _LOGGER.error("BSB-LAN CWU OFF failed")
         return success
 
     async def _async_set_floor_on(self) -> bool:
-        """Turn floor heating on - tries BSB-LAN first, falls back to HA cloud."""
-        # Try BSB-LAN first
-        if self._bsb_client.is_available:
-            if await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_AUTOMATIC):
-                self._control_source = CONTROL_SOURCE_BSB_LAN
-                self._log_action("Floor ON (BSB-LAN)")
-                return True
-            _LOGGER.warning("BSB-LAN Floor ON failed, trying HA cloud fallback")
-        else:
-            _LOGGER.info("BSB-LAN unavailable for Floor ON, using HA cloud")
+        """Turn floor heating on via BSB-LAN."""
+        if not self._bsb_client.is_available:
+            _LOGGER.warning("BSB-LAN unavailable - Floor ON skipped")
+            return False
 
-        # Fallback to HA cloud
-        success = await self._async_set_climate(True)
+        success = await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_AUTOMATIC)
         if success:
-            self._control_source = CONTROL_SOURCE_HA_CLOUD
-            self._log_action("Floor ON (HA cloud fallback)")
+            self._control_source = CONTROL_SOURCE_BSB_LAN
+            self._log_action("Floor ON")
         else:
-            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn Floor ON!")
+            _LOGGER.error("BSB-LAN Floor ON failed")
         return success
 
     async def _async_set_floor_off(self) -> bool:
-        """Turn floor heating off - tries BSB-LAN first, falls back to HA cloud."""
-        # Try BSB-LAN first
-        if self._bsb_client.is_available:
-            if await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_PROTECTION):
-                self._control_source = CONTROL_SOURCE_BSB_LAN
-                self._log_action("Floor OFF (BSB-LAN)")
-                return True
-            _LOGGER.warning("BSB-LAN Floor OFF failed, trying HA cloud fallback")
-        else:
-            _LOGGER.info("BSB-LAN unavailable for Floor OFF, using HA cloud")
+        """Turn floor heating off via BSB-LAN."""
+        if not self._bsb_client.is_available:
+            _LOGGER.warning("BSB-LAN unavailable - Floor OFF skipped")
+            return False
 
-        # Fallback to HA cloud
-        success = await self._async_set_climate(False)
+        success = await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_PROTECTION)
         if success:
-            self._control_source = CONTROL_SOURCE_HA_CLOUD
-            self._log_action("Floor OFF (HA cloud fallback)")
+            self._control_source = CONTROL_SOURCE_BSB_LAN
+            self._log_action("Floor OFF")
         else:
-            _LOGGER.error("BOTH BSB-LAN and HA cloud failed to turn Floor OFF!")
+            _LOGGER.error("BSB-LAN Floor OFF failed")
         return success
 
     # -------------------------------------------------------------------------
@@ -943,19 +897,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._bsb_lan_data["delta_t"] = None
 
     def _get_cwu_temperature(self) -> float | None:
-        """Get CWU temperature from BSB-LAN (preferred) or external sensor.
+        """Get CWU temperature from BSB-LAN exclusively.
 
-        BSB-LAN parameter 8830 is the primary source.
-        Falls back to external sensor if BSB-LAN unavailable or no data.
+        BSB-LAN parameter 8830 is the only source.
+        Returns None if BSB-LAN unavailable - triggers safe mode after timeout.
         """
-        # Try BSB-LAN first (preferred)
         if self._bsb_lan_data:
-            bsb_temp = self._bsb_lan_data.get("cwu_temp")
-            if bsb_temp is not None:
-                return bsb_temp
-
-        # Fallback to external sensor
-        return self._get_sensor_value(self.config.get("cwu_temp_sensor"))
+            return self._bsb_lan_data.get("cwu_temp")
+        return None
 
     def _detect_fake_heating_bsb(self) -> bool:
         """Detect fake heating using BSB-LAN status (more accurate).
@@ -1551,24 +1500,28 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Next coordinator update will run control logic and decide
 
     async def async_test_cwu_on(self) -> None:
-        """Test action: turn on CWU."""
-        await self._async_set_water_heater_mode(WH_MODE_HEAT_PUMP)
-        await self._async_send_notification("CWU Controller Test", "CWU turned ON (heat_pump mode)")
+        """Test action: turn on CWU via BSB-LAN."""
+        success = await self._async_set_cwu_on()
+        status = "CWU turned ON via BSB-LAN" if success else "CWU ON failed (BSB-LAN unavailable)"
+        await self._async_send_notification("CWU Controller Test", status)
 
     async def async_test_cwu_off(self) -> None:
-        """Test action: turn off CWU."""
-        await self._async_set_water_heater_mode(WH_MODE_OFF)
-        await self._async_send_notification("CWU Controller Test", "CWU turned OFF")
+        """Test action: turn off CWU via BSB-LAN."""
+        success = await self._async_set_cwu_off()
+        status = "CWU turned OFF via BSB-LAN" if success else "CWU OFF failed (BSB-LAN unavailable)"
+        await self._async_send_notification("CWU Controller Test", status)
 
     async def async_test_floor_on(self) -> None:
-        """Test action: turn on floor heating."""
-        await self._async_set_climate(True)
-        await self._async_send_notification("CWU Controller Test", "Floor heating turned ON")
+        """Test action: turn on floor heating via BSB-LAN."""
+        success = await self._async_set_floor_on()
+        status = "Floor heating turned ON via BSB-LAN" if success else "Floor ON failed (BSB-LAN unavailable)"
+        await self._async_send_notification("CWU Controller Test", status)
 
     async def async_test_floor_off(self) -> None:
-        """Test action: turn off floor heating."""
-        await self._async_set_climate(False)
-        await self._async_send_notification("CWU Controller Test", "Floor heating turned OFF")
+        """Test action: turn off floor heating via BSB-LAN."""
+        success = await self._async_set_floor_off()
+        status = "Floor heating turned OFF via BSB-LAN" if success else "Floor OFF failed (BSB-LAN unavailable)"
+        await self._async_send_notification("CWU Controller Test", status)
 
     def _parse_bsb_value(self, data: dict) -> float | None:
         """Parse BSB-LAN value from response."""
@@ -1599,8 +1552,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         pump_input = self._get_sensor_value(self.config.get("pump_input_temp"))
         pump_output = self._get_sensor_value(self.config.get("pump_output_temp"))
 
-        wh_state = self._get_entity_state(self.config.get("water_heater"))
-        climate_state = self._get_entity_state(self.config.get("climate"))
+        # Get CWU and floor modes from BSB-LAN (primary source)
+        wh_state = self._bsb_lan_data.get("cwu_mode") if self._bsb_lan_data else None
+        climate_state = self._bsb_lan_data.get("floor_mode") if self._bsb_lan_data else None
 
         # First run - detect current state from actual device states
         if self._first_run:
@@ -1610,9 +1564,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Track CWU temp for trend analysis
         if cwu_temp is not None:
             self._last_known_cwu_temp = cwu_temp
-            self._cwu_temp_unavailable_since = None
-        elif self._cwu_temp_unavailable_since is None:
-            self._cwu_temp_unavailable_since = now
 
         if salon_temp is not None:
             self._last_known_salon_temp = salon_temp
@@ -1683,11 +1634,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "cwu_heating_minutes": 0,
             "state_history": self._state_history[-20:],
             "action_history": self._action_history[-20:],
-            "cwu_target_temp": self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP),
-            "cwu_target_temp_effective": self._get_target_temp(),  # Adjusted for BSB offset
-            "cwu_min_temp": self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP),
-            "cwu_min_temp_effective": self._get_min_temp(),  # Adjusted for BSB offset
-            "bsb_offset_active": self._get_bsb_offset() > 0,
+            "cwu_target_temp": self._get_target_temp(),
+            "cwu_min_temp": self._get_min_temp(),
             "salon_target_temp": self.config.get("salon_target_temp", DEFAULT_SALON_TARGET_TEMP),
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
@@ -1871,46 +1819,52 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if self._transition_in_progress:
             return
 
-        # Handle safe mode - sensors unavailable
+        # Handle safe mode - BSB-LAN unavailable
         if self._current_state == STATE_SAFE_MODE:
-            # Check if sensors recovered - both CWU and at least one room temp needed
-            if cwu_temp is not None and salon_temp is not None:
-                self._log_action("Sensors recovered - exiting safe mode")
+            # Check if BSB-LAN recovered
+            if self._bsb_client.is_available and cwu_temp is not None:
+                self._log_action("BSB-LAN recovered - exiting safe mode")
                 await self._async_send_notification(
                     "CWU Controller Recovered",
-                    f"Temperature sensors are back online.\n"
+                    f"BSB-LAN connection restored.\n"
                     f"CWU: {cwu_temp}°C, Salon: {salon_temp}°C\n"
-                    f"Resuming normal control."
+                    f"Resuming normal BSB-LAN control."
                 )
-                self._cwu_temp_unavailable_since = None
+                self._bsb_lan_unavailable_since = None
+                self._control_source = CONTROL_SOURCE_BSB_LAN
                 self._change_state(STATE_IDLE)
                 # Continue to normal control logic below
             else:
                 # Still in safe mode, nothing to do
                 return
 
-        # Check if we need to enter safe mode due to sensor unavailability
-        if cwu_temp is None:
-            if self._cwu_temp_unavailable_since is None:
-                self._cwu_temp_unavailable_since = datetime.now()
+        # Check if we need to enter safe mode due to BSB-LAN unavailability
+        if not self._bsb_client.is_available:
+            if self._bsb_lan_unavailable_since is None:
+                self._bsb_lan_unavailable_since = datetime.now()
+                _LOGGER.warning("BSB-LAN became unavailable - starting safe mode countdown")
             else:
-                unavailable_minutes = (datetime.now() - self._cwu_temp_unavailable_since).total_seconds() / 60
-                if unavailable_minutes >= CWU_SENSOR_UNAVAILABLE_TIMEOUT:
+                unavailable_minutes = (datetime.now() - self._bsb_lan_unavailable_since).total_seconds() / 60
+                if unavailable_minutes >= BSB_LAN_UNAVAILABLE_TIMEOUT:
                     self._log_action(
-                        f"CWU sensor unavailable for {unavailable_minutes:.0f} minutes - entering safe mode"
+                        f"BSB-LAN unavailable for {unavailable_minutes:.0f} minutes - entering safe mode"
                     )
                     await self._async_send_notification(
                         "CWU Controller - Safe Mode",
-                        f"CWU temperature sensor has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
-                        f"Entering safe mode - heat pump will control both floor and CWU.\n"
-                        f"Normal control will resume when sensors recover."
+                        f"BSB-LAN has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
+                        f"Entering safe mode - using cloud control as backup.\n"
+                        f"CWU and floor heating will be turned on via cloud.\n"
+                        f"Normal BSB-LAN control will resume when connection recovers."
                     )
                     await self._enter_safe_mode()
                     self._change_state(STATE_SAFE_MODE)
                     return
         else:
-            # Sensor is available, clear the unavailable timestamp
-            self._cwu_temp_unavailable_since = None
+            # BSB-LAN is available, clear the unavailable timestamp
+            if self._bsb_lan_unavailable_since is not None:
+                self._log_action("BSB-LAN connection restored")
+                self._bsb_lan_unavailable_since = None
+                self._control_source = CONTROL_SOURCE_BSB_LAN
 
         # Route based on operating mode
         if self._operating_mode == MODE_WINTER:
@@ -2094,11 +2048,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if cwu_temp is None:
             return False
 
-        # Absolute minimum (adjusted for BSB offset - uses critical offset, not target offset)
-        critical_threshold = MAX_TEMP_CRITICAL_THRESHOLD
-        if self._is_using_bsb_temp():
-            critical_threshold += BSB_CWU_CRITICAL_OFFSET
-        if cwu_temp < critical_threshold:
+        # Absolute minimum threshold
+        if cwu_temp < MAX_TEMP_CRITICAL_THRESHOLD:
             return False
 
         # If we have recorded max
@@ -2159,16 +2110,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         return DHW_STATUS_CHARGED in dhw_status.lower()
 
     def _get_target_temp(self) -> float:
-        """Get CWU target temperature, adjusted for sensor source.
-
-        BSB 8830 sensor is at bottom of tank, reads ~10°C lower than HA sensor.
-        When using BSB for temp reading, target must be +10°C higher.
-
-        Returns:
-            Target temp adjusted for current sensor source.
-        """
-        base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        return base_target + self._get_bsb_offset()
+        """Get CWU target temperature from config."""
+        return self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
 
     def _reset_max_temp_tracking(self) -> None:
         """Reset max temp tracking for new CWU session."""
@@ -2668,10 +2611,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._transition_in_progress = False
 
     async def _enter_safe_mode(self) -> None:
-        """Enter safe mode - hand control back to heat pump.
+        """Enter safe mode - use cloud as last resort.
 
-        Turns on both floor heating and CWU, letting the heat pump
-        decide what to do. Used when sensors are unavailable.
+        Called when BSB-LAN has been unavailable for 15 minutes.
+        Uses cloud entities to turn on both CWU and floor heating.
+        Always sends commands even if devices appear on (cloud state unreliable).
         """
         if self._transition_in_progress:
             self._log_action("Enter safe mode skipped - transition in progress")
@@ -2679,15 +2623,19 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._transition_in_progress = True
         try:
-            self._log_action("Entering safe mode - enabling both floor and CWU")
+            self._control_source = CONTROL_SOURCE_HA_CLOUD
+            self._log_action("Entering safe mode - BSB-LAN unavailable, using cloud fallback")
 
-            # Turn on both - let heat pump decide
-            # Add delay between commands
-            await self._async_set_floor_on()
-            self._log_action("Floor heating enabled, waiting 60s...")
-            await asyncio.sleep(60)
-            await self._async_set_cwu_on()
+            # Turn on CWU via cloud (always send command)
+            await self._async_safe_mode_cwu_on()
+            self._log_action(f"Safe mode: CWU enabled, waiting {SAFE_MODE_DELAY}s before floor...")
 
-            self._log_action("Safe mode active - heat pump in control")
+            # Wait 2 minutes before enabling floor
+            await asyncio.sleep(SAFE_MODE_DELAY)
+
+            # Turn on floor via cloud (always send command)
+            await self._async_safe_mode_floor_on()
+
+            self._log_action("Safe mode active - heat pump in control via cloud")
         finally:
             self._transition_in_progress = False

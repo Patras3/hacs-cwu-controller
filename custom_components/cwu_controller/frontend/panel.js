@@ -49,18 +49,17 @@ const ENTITIES = {
 };
 
 const EXTERNAL_ENTITIES = {
-    cwuTemp: 'sensor.temperatura_c_w_u',
+    // Room temps (still from HA sensors)
     salonTemp: 'sensor.temperatura_govee_salon',
     bedroomTemp: 'sensor.temperatura_govee_sypialnia',
     kidsTemp: 'sensor.temperatura_govee_dzieciecy',
     power: 'sensor.ogrzewanie_total_system_power',
-    waterHeater: 'water_heater.pompa_ciepla_io_13873843_2',
-    climate: 'climate.pompa_ciepla_dom',
     // Technical temps
     pumpInlet: 'sensor.temperatura_wejscia_pompy_ciepla',
     pumpOutlet: 'sensor.temperatura_wyjscia_pompy_ciepla',
     cwuInlet: 'sensor.temperatura_wejscia_c_w_u',
     floorInlet: 'sensor.temperatura_wejscia_ogrzewania_podlogowego',
+    // NOTE: CWU temp, water heater, climate removed - now using BSB-LAN exclusively
 };
 
 // State icons and classes
@@ -96,7 +95,7 @@ const STATE_DESCRIPTIONS = {
     'emergency_floor': 'Emergency! Room temperature critically low - priority heating',
     'fake_heating_detected': 'Fake heating detected - waiting for HP ready',
     'fake_heating_restarting': 'HP ready - restarting CWU heating',
-    'safe_mode': 'Safe mode - heat pump controls both CWU and floor (sensor unavailable)',
+    'safe_mode': 'Safe mode - BSB-LAN unavailable, using cloud backup',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -332,10 +331,10 @@ async function fetchHistory(entityId, hoursBack = 6, retryOnAuth = true) {
 }
 
 /**
- * Fetch CWU temp from 1 hour ago for comparison
+ * Fetch CWU temp from 1 hour ago for comparison (now from BSB-LAN sensor)
  */
 async function fetchCwuTemp1hAgo() {
-    const history = await fetchHistory(EXTERNAL_ENTITIES.cwuTemp, 1.5);
+    const history = await fetchHistory(ENTITIES.bsbCwuTemp, 1.5);
     if (history.length > 0) {
         // Find temp closest to 1 hour ago
         const oneHourAgo = Date.now() - 60 * 60 * 1000;
@@ -480,29 +479,25 @@ async function refreshData() {
         if (cwuHeating) currentData.cwuHeatingActive = cwuHeating.state === 'on';
         if (floorHeating) currentData.floorHeatingActive = floorHeating.state === 'on';
 
-        const [cwuTemp, salonTemp, bedroomTemp, kidsTemp, power, waterHeater, climate, pumpInlet, pumpOutlet, cwuInlet, floorInlet] = await Promise.all([
-            fetchState(EXTERNAL_ENTITIES.cwuTemp),
+        // Fetch external entities (room temps, power, technical temps)
+        // NOTE: CWU temp now from BSB-LAN, water heater/climate states from BSB modes
+        const [salonTemp, bedroomTemp, kidsTemp, power, pumpInlet, pumpOutlet, cwuInlet, floorInlet] = await Promise.all([
             fetchState(EXTERNAL_ENTITIES.salonTemp),
             fetchState(EXTERNAL_ENTITIES.bedroomTemp),
             fetchState(EXTERNAL_ENTITIES.kidsTemp),
             fetchState(EXTERNAL_ENTITIES.power),
-            fetchState(EXTERNAL_ENTITIES.waterHeater),
-            fetchState(EXTERNAL_ENTITIES.climate),
             fetchState(EXTERNAL_ENTITIES.pumpInlet),
             fetchState(EXTERNAL_ENTITIES.pumpOutlet),
             fetchState(EXTERNAL_ENTITIES.cwuInlet),
             fetchState(EXTERNAL_ENTITIES.floorInlet),
         ]);
 
-        if (cwuTemp) currentData.cwuTemp = parseFloat(cwuTemp.state);
         if (salonTemp) currentData.salonTemp = parseFloat(salonTemp.state);
         if (bedroomTemp) currentData.bedroomTemp = parseFloat(bedroomTemp.state);
         if (kidsTemp) currentData.kidsTemp = parseFloat(kidsTemp.state);
         if (power) {
             currentData.power = parseFloat(power.state) || 0;
         }
-        if (waterHeater) currentData.waterHeaterState = waterHeater.state;
-        if (climate) currentData.climateState = climate.state;
         if (pumpInlet) currentData.pumpInlet = parseFloat(pumpInlet.state);
         if (pumpOutlet) currentData.pumpOutlet = parseFloat(pumpOutlet.state);
         if (cwuInlet) currentData.cwuInlet = parseFloat(cwuInlet.state);
@@ -534,6 +529,16 @@ async function refreshData() {
             control_source: controlSource?.state || 'unknown',
         };
         currentData.bsbLan = bsbData;
+
+        // CWU temp now exclusively from BSB-LAN
+        if (bsbCwuTemp && !isNaN(parseFloat(bsbCwuTemp.state))) {
+            currentData.cwuTemp = parseFloat(bsbCwuTemp.state);
+        }
+
+        // Use BSB modes for display (instead of cloud entity states)
+        currentData.waterHeaterState = bsbData.dhw_status;  // CWU mode from BSB
+        currentData.climateState = currentData.attrs?.floor_mode || '---';  // Floor mode from coordinator
+
         updateBsbLanDisplay(bsbData);
 
         document.getElementById('connection-state').textContent = 'Connected';
@@ -1499,7 +1504,7 @@ async function updateChartData(chartId, range) {
 
     if (chartId === 'tempChart' && tempChart) {
         const [cwu, salon, bedroom, kids] = await Promise.all([
-            fetchHistory(EXTERNAL_ENTITIES.cwuTemp, hours),
+            fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.salonTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.bedroomTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.kidsTemp, hours),
@@ -1515,7 +1520,7 @@ async function updateChartData(chartId, range) {
         powerChart.update('none');
     } else if (chartId === 'techChart' && techChart) {
         const [cwu, pumpIn, pumpOut, cwuIn, floorIn] = await Promise.all([
-            fetchHistory(EXTERNAL_ENTITIES.cwuTemp, hours),
+            fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.pumpInlet, hours),
             fetchHistory(EXTERNAL_ENTITIES.pumpOutlet, hours),
             fetchHistory(EXTERNAL_ENTITIES.cwuInlet, hours),
@@ -1650,7 +1655,7 @@ async function updateModalChartData() {
 
     if (modalChartType === 'temp') {
         const [cwu, salon, bedroom, kids] = await Promise.all([
-            fetchHistory(EXTERNAL_ENTITIES.cwuTemp, hours),
+            fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.salonTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.bedroomTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.kidsTemp, hours),
@@ -1664,7 +1669,7 @@ async function updateModalChartData() {
         modalChart.data.datasets[0].data = convertToChartData(power);
     } else if (modalChartType === 'tech') {
         const [cwu, pumpIn, pumpOut, cwuIn, floorIn] = await Promise.all([
-            fetchHistory(EXTERNAL_ENTITIES.cwuTemp, hours),
+            fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.pumpInlet, hours),
             fetchHistory(EXTERNAL_ENTITIES.pumpOutlet, hours),
             fetchHistory(EXTERNAL_ENTITIES.cwuInlet, hours),

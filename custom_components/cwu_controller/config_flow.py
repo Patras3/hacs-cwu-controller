@@ -10,13 +10,10 @@ from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
-    CONF_CWU_TEMP_SENSOR,
     CONF_SALON_TEMP_SENSOR,
     CONF_BEDROOM_TEMP_SENSOR,
     CONF_KIDS_ROOM_TEMP_SENSOR,
     CONF_POWER_SENSOR,
-    CONF_WATER_HEATER,
-    CONF_CLIMATE,
     CONF_NOTIFY_SERVICE,
     CONF_PUMP_INPUT_TEMP,
     CONF_PUMP_OUTPUT_TEMP,
@@ -45,7 +42,6 @@ from .const import (
     MODE_BROKEN_HEATER,
     MODE_WINTER,
     MODE_SUMMER,
-    OPERATING_MODES,
     # BSB-LAN
     CONF_BSB_LAN_HOST,
     DEFAULT_BSB_LAN_HOST,
@@ -64,12 +60,9 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate that required entities exist
-            for key in [CONF_CWU_TEMP_SENSOR, CONF_WATER_HEATER, CONF_CLIMATE]:
-                if key in user_input:
-                    state = self.hass.states.get(user_input[key])
-                    if state is None:
-                        errors[key] = "entity_not_found"
+            # BSB-LAN host is required
+            if not user_input.get(CONF_BSB_LAN_HOST):
+                errors["base"] = "bsb_lan_required"
 
             if not errors:
                 # Store entity config and move to thresholds
@@ -78,14 +71,12 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Default entity IDs based on user's setup
         defaults = {
-            CONF_CWU_TEMP_SENSOR: "sensor.temperatura_c_w_u",
+            CONF_BSB_LAN_HOST: DEFAULT_BSB_LAN_HOST,
             CONF_SALON_TEMP_SENSOR: "sensor.temperatura_govee_salon",
             CONF_BEDROOM_TEMP_SENSOR: "sensor.temperatura_govee_sypialnia",
             CONF_KIDS_ROOM_TEMP_SENSOR: "sensor.temperatura_govee_dzieciecy",
             CONF_POWER_SENSOR: "sensor.ogrzewanie_total_system_power",
             CONF_ENERGY_SENSOR: DEFAULT_ENERGY_SENSOR,
-            CONF_WATER_HEATER: "water_heater.pompa_ciepla_io_13873843_2",
-            CONF_CLIMATE: "climate.pompa_ciepla_dom",
             CONF_NOTIFY_SERVICE: "notify.mobile_app_patryk_s22_ultra",
             CONF_PUMP_INPUT_TEMP: "sensor.temperatura_wejscia_pompy_ciepla",
             CONF_PUMP_OUTPUT_TEMP: "sensor.temperatura_wyjscia_pompy_ciepla",
@@ -95,9 +86,11 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
 
         data_schema = vol.Schema({
-            vol.Required(CONF_CWU_TEMP_SENSOR, default=defaults[CONF_CWU_TEMP_SENSOR]): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            # BSB-LAN host (required - primary control source)
+            vol.Required(CONF_BSB_LAN_HOST, default=defaults[CONF_BSB_LAN_HOST]): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
             ),
+            # Room temperature sensors
             vol.Required(CONF_SALON_TEMP_SENSOR, default=defaults[CONF_SALON_TEMP_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),
@@ -107,22 +100,19 @@ class CWUControllerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_KIDS_ROOM_TEMP_SENSOR, default=defaults[CONF_KIDS_ROOM_TEMP_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),
+            # Power sensor (for fake heating detection)
             vol.Required(CONF_POWER_SENSOR, default=defaults[CONF_POWER_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="power")
             ),
             vol.Optional(CONF_ENERGY_SENSOR, default=defaults[CONF_ENERGY_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="energy")
             ),
-            vol.Required(CONF_WATER_HEATER, default=defaults[CONF_WATER_HEATER]): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="water_heater")
-            ),
-            vol.Required(CONF_CLIMATE, default=defaults[CONF_CLIMATE]): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="climate")
-            ),
+            # Workday sensor (for tariff)
             vol.Required(CONF_WORKDAY_SENSOR, default=defaults[CONF_WORKDAY_SENSOR]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
             vol.Optional(CONF_NOTIFY_SERVICE, default=defaults[CONF_NOTIFY_SERVICE]): selector.TextSelector(),
+            # Optional technical sensors
             vol.Optional(CONF_PUMP_INPUT_TEMP, default=defaults[CONF_PUMP_INPUT_TEMP]): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),

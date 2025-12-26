@@ -13,13 +13,10 @@ OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER]
 
 # Configuration keys
 CONF_OPERATING_MODE: Final = "operating_mode"
-CONF_CWU_TEMP_SENSOR: Final = "cwu_temp_sensor"
 CONF_SALON_TEMP_SENSOR: Final = "salon_temp_sensor"
 CONF_BEDROOM_TEMP_SENSOR: Final = "bedroom_temp_sensor"
 CONF_KIDS_ROOM_TEMP_SENSOR: Final = "kids_room_temp_sensor"
 CONF_POWER_SENSOR: Final = "power_sensor"
-CONF_WATER_HEATER: Final = "water_heater"
-CONF_CLIMATE: Final = "climate"
 CONF_NOTIFY_SERVICE: Final = "notify_service"
 CONF_PUMP_INPUT_TEMP: Final = "pump_input_temp"
 CONF_PUMP_OUTPUT_TEMP: Final = "pump_output_temp"
@@ -97,8 +94,11 @@ CLIMATE_OFF: Final = "off"
 CLIMATE_AUTO: Final = "auto"
 CLIMATE_HEAT: Final = "heat"
 
-# Safety: sensor unavailability timeout (minutes)
-CWU_SENSOR_UNAVAILABLE_TIMEOUT: Final = 60  # Enter safe mode if CWU temp unavailable for this long
+# Safe mode - BSB-LAN unavailability (cloud used ONLY as last resort)
+BSB_LAN_UNAVAILABLE_TIMEOUT: Final = 15  # minutes before entering safe mode
+SAFE_MODE_WATER_HEATER: Final = "water_heater.pompa_ciepla_io_13873843_2"
+SAFE_MODE_CLIMATE: Final = "climate.pompa_ciepla_dom"
+SAFE_MODE_DELAY: Final = 120  # 2 minutes between CWU and floor commands
 
 # Update interval
 UPDATE_INTERVAL: Final = 60  # seconds
@@ -140,16 +140,8 @@ CONF_BSB_LAN_HOST: Final = "bsb_lan_host"
 DEFAULT_BSB_LAN_HOST: Final = "192.168.50.219"
 BSB_LAN_READ_TIMEOUT: Final = 5  # seconds for reads
 BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
-BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before fallback to HA cloud
+BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before marking unavailable
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
-
-# BSB-LAN CWU Temperature Offsets
-# BSB 8830 sensor is at bottom of tank, HA sensor is higher (middle)
-# BSB reads ~10°C lower than HA for same actual water state
-# When using BSB for temp reading, thresholds must be adjusted
-BSB_CWU_TARGET_OFFSET: Final = 10.0  # Add to target when using BSB temp reading
-BSB_CWU_MIN_OFFSET: Final = 0.0      # Add to min temp (0 for now, may adjust later)
-BSB_CWU_CRITICAL_OFFSET: Final = 0.0  # Add to critical temp (0 for now, may adjust later)
 
 # BSB-LAN Parameters for reading
 BSB_LAN_READ_PARAMS: Final = "700,1600,8000,8003,8006,8412,8410,8830,8700"

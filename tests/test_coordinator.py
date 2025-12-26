@@ -523,7 +523,7 @@ class TestFakeHeatingDetection:
     """Tests for fake heating detection (broken heater mode).
 
     Fake heating is detected when:
-    - Water heater is in active mode (heat_pump/performance)
+    - Water heater is in active mode (On/performance)
     - CWU heating has been active for 10+ minutes
     - No power spike >= 200W (POWER_SPIKE_THRESHOLD) in the last 10 minutes
     """
@@ -540,7 +540,7 @@ class TestFakeHeatingDetection:
             (now - timedelta(minutes=3), 45.0),
             (now - timedelta(minutes=1), 40.0),
         ]
-        result = mock_coordinator._detect_fake_heating(40.0, "heat_pump")
+        result = mock_coordinator._detect_fake_heating(40.0, "On")  # BSB mode
         assert result is False
 
     def test_no_fake_heating_wrong_mode(self, mock_coordinator):
@@ -552,7 +552,7 @@ class TestFakeHeatingDetection:
             (now - timedelta(minutes=3), 5.0),
             (now - timedelta(minutes=1), 5.0),
         ]
-        result = mock_coordinator._detect_fake_heating(5.0, "off")
+        result = mock_coordinator._detect_fake_heating(5.0, "Off")  # BSB mode
         assert result is False
 
     def test_fake_heating_detected_low_power(self, mock_coordinator):
@@ -567,7 +567,7 @@ class TestFakeHeatingDetection:
             (now - timedelta(minutes=3), 5.0),
             (now - timedelta(minutes=1), 5.0),
         ]
-        result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
+        result = mock_coordinator._detect_fake_heating(5.0, "On")
         assert result is True
 
     def test_fake_heating_detected_pump_running_no_spike(self, mock_coordinator):
@@ -582,7 +582,7 @@ class TestFakeHeatingDetection:
             (now - timedelta(minutes=3), 48.0),
             (now - timedelta(minutes=1), 52.0),
         ]
-        result = mock_coordinator._detect_fake_heating(52.0, "heat_pump")
+        result = mock_coordinator._detect_fake_heating(52.0, "On")
         assert result is True
 
     def test_fake_heating_not_detected_short_duration(self, mock_coordinator):
@@ -592,7 +592,7 @@ class TestFakeHeatingDetection:
         mock_coordinator._recent_power_readings = [
             (now - timedelta(minutes=1), 5.0),
         ]
-        result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
+        result = mock_coordinator._detect_fake_heating(5.0, "On")
         assert result is False
 
     def test_fake_heating_not_detected_no_cwu_start(self, mock_coordinator):
@@ -602,7 +602,7 @@ class TestFakeHeatingDetection:
         mock_coordinator._recent_power_readings = [
             (now - timedelta(minutes=5), 5.0),
         ]
-        result = mock_coordinator._detect_fake_heating(5.0, "heat_pump")
+        result = mock_coordinator._detect_fake_heating(5.0, "On")
         assert result is False
 
 
@@ -1221,67 +1221,39 @@ class TestResetMaxTempTracking:
 
 
 class TestGetTargetTemp:
-    """Tests for _get_target_temp() - get CWU target from config."""
+    """Tests for _get_target_temp() - get CWU target from config (BSB-LAN only, no offset)."""
 
     def test_get_target_from_config(self, mock_coordinator):
-        """Test getting target temp from configuration (no BSB offset)."""
-        mock_coordinator._bsb_lan_data = None
+        """Test getting target temp from configuration."""
         mock_coordinator.config["cwu_target_temp"] = 48.0
         assert mock_coordinator._get_target_temp() == 48.0
 
     def test_get_default_target(self, mock_coordinator):
         """Test getting default target when not in config."""
         # default_config fixture has cwu_target_temp set to DEFAULT_CWU_TARGET_TEMP (45.0)
-        # No BSB data, so no offset
-        mock_coordinator._bsb_lan_data = None
         assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP
 
-    def test_get_target_with_bsb_offset(self, mock_coordinator):
-        """Test target adds BSB offset when BSB temp available."""
-        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
-        # Should add 10°C offset: 45 + 10 = 55
-        assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP + 10.0
+    def test_get_min_temp_from_config(self, mock_coordinator):
+        """Test getting min temp from configuration."""
+        mock_coordinator.config["cwu_min_temp"] = 42.0
+        assert mock_coordinator._get_min_temp() == 42.0
 
-    def test_get_target_no_bsb_offset_when_no_cwu_temp(self, mock_coordinator):
-        """Test no BSB offset when BSB data exists but cwu_temp is None."""
-        mock_coordinator._bsb_lan_data = {"hp_status": "Compressor"}  # No cwu_temp
-        assert mock_coordinator._get_target_temp() == DEFAULT_CWU_TARGET_TEMP
+    def test_get_default_min_temp(self, mock_coordinator):
+        """Test getting default min temp."""
+        assert mock_coordinator._get_min_temp() == 40.0  # DEFAULT_CWU_MIN_TEMP
 
+    def test_get_critical_temp_from_config(self, mock_coordinator):
+        """Test getting critical temp from configuration."""
+        mock_coordinator.config["cwu_critical_temp"] = 38.0
+        assert mock_coordinator._get_critical_temp() == 38.0
 
-class TestBSBOffset:
-    """Tests for BSB sensor offset logic."""
+    def test_get_default_critical_temp(self, mock_coordinator):
+        """Test getting default critical temp."""
+        assert mock_coordinator._get_critical_temp() == 35.0  # DEFAULT_CWU_CRITICAL_TEMP
 
-    def test_bsb_offset_zero_when_no_data(self, mock_coordinator):
-        """Test BSB offset is 0 when no BSB data."""
-        mock_coordinator._bsb_lan_data = None
-        assert mock_coordinator._get_bsb_offset() == 0.0
-
-    def test_bsb_offset_zero_when_no_cwu_temp(self, mock_coordinator):
-        """Test BSB offset is 0 when BSB data has no cwu_temp."""
-        mock_coordinator._bsb_lan_data = {"hp_status": "---"}
-        assert mock_coordinator._get_bsb_offset() == 0.0
-
-    def test_bsb_offset_active_when_cwu_temp_present(self, mock_coordinator):
-        """Test BSB offset is 10°C when cwu_temp is present."""
-        mock_coordinator._bsb_lan_data = {"cwu_temp": 45.0}
-        assert mock_coordinator._get_bsb_offset() == 10.0
-
-    def test_get_min_temp_with_bsb_offset(self, mock_coordinator):
-        """Test min temp with BSB (offset is 0 for now)."""
-        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
-        # Default min is 40, BSB_CWU_MIN_OFFSET is 0
-        assert mock_coordinator._get_min_temp() == 40.0
-
-    def test_get_critical_temp_with_bsb_offset(self, mock_coordinator):
-        """Test critical temp with BSB (offset is 0 for now)."""
-        mock_coordinator._bsb_lan_data = {"cwu_temp": 35.0}
-        # Default critical is 35, BSB_CWU_CRITICAL_OFFSET is 0
-        assert mock_coordinator._get_critical_temp() == 35.0
-
-    def test_winter_target_capped_with_bsb(self, mock_coordinator):
-        """Test winter target is capped at 55°C even with BSB offset."""
-        mock_coordinator._bsb_lan_data = {"cwu_temp": 42.0}
-        # base 45 + winter 5 + bsb 10 = 60, but capped at 55
+    def test_winter_target_capped_at_max(self, mock_coordinator):
+        """Test winter target is capped at 55°C."""
+        mock_coordinator.config["cwu_target_temp"] = 52.0  # base 52 + winter 5 = 57, but capped at 55
         winter_target = mock_coordinator.get_winter_cwu_target()
         assert winter_target == 55.0  # WINTER_CWU_MAX_TEMP
 
