@@ -550,8 +550,8 @@ async function refreshData() {
         }
 
         // Use BSB modes for display (instead of cloud entity states)
-        currentData.waterHeaterState = bsbData.dhw_status;  // CWU mode from BSB
-        currentData.climateState = currentData.attrs?.floor_mode || '---';  // Floor mode from coordinator
+        currentData.waterHeaterState = bsbData.cwu_mode;   // CWU mode from BSB (On/Off/Eco)
+        currentData.climateState = bsbData.floor_mode;      // Floor mode from BSB (Automatic/Protection/etc.)
 
         updateBsbLanDisplay(bsbData);
 
