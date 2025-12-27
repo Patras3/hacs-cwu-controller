@@ -862,6 +862,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._last_state_verify = now
 
+        # Refresh BSB-LAN data to get current state (not cached from cycle start)
+        await self._async_refresh_bsb_lan_data()
+
         # Get current BSB-LAN state
         actual_cwu_mode = self._bsb_lan_data.get("cwu_mode", "")
         actual_floor_mode = self._bsb_lan_data.get("floor_mode", "")

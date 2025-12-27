@@ -191,7 +191,7 @@ class BSBLanClient:
         return await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, int(temp))
 
     async def async_write_and_verify(
-        self, param: int, value: int, verify_delay: float = 1.0
+        self, param: int, value: int, verify_delay: float = 5.0
     ) -> tuple[bool, str]:
         """Write a parameter and verify it was set correctly.
 
