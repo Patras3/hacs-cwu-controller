@@ -1,0 +1,18 @@
+{# --- CWU Controller Widget (Compact) --- #}
+{% set state = states('sensor.cwu_controller_state') %}
+{% set cwu_temp = states('sensor.cwu_controller_bsb_cwu_temperature') | float(0) %}
+{% set outside = states('sensor.cwu_controller_bsb_outside_temperature') | float(0) %}
+{% set power = states('sensor.cwu_controller_average_power') | float(0) %}
+{% set is_cheap = state_attr('sensor.cwu_controller_tariff_rate', 'is_cheap_tariff') %}
+{% set hold = state_attr('sensor.cwu_controller_state', 'hold_time_remaining') | default(0) %}
+
+{# Status #}
+{% if state == 'heating_cwu' %}🔥CWU{% elif state == 'heating_floor' %}🏠FLOOR{% elif 'emergency' in state %}🚨EMG{% elif state == 'pause' %}⏸️PAUZA{% elif state == 'fake_heating_detected' %}⚠️FAKE{% else %}💤IDLE{% endif %}
+{% if hold > 0 %} ({{ hold }}m){% endif %}
+
+<br>
+🌡️ {{ cwu_temp | round(1) }}°C | 🌍 {{ outside | round(1) }}°C
+<br>
+⚡ {{ power | round(0) }}W | {% if is_cheap %}💚Tania{% else %}⛔Droga{% endif %}
+<br>
+<em>{{ now().strftime('%H:%M') }}</em>

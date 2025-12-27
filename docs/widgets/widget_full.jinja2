@@ -1,0 +1,138 @@
+{# --- CWU Controller Widget (Full) --- #}
+{% set state = states('sensor.cwu_controller_state') %}
+{% set hold_time = state_attr('sensor.cwu_controller_state', 'hold_time_remaining') | default(0) %}
+{% set hp_ready = state_attr('sensor.cwu_controller_state', 'hp_ready') | default(true) %}
+{% set hp_reason = state_attr('sensor.cwu_controller_state', 'hp_ready_reason') | default('OK') %}
+
+{# --- Główny status --- #}
+{% if state == 'heating_cwu' %}
+🔥 <span style="color: #00BCD4; font-size: 24px;">Grzanie CWU</span>
+{% elif state == 'heating_floor' %}
+🏠 <span style="color: #4CAF50; font-size: 24px;">Podłogówka</span>
+{% elif state == 'emergency_cwu' %}
+🚨 <span style="color: #F44336; font-size: 24px;">Awaryjne CWU!</span>
+{% elif state == 'emergency_floor' %}
+🚨 <span style="color: #F44336; font-size: 24px;">Awaryjna Podłoga!</span>
+{% elif state == 'pause' %}
+⏸️ <span style="color: #FF9800; font-size: 24px;">Pauza</span>
+{% elif state == 'fake_heating_detected' %}
+⚠️ <span style="color: #FF5722; font-size: 24px;">Fake Heating!</span>
+{% elif state == 'safe_mode' %}
+🛡️ <span style="color: #9C27B0; font-size: 24px;">Safe Mode</span>
+{% else %}
+💤 <span style="color: #607D8B; font-size: 24px;">Idle</span>
+{% endif %}
+
+{# --- Hold timer --- #}
+{% if hold_time > 0 %}
+<br>⏱️ Hold: {{ hold_time }}min
+{% endif %}
+
+<br><br>
+{# --- Temperatury --- #}
+{% set cwu_temp = states('sensor.cwu_controller_bsb_cwu_temperature') | float(0) %}
+{% set cwu_target = states('sensor.cwu_controller_cwu_target_temp') | float(45) %}
+{% set outside = states('sensor.cwu_controller_bsb_outside_temperature') | float(0) %}
+
+🌡️ <b>CWU:</b>
+{% if cwu_temp < 38 %}
+<span style="color: #F44336;">{{ cwu_temp | round(1) }}°C</span>
+{% elif cwu_temp < 42 %}
+<span style="color: #FF9800;">{{ cwu_temp | round(1) }}°C</span>
+{% else %}
+<span style="color: #4CAF50;">{{ cwu_temp | round(1) }}°C</span>
+{% endif %}
+ / {{ cwu_target | round(0) }}°C
+
+<br>🌍 Zewn: {{ outside | round(1) }}°C
+
+<br><br>
+{# --- Tryby BSB --- #}
+{% set cwu_mode = states('sensor.cwu_controller_bsb_cwu_mode') %}
+{% set floor_mode = states('sensor.cwu_controller_bsb_floor_mode') %}
+
+<b>BSB Tryby:</b><br>
+{% if cwu_mode | lower in ['on', 'eco', '1'] %}
+🔵 CWU: <span style="color: #4CAF50;">ON</span> ({{ cwu_mode }})
+{% else %}
+⚫ CWU: <span style="color: #9E9E9E;">OFF</span>
+{% endif %}
+<br>
+{% if floor_mode | lower in ['automatic', 'comfort', '1'] %}
+🟢 Floor: <span style="color: #4CAF50;">ON</span> ({{ floor_mode }})
+{% else %}
+⚫ Floor: <span style="color: #9E9E9E;">OFF</span>
+{% endif %}
+
+<br><br>
+{# --- Statusy pompy --- #}
+{% set dhw = states('sensor.cwu_controller_bsb_dhw_status') %}
+{% set hp = states('sensor.cwu_controller_bsb_heat_pump_status') %}
+
+<b>Pompa:</b><br>
+DHW: {{ dhw }}<br>
+HP: {% if 'compressor' in hp | lower %}
+<span style="color: #4CAF50;">{{ hp }}</span>
+{% elif 'off time' in hp | lower %}
+<span style="color: #FF9800;">{{ hp }}</span>
+{% else %}
+{{ hp }}
+{% endif %}
+
+<br>
+{% if hp_ready %}
+✅ <span style="color: #4CAF50;">HP Ready</span>
+{% else %}
+⏳ <span style="color: #FF9800;">HP: {{ hp_reason }}</span>
+{% endif %}
+
+<br><br>
+{# --- Przepływy --- #}
+{% set flow = states('sensor.cwu_controller_bsb_flow_temperature') | float(0) %}
+{% set ret = states('sensor.cwu_controller_bsb_return_temperature') | float(0) %}
+{% set delta = states('sensor.cwu_controller_bsb_delta_t') | float(0) %}
+
+<b>Temp przepływu:</b><br>
+Flow: {{ flow | round(1) }}°C | Ret: {{ ret | round(1) }}°C<br>
+ΔT: {% if delta >= 3 and delta <= 5 %}
+<span style="color: #4CAF50;">{{ delta | round(1) }}°C</span> ✓
+{% elif delta > 0.5 and delta < 3 %}
+<span style="color: #FF9800;">{{ delta | round(1) }}°C</span> (słaby)
+{% elif delta <= 0.5 %}
+<span style="color: #F44336;">{{ delta | round(1) }}°C</span> (brak)
+{% else %}
+<span style="color: #2196F3;">{{ delta | round(1) }}°C</span> (wysoki)
+{% endif %}
+
+<br><br>
+{# --- Moc --- #}
+{% set power = states('sensor.cwu_controller_average_power') | float(0) %}
+
+⚡ Moc: {% if power > 300 %}
+<span style="color: #4CAF50;">{{ power | round(0) }}W</span>
+{% elif power > 80 %}
+<span style="color: #FF9800;">{{ power | round(0) }}W</span>
+{% else %}
+<span style="color: #9E9E9E;">{{ power | round(0) }}W</span>
+{% endif %}
+
+{# --- Energia dziś --- #}
+{% set energy_cwu = states('sensor.cwu_controller_cwu_energy_today') | float(0) %}
+{% set energy_floor = states('sensor.cwu_controller_floor_energy_today') | float(0) %}
+{% set cost_cwu = states('sensor.cwu_controller_cwu_energy_cost_today') | float(0) %}
+{% set cost_floor = states('sensor.cwu_controller_floor_energy_cost_today') | float(0) %}
+
+<br>📊 Dziś: CWU {{ energy_cwu | round(2) }}kWh ({{ cost_cwu | round(2) }}zł) | Floor {{ energy_floor | round(2) }}kWh ({{ cost_floor | round(2) }}zł)
+
+<br><br>
+{# --- Taryfa --- #}
+{% set is_cheap = state_attr('sensor.cwu_controller_tariff_rate', 'is_cheap_tariff') %}
+
+💰 {% if is_cheap %}
+<span style="color: #4CAF50;">Tania taryfa</span> 💚
+{% else %}
+<span style="color: #F44336;">Droga taryfa</span> ⛔
+{% endif %}
+
+<br><br>
+<em style="color: #666;">{{ now().strftime('%H:%M:%S') }}</em>

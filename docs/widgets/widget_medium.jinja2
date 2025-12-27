@@ -1,0 +1,52 @@
+{# --- CWU Controller Widget (Medium/BSB) --- #}
+{% set state = states('sensor.cwu_controller_state') %}
+{% set cwu = states('sensor.cwu_controller_bsb_cwu_temperature') | float(0) %}
+{% set cwu_mode = states('sensor.cwu_controller_bsb_cwu_mode') %}
+{% set floor_mode = states('sensor.cwu_controller_bsb_floor_mode') %}
+{% set dhw = states('sensor.cwu_controller_bsb_dhw_status') %}
+{% set hp = states('sensor.cwu_controller_bsb_heat_pump_status') %}
+{% set power = states('sensor.cwu_controller_average_power') | float(0) %}
+{% set hold = state_attr('sensor.cwu_controller_state', 'hold_time_remaining') | default(0) %}
+{% set hp_ready = state_attr('sensor.cwu_controller_state', 'hp_ready') | default(true) %}
+
+{# Nagłówek #}
+<b>CWU Controller</b>
+<br><br>
+
+{# Stan + Hold #}
+{% if state == 'heating_cwu' %}
+🔥 <span style="color:#00BCD4;font-size:20px;">Grzanie CWU</span>
+{% elif state == 'heating_floor' %}
+🏠 <span style="color:#4CAF50;font-size:20px;">Podłogówka</span>
+{% elif state == 'emergency_cwu' or state == 'emergency_floor' %}
+🚨 <span style="color:#F44336;font-size:20px;">EMERGENCY!</span>
+{% elif state == 'pause' %}
+⏸️ <span style="color:#FF9800;font-size:20px;">Pauza</span>
+{% elif state == 'fake_heating_detected' %}
+⚠️ <span style="color:#FF5722;font-size:20px;">Fake Heat</span>
+{% else %}
+💤 <span style="color:#607D8B;font-size:20px;">Idle</span>
+{% endif %}
+{% if hold > 0 %} <span style="color:#FF9800;">({{ hold }}m)</span>{% endif %}
+
+<br><br>
+
+{# Temperatury #}
+🌡️ CWU: {% if cwu < 38 %}<span style="color:#F44336;">{% elif cwu < 42 %}<span style="color:#FF9800;">{% else %}<span style="color:#4CAF50;">{% endif %}<b>{{ cwu | round(1) }}°C</b></span>
+<br>
+⚡ {{ power | round(0) }}W
+
+<br><br>
+
+{# BSB Status #}
+📡 <b>BSB:</b><br>
+CWU: {% if cwu_mode | lower in ['on','eco','1'] %}🟢{% else %}⚫{% endif %} {{ cwu_mode }}
+ | Floor: {% if floor_mode | lower in ['automatic','comfort','1'] %}🟢{% else %}⚫{% endif %} {{ floor_mode }}
+<br>
+DHW: {{ dhw }}<br>
+HP: {{ hp }}
+<br>
+{% if hp_ready %}✅ Ready{% else %}⏳ Waiting{% endif %}
+
+<br><br>
+<em style="color:#888;">{{ now().strftime('%H:%M:%S') }}</em>
