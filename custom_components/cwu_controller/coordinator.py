@@ -193,6 +193,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # BSB-LAN cached data (updated every coordinator update)
         self._bsb_lan_data: dict[str, Any] = {}
+        self._bsb_lan_last_update: datetime | None = None  # Last successful BSB-LAN fetch
 
         # Control source tracking (bsb_lan or ha_cloud)
         self._control_source: str = CONTROL_SOURCE_BSB_LAN
@@ -926,11 +927,21 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     # -------------------------------------------------------------------------
 
     async def _async_refresh_bsb_lan_data(self) -> None:
-        """Refresh BSB-LAN data for control decisions and sensors."""
+        """Refresh BSB-LAN data for control decisions and sensors.
+
+        On failure, keeps previous data (stale data is better than no data).
+        Tracks last successful update time for staleness detection.
+        After 15 min without fresh data, control logic will enter safe mode.
+        """
         raw_data = await self._bsb_client.async_read_parameters()
         if not raw_data:
-            self._bsb_lan_data = {}
+            # Keep old data - stale data is better than None values
+            # Control logic checks _bsb_lan_last_update for staleness
+            _LOGGER.debug("BSB-LAN refresh failed - keeping previous data")
             return
+
+        # Update timestamp on successful fetch
+        self._bsb_lan_last_update = datetime.now()
 
         self._bsb_lan_data = {
             "floor_mode": raw_data.get("700", {}).get("desc", "---"),
@@ -2013,50 +2024,43 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 # Still in safe mode, nothing to do
                 return
 
-        # Check if we have BSB-LAN data - if not, don't make any decisions
-        # Note: is_available becomes False after 3 failures, but _bsb_lan_data
-        # becomes empty on first failure. Check both to catch all cases.
-        bsb_lan_has_data = bool(self._bsb_lan_data)
+        # Check BSB-LAN data freshness for safe mode
+        # We keep stale data on failure (stale data is better than None),
+        # but after 15 min without fresh data, enter safe mode and clear data.
+        data_stale_minutes = 0.0
+        if self._bsb_lan_last_update is not None:
+            data_stale_minutes = (datetime.now() - self._bsb_lan_last_update).total_seconds() / 60
 
-        if not self._bsb_client.is_available or not bsb_lan_has_data:
-            if self._bsb_lan_unavailable_since is None:
-                self._bsb_lan_unavailable_since = datetime.now()
-                _LOGGER.warning(
-                    "BSB-LAN data unavailable (is_available=%s, has_data=%s) - "
-                    "starting safe mode countdown, NOT making any decisions",
-                    self._bsb_client.is_available, bsb_lan_has_data
-                )
-                # Don't make any decisions - wait for BSB-LAN to recover
+        # Check if data is too stale (no fresh data for 15+ minutes)
+        if self._bsb_lan_last_update is None or data_stale_minutes >= BSB_LAN_UNAVAILABLE_TIMEOUT:
+            if self._bsb_lan_last_update is None:
+                # Never had data - can't make decisions
+                _LOGGER.warning("BSB-LAN: No data yet - waiting for first successful fetch")
                 return
-            else:
-                unavailable_minutes = (datetime.now() - self._bsb_lan_unavailable_since).total_seconds() / 60
-                if unavailable_minutes >= BSB_LAN_UNAVAILABLE_TIMEOUT:
-                    self._log_action(
-                        f"BSB-LAN unavailable for {unavailable_minutes:.0f} minutes - entering safe mode"
-                    )
-                    await self._async_send_notification(
-                        "CWU Controller - Safe Mode",
-                        f"BSB-LAN has been unavailable for {unavailable_minutes:.0f} minutes.\n\n"
-                        f"Entering safe mode - using cloud control as backup.\n"
-                        f"CWU and floor heating will be turned on via cloud.\n"
-                        f"Normal BSB-LAN control will resume when connection recovers."
-                    )
-                    await self._enter_safe_mode()
-                    self._change_state(STATE_SAFE_MODE)
-                    return
-                else:
-                    # Still waiting for timeout - don't make any decisions
-                    _LOGGER.debug(
-                        f"BSB-LAN unavailable for {unavailable_minutes:.1f}m, "
-                        f"waiting for {BSB_LAN_UNAVAILABLE_TIMEOUT}m before safe mode"
-                    )
-                    return
-        else:
-            # BSB-LAN is available with data, clear the unavailable timestamp
-            if self._bsb_lan_unavailable_since is not None:
-                self._log_action("BSB-LAN connection restored")
-                self._bsb_lan_unavailable_since = None
-                self._control_source = CONTROL_SOURCE_BSB_LAN
+
+            # Data is too stale - enter safe mode
+            self._log_action(
+                f"BSB-LAN data stale for {data_stale_minutes:.0f} minutes - entering safe mode"
+            )
+            await self._async_send_notification(
+                "CWU Controller - Safe Mode",
+                f"BSB-LAN data has been stale for {data_stale_minutes:.0f} minutes.\n\n"
+                f"Entering safe mode - using cloud control as backup.\n"
+                f"CWU and floor heating will be turned on via cloud.\n"
+                f"Normal BSB-LAN control will resume when connection recovers."
+            )
+            # Clear stale data
+            self._bsb_lan_data = {}
+            await self._enter_safe_mode()
+            self._change_state(STATE_SAFE_MODE)
+            return
+
+        # Data is fresh enough - continue with cached data
+        # Clear any previous unavailable state if we have fresh data
+        if self._bsb_lan_unavailable_since is not None and data_stale_minutes < 2:
+            self._log_action("BSB-LAN connection restored")
+            self._bsb_lan_unavailable_since = None
+            self._control_source = CONTROL_SOURCE_BSB_LAN
 
         # Route based on operating mode
         if self._operating_mode == MODE_WINTER:

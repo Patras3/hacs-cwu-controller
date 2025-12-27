@@ -548,7 +548,7 @@ class TestBSBLanDataRefresh:
 
     @pytest.mark.asyncio
     async def test_refresh_handles_empty_response(self, mock_coordinator):
-        """Test empty response clears BSB-LAN data."""
+        """Test empty response keeps previous BSB-LAN data (stale data is better than None)."""
         mock_coordinator._bsb_lan_data = {"cwu_temp": 45.0}  # Pre-existing data
 
         with patch.object(mock_coordinator._bsb_client, "async_read_parameters", new_callable=AsyncMock) as mock_read:
@@ -556,7 +556,8 @@ class TestBSBLanDataRefresh:
 
             await mock_coordinator._async_refresh_bsb_lan_data()
 
-            assert mock_coordinator._bsb_lan_data == {}
+            # Stale data is kept - better than None values
+            assert mock_coordinator._bsb_lan_data == {"cwu_temp": 45.0}
 
     @pytest.mark.asyncio
     async def test_delta_t_calculation_missing_data(self, mock_coordinator):
