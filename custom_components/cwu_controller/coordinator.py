@@ -2670,13 +2670,24 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._dhw_charged_at = None
             return
 
-        # Idle - start with CWU (priority)
+        # Idle - start CWU only if temp is below target - hysteresis
         if self._current_state == STATE_IDLE:
             target = self._get_target_temp()
+            hysteresis = self.get_config_value(CONF_CWU_HYSTERESIS, DEFAULT_CWU_HYSTERESIS)
             cwu_start_temp = self._get_cwu_temperature()
+
+            # Only start if temp is below threshold (respects hysteresis)
+            if cwu_start_temp is not None and cwu_start_temp >= target - hysteresis:
+                # Temp is OK, stay idle
+                _LOGGER.debug(
+                    f"Idle: CWU {cwu_start_temp:.1f}°C >= threshold {target - hysteresis:.1f}°C, staying idle"
+                )
+                return
+
             self._log_action(
                 "CWU ON",
-                f"CWU {cwu_start_temp:.1f}°C < target {target:.1f}°C" if cwu_start_temp else f"Starting CWU heating"
+                f"CWU {cwu_start_temp:.1f}°C < threshold {target - hysteresis:.1f}°C"
+                if cwu_start_temp else "Starting CWU heating (no temp data)"
             )
             await self._switch_to_cwu()
             self._change_state(STATE_HEATING_CWU)
