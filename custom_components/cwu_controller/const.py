@@ -193,9 +193,10 @@ MAX_TEMP_ACCEPTABLE_DROP: Final = 5.0        # Spadek o 5°C od max = OK
 MAX_TEMP_CRITICAL_THRESHOLD: Final = 38.0    # Poniżej 38°C spadek nieakceptowalny
 
 # Anti-fighting constants (avoid fighting for last few degrees for hours)
-MAX_TEMP_FIGHTING_TIME: Final = 60           # 60 min of heating = check if fighting
-MAX_TEMP_FIGHTING_PROGRESS: Final = 2.0      # Less than 2°C rise in 60 min = fighting
-MAX_TEMP_FIGHTING_THRESHOLD: Final = 3.0     # Within 3°C of target = close enough, stop fighting
+MAX_TEMP_FIGHTING_WINDOW: Final = 60         # Rolling window: last 60 min
+MAX_TEMP_FIGHTING_PROGRESS: Final = 2.0      # Less than 2°C rise in window = fighting
+MAX_TEMP_FIGHTING_THRESHOLD: Final = 5.0     # Within 5°C of target = close enough, stop fighting
+MAX_TEMP_FIGHTING_ELECTRIC_COUNT: Final = 2  # 2+ electric fallbacks in window = fighting
 
 # Rapid Drop Detection (pobór CWU - kąpiel)
 CWU_RAPID_DROP_THRESHOLD: Final = 5.0   # 5°C spadek = ktoś się kąpie

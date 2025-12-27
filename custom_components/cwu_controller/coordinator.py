@@ -102,9 +102,10 @@ from .const import (
     MAX_TEMP_ELECTRIC_FALLBACK_COUNT,
     MAX_TEMP_ACCEPTABLE_DROP,
     MAX_TEMP_CRITICAL_THRESHOLD,
-    MAX_TEMP_FIGHTING_TIME,
+    MAX_TEMP_FIGHTING_WINDOW,
     MAX_TEMP_FIGHTING_PROGRESS,
     MAX_TEMP_FIGHTING_THRESHOLD,
+    MAX_TEMP_FIGHTING_ELECTRIC_COUNT,
     CWU_RAPID_DROP_THRESHOLD,
     CWU_RAPID_DROP_WINDOW,
     HP_RESTART_MIN_WAIT,
@@ -206,9 +207,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._electric_fallback_count: int = 0  # Ile razy "Charging electric"
         self._flow_temp_at_max_check: float | None = None  # Flow temp na początku okna
 
-        # Anti-fighting tracking (avoid fighting for last few degrees for hours)
-        self._cwu_heating_session_start: datetime | None = None  # Start of current CWU session
-        self._cwu_temp_at_session_start: float | None = None  # CWU temp at session start
+        # Anti-fighting tracking (rolling window - avoid fighting for last few degrees)
+        self._cwu_temp_history_fighting: list[tuple[datetime, float]] = []  # Rolling 60min history
+        self._electric_fallback_history: list[datetime] = []  # Timestamps of electric fallback events
 
         # Rapid drop detection (pobór CWU - kąpiel)
         self._cwu_temp_history_bsb: list[tuple[datetime, float]] = []  # Historia temp BSB 8830
@@ -2163,8 +2164,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         Criteria (any of these triggers max temp detection):
         1. Flow temp (8412) not rising significantly for 30 min + electric fallback 2+ times
-        2. Anti-fighting: 60+ min heating with <2°C progress AND within 3°C of target
-           (avoid fighting for 55°C when at 53°C for hours)
+        2. Anti-fighting (rolling 60min window): within 5°C of target AND either:
+           - <2°C progress in last 60 min, OR
+           - 2+ electric fallback events in last 60 min
 
         Returns True if max temp detected (should switch to floor).
         """
@@ -2176,18 +2178,32 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         cwu_temp = self._bsb_lan_data.get("cwu_temp")
         target_temp = self._get_target_temp()
         now = datetime.now()
+        cutoff = now - timedelta(minutes=MAX_TEMP_FIGHTING_WINDOW)
 
-        # Count "Charging electric" occurrences
+        # Track electric fallback events with timestamps
         if "electric" in dhw_status.lower():
-            self._electric_fallback_count += 1
-            _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count}")
+            # Avoid duplicate entries within same minute
+            if not self._electric_fallback_history or \
+               (now - self._electric_fallback_history[-1]).total_seconds() > 60:
+                self._electric_fallback_history.append(now)
+                self._electric_fallback_count += 1
+                _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count}")
 
-        # Initialize session tracking (for anti-fighting)
-        if self._cwu_heating_session_start is None:
-            self._cwu_heating_session_start = now
-            self._cwu_temp_at_session_start = cwu_temp
+        # Prune old electric fallback history (keep only last 60 min)
+        self._electric_fallback_history = [
+            t for t in self._electric_fallback_history if t > cutoff
+        ]
 
-        # Initialize flow temp tracking (for electric fallback detection)
+        # Track CWU temp history for rolling window (anti-fighting)
+        if cwu_temp is not None:
+            self._cwu_temp_history_fighting.append((now, cwu_temp))
+            # Prune old entries (keep 70 min to have buffer)
+            prune_cutoff = now - timedelta(minutes=70)
+            self._cwu_temp_history_fighting = [
+                (t, temp) for t, temp in self._cwu_temp_history_fighting if t > prune_cutoff
+            ]
+
+        # Initialize flow temp tracking (for original electric fallback detection)
         if self._flow_temp_at_max_check is None:
             self._flow_temp_at_max_check = flow_temp
             self._max_temp_at = now
@@ -2199,7 +2215,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         flow_rise = flow_temp - self._flow_temp_at_max_check
         elapsed = (now - self._max_temp_at).total_seconds() / 60 if self._max_temp_at else 0
 
-        # Check 1: Electric fallback + flow stagnation (original logic)
+        # Check 1: Electric fallback + flow stagnation (original logic - 30 min window)
         if elapsed >= MAX_TEMP_DETECTION_WINDOW:
             if flow_rise < MAX_TEMP_FLOW_STAGNATION and self._electric_fallback_count >= MAX_TEMP_ELECTRIC_FALLBACK_COUNT:
                 # Max reached via electric fallback
@@ -2215,24 +2231,43 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._max_temp_at = now
             self._electric_fallback_count = 0
 
-        # Check 2: Anti-fighting - avoid fighting for last few degrees for hours
-        if cwu_temp is not None and self._cwu_temp_at_session_start is not None:
-            session_elapsed = (now - self._cwu_heating_session_start).total_seconds() / 60 if self._cwu_heating_session_start else 0
-            session_progress = cwu_temp - self._cwu_temp_at_session_start
+        # Check 2: Anti-fighting (rolling 60 min window)
+        if cwu_temp is not None:
             distance_to_target = target_temp - cwu_temp
 
-            # 60+ min heating, <2°C progress, within 3°C of target
-            if (session_elapsed >= MAX_TEMP_FIGHTING_TIME and
-                session_progress < MAX_TEMP_FIGHTING_PROGRESS and
-                distance_to_target <= MAX_TEMP_FIGHTING_THRESHOLD and
-                distance_to_target >= 0):
-                # Fighting for last few degrees - give up
-                self._max_temp_achieved = cwu_temp
-                self._log_action(
-                    "Max temp detected (anti-fighting)",
-                    f"{session_elapsed:.0f}min heating, only +{session_progress:.1f}°C progress, {cwu_temp:.1f}°C is close enough to {target_temp:.1f}°C"
-                )
-                return True
+            # Only check if within threshold of target
+            if 0 <= distance_to_target <= MAX_TEMP_FIGHTING_THRESHOLD:
+                # Get temp from ~60 min ago
+                old_temps = [(t, temp) for t, temp in self._cwu_temp_history_fighting if t <= cutoff]
+
+                if old_temps:
+                    # Use the oldest entry within our window
+                    oldest_time, oldest_temp = min(old_temps, key=lambda x: x[0])
+                    window_progress = cwu_temp - oldest_temp
+                    window_elapsed = (now - oldest_time).total_seconds() / 60
+
+                    # Count electric events in last 60 min
+                    electric_in_window = len(self._electric_fallback_history)
+
+                    # Fighting conditions:
+                    # A) Slow progress: <2°C in 60 min
+                    slow_progress = window_progress < MAX_TEMP_FIGHTING_PROGRESS and window_elapsed >= MAX_TEMP_FIGHTING_WINDOW
+
+                    # B) Electric heater keeps activating: 2+ times in 60 min
+                    electric_fighting = electric_in_window >= MAX_TEMP_FIGHTING_ELECTRIC_COUNT
+
+                    if slow_progress or electric_fighting:
+                        self._max_temp_achieved = cwu_temp
+                        reason_parts = []
+                        if slow_progress:
+                            reason_parts.append(f"only +{window_progress:.1f}°C in {window_elapsed:.0f}min")
+                        if electric_fighting:
+                            reason_parts.append(f"electric x{electric_in_window} in 60min")
+                        self._log_action(
+                            "Max temp (anti-fighting)",
+                            f"{cwu_temp:.1f}°C close to target {target_temp:.1f}°C, {', '.join(reason_parts)}"
+                        )
+                        return True
 
         return False
 
@@ -2319,9 +2354,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._max_temp_at = None
         self._electric_fallback_count = 0
         self._flow_temp_at_max_check = None
-        # Reset anti-fighting session tracking
-        self._cwu_heating_session_start = None
-        self._cwu_temp_at_session_start = None
+        # Reset anti-fighting rolling window history
+        self._cwu_temp_history_fighting.clear()
+        self._electric_fallback_history.clear()
 
     # =========================================================================
     # BROKEN HEATER MODE - Main Logic (Refactored)
