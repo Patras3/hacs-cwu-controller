@@ -275,6 +275,6 @@ class BSBLanClient:
             if self._is_available:
                 self._is_available = False
                 _LOGGER.error(
-                    "BSB-LAN marked UNAVAILABLE after %d consecutive failures - falling back to HA cloud",
+                    "BSB-LAN marked UNAVAILABLE after %d consecutive failures - safe mode may activate",
                     self._consecutive_failures
                 )

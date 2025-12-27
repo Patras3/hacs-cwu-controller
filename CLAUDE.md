@@ -7,9 +7,17 @@ Home Assistant integration for smart heat pump water heating management (CWU = C
 ```
 custom_components/cwu_controller/
 ├── __init__.py       # Integration setup, service registration
-├── coordinator.py    # Main control logic (~2900 lines) - NEEDS REFACTORING
+├── coordinator.py    # Core control logic, state management (~2000 lines)
 ├── const.py          # All constants, thresholds, time windows
 ├── bsb_lan.py        # BSB-LAN client for heat pump communication
+├── energy.py         # EnergyTracker - consumption tracking & persistence
+├── tariff.py         # G12w tariff & winter window helpers
+├── modes/            # Operating mode handlers
+│   ├── __init__.py   # Exports all mode handlers
+│   ├── base.py       # BaseModeHandler abstract class
+│   ├── broken_heater.py  # BrokenHeaterMode (default)
+│   ├── winter.py     # WinterMode (scheduled heating)
+│   └── summer.py     # SummerMode (placeholder)
 ├── sensor.py         # HA sensor entities (state, urgency, energy, tariff)
 ├── number.py         # Editable threshold entities (cwu_target, cwu_min, etc.)
 ├── select.py         # Operating mode selector entity
@@ -194,52 +202,36 @@ self._log_action(
 
 ---
 
-## Planned Refactoring: Mode Separation
+## Mode Handler Architecture
 
-Coordinator.py (~2900 lines) should be split:
+Mode-specific logic is separated into handler classes in `modes/`:
 
-```
-custom_components/cwu_controller/
-├── coordinator.py          # Core: state, BSB-LAN, energy, routing
-├── modes/
-│   ├── __init__.py
-│   ├── base.py             # BaseModeHandler class
-│   ├── broken_heater.py    # BrokenHeaterMode (~350 lines)
-│   ├── winter.py           # WinterMode (~200 lines)
-│   └── summer.py           # SummerMode (placeholder)
-```
-
-**Structure:**
 ```python
 # modes/base.py
-class BaseModeHandler:
+class BaseModeHandler(ABC):
     def __init__(self, coordinator: "CWUControllerCoordinator"):
         self.coord = coordinator
 
-    async def run_logic(self, cwu_urgency, floor_urgency, ...) -> None:
+    @abstractmethod
+    async def run_logic(self, cwu_urgency, floor_urgency, cwu_temp, salon_temp) -> None:
         raise NotImplementedError
 
-# modes/broken_heater.py
-class BrokenHeaterMode(BaseModeHandler):
-    """Broken heater mode - fake heating detection, anti-fighting, etc."""
+    # Helper methods wrapping coordinator methods:
+    # _log_action(), _switch_to_cwu(), _switch_to_floor(), etc.
+```
 
-    async def run_logic(self, cwu_urgency, floor_urgency, fake_heating,
-                        cwu_temp, salon_temp) -> None:
-        # All _run_broken_heater_mode_logic code here
-        # Access coordinator via self.coord._current_state, etc.
-
+**Coordinator routing:**
+```python
 # coordinator.py
-class CWUControllerCoordinator:
-    def __init__(self, ...):
-        self._modes = {
-            MODE_BROKEN_HEATER: BrokenHeaterMode(self),
-            MODE_WINTER: WinterMode(self),
-            MODE_SUMMER: SummerMode(self),
-        }
+self._mode_handlers = {
+    MODE_BROKEN_HEATER: BrokenHeaterMode(self),
+    MODE_WINTER: WinterMode(self),
+    MODE_SUMMER: SummerMode(self),
+}
 
-    async def _run_control_logic(self, ...):
-        handler = self._modes[self._operating_mode]
-        await handler.run_logic(...)
+# In _run_control_logic():
+handler = self._mode_handlers.get(self._operating_mode)
+await handler.run_logic(cwu_urgency, floor_urgency, cwu_temp, salon_temp)
 ```
 
 **What stays in coordinator.py:**
@@ -248,12 +240,11 @@ class CWUControllerCoordinator:
 - Energy tracking
 - Tariff logic
 - Shared helpers (`_switch_to_cwu`, `_switch_to_floor`, etc.)
-- `_log_action`, `_change_state`, `_async_send_notification`
 
-**What moves to mode handlers:**
-- `_run_broken_heater_mode_logic()` → `BrokenHeaterMode.run_logic()`
-- `_run_winter_mode_logic()` → `WinterMode.run_logic()`
-- Mode-specific helpers (if only used by that mode)
+**What's in mode handlers:**
+- `BrokenHeaterMode.run_logic()` - fake heating, anti-fighting, max temp detection
+- `WinterMode.run_logic()` - scheduled heating, emergency handling
+- `SummerMode.run_logic()` - placeholder (defaults to floor)
 
 ---
 

@@ -612,7 +612,7 @@ class TestWinterModeWithUnavailableTemp:
         # Mock is_winter_cwu_heating_window to return True
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                await mock_coordinator._mode_handlers["winter"].run_logic(
                     cwu_urgency=2,  # medium
                     floor_urgency=1,  # low
                     cwu_temp=None,  # CRITICAL: temp unavailable (BSB-LAN down)
@@ -633,7 +633,7 @@ class TestWinterModeWithUnavailableTemp:
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                await mock_coordinator._mode_handlers["winter"].run_logic(
                     cwu_urgency=2,
                     floor_urgency=1,
                     cwu_temp=None,
@@ -655,7 +655,7 @@ class TestWinterModeWithUnavailableTemp:
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=False):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                await mock_coordinator._mode_handlers["winter"].run_logic(
                     cwu_urgency=2,
                     floor_urgency=1,
                     cwu_temp=None,  # BSB-LAN temp unavailable
