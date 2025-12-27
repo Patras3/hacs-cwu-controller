@@ -361,6 +361,51 @@ async function fetchStateHistory(hoursBack = 24) {
 }
 
 /**
+ * Build chart annotations from state history
+ * Shows semi-transparent background bands for CWU (blue) and floor (orange) heating periods
+ */
+async function buildStateAnnotations(hoursBack) {
+    const history = await fetchHistory(ENTITIES.state, hoursBack);
+    if (history.length < 1) return {};
+
+    const annotations = {};
+    let annotationId = 0;
+
+    // Colors for different states
+    const stateColors = {
+        'heating_cwu': 'rgba(0, 217, 255, 0.15)',      // CWU - cyan/blue
+        'emergency_cwu': 'rgba(0, 217, 255, 0.25)',    // Emergency CWU - brighter
+        'heating_floor': 'rgba(237, 137, 54, 0.15)',   // Floor - orange
+        'emergency_floor': 'rgba(237, 137, 54, 0.25)', // Emergency floor - brighter
+        'pause': 'rgba(160, 174, 192, 0.1)',           // Pause - gray
+    };
+
+    // Build periods from state changes
+    for (let i = 0; i < history.length; i++) {
+        const state = history[i].state;
+        const color = stateColors[state];
+        if (!color) continue; // Skip idle and other states
+
+        const startTime = new Date(history[i].last_changed || history[i].last_updated);
+        // End time is next state change or now
+        const endTime = (i + 1 < history.length)
+            ? new Date(history[i + 1].last_changed || history[i + 1].last_updated)
+            : new Date();
+
+        annotations[`state_${annotationId++}`] = {
+            type: 'box',
+            xMin: startTime,
+            xMax: endTime,
+            backgroundColor: color,
+            borderWidth: 0,
+            drawTime: 'beforeDatasetsDraw',
+        };
+    }
+
+    return annotations;
+}
+
+/**
  * Fetch CWU temp from 1 hour ago for comparison (now from BSB-LAN sensor)
  */
 async function fetchCwuTemp1hAgo() {
@@ -1585,33 +1630,49 @@ async function updateChartData(chartId, range) {
             .filter(item => !isNaN(item.y));
     };
 
+    // Helper to apply state annotations to chart
+    const applyAnnotations = (chart, annotations) => {
+        if (!chart.options.plugins.annotation) {
+            chart.options.plugins.annotation = { annotations: {} };
+        }
+        chart.options.plugins.annotation.annotations = annotations;
+    };
+
     if (chartId === 'tempChart' && tempChart) {
-        const [cwu, salon, bedroom, kids] = await Promise.all([
+        const [cwu, salon, bedroom, kids, annotations] = await Promise.all([
             fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.salonTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.bedroomTemp, hours),
             fetchHistory(EXTERNAL_ENTITIES.kidsTemp, hours),
+            buildStateAnnotations(hours),
         ]);
         tempChart.data.datasets[0].data = convertToChartData(cwu);
         tempChart.data.datasets[1].data = convertToChartData(salon);
         tempChart.data.datasets[2].data = convertToChartData(bedroom);
         tempChart.data.datasets[3].data = convertToChartData(kids);
+        applyAnnotations(tempChart, annotations);
         tempChart.update('none');
     } else if (chartId === 'powerChart' && powerChart) {
-        const power = await fetchHistory(EXTERNAL_ENTITIES.power, hours);
+        const [power, annotations] = await Promise.all([
+            fetchHistory(EXTERNAL_ENTITIES.power, hours),
+            buildStateAnnotations(hours),
+        ]);
         powerChart.data.datasets[0].data = convertToChartData(power);
+        applyAnnotations(powerChart, annotations);
         powerChart.update('none');
     } else if (chartId === 'techChart' && techChart) {
-        const [cwu, flow, ret, deltaT] = await Promise.all([
+        const [cwu, flow, ret, deltaT, annotations] = await Promise.all([
             fetchHistory(ENTITIES.bsbCwuTemp, hours),
             fetchHistory(ENTITIES.bsbFlowTemp, hours),
             fetchHistory(ENTITIES.bsbReturnTemp, hours),
             fetchHistory(ENTITIES.bsbDeltaT, hours),
+            buildStateAnnotations(hours),
         ]);
         techChart.data.datasets[0].data = convertToChartData(cwu);
         techChart.data.datasets[1].data = convertToChartData(flow);
         techChart.data.datasets[2].data = convertToChartData(ret);
         techChart.data.datasets[3].data = convertToChartData(deltaT);
+        applyAnnotations(techChart, annotations);
         techChart.update('none');
     } else if (chartId === 'outsideChart' && outsideChart) {
         const outside = await fetchHistory(ENTITIES.bsbOutsideTemp, hours);
@@ -1738,6 +1799,17 @@ async function updateModalChartData() {
             .filter(item => !isNaN(item.y));
     };
 
+    // Helper to apply state annotations to chart
+    const applyAnnotations = (chart, annotations) => {
+        if (!chart.options.plugins.annotation) {
+            chart.options.plugins.annotation = { annotations: {} };
+        }
+        chart.options.plugins.annotation.annotations = annotations;
+    };
+
+    // Fetch annotations for all chart types
+    const annotations = await buildStateAnnotations(hours);
+
     if (modalChartType === 'temp') {
         const [cwu, salon, bedroom, kids] = await Promise.all([
             fetchHistory(ENTITIES.bsbCwuTemp, hours),
@@ -1766,6 +1838,7 @@ async function updateModalChartData() {
         modalChart.data.datasets[3].data = convertToChartData(cwuIn);
         modalChart.data.datasets[4].data = convertToChartData(floorIn);
     }
+    applyAnnotations(modalChart, annotations);
     modalChart.update('none');
 }
 
