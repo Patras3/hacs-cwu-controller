@@ -337,6 +337,30 @@ async function fetchHistory(entityId, hoursBack = 6, retryOnAuth = true) {
 }
 
 /**
+ * Fetch state history from HA history API and convert to our format
+ * Returns array of {timestamp, from_state, to_state}
+ */
+async function fetchStateHistory(hoursBack = 24) {
+    const history = await fetchHistory(ENTITIES.state, hoursBack);
+    if (history.length < 2) return [];
+
+    const stateChanges = [];
+    for (let i = 1; i < history.length; i++) {
+        const prev = history[i - 1];
+        const curr = history[i];
+        // Only record actual state changes
+        if (prev.state !== curr.state) {
+            stateChanges.push({
+                timestamp: curr.last_changed || curr.last_updated,
+                from_state: prev.state,
+                to_state: curr.state,
+            });
+        }
+    }
+    return stateChanges;
+}
+
+/**
  * Fetch CWU temp from 1 hour ago for comparison (now from BSB-LAN sensor)
  */
 async function fetchCwuTemp1hAgo() {
@@ -666,7 +690,9 @@ async function updateUI() {
     updateOverrideAlert();
 
     updateActionHistory(attrs.action_history || []);
-    updateStateHistory(attrs.state_history || []);
+    // State history from HA history API (not coordinator attributes)
+    const stateHistory = await fetchStateHistory(24);
+    updateStateHistory(stateHistory);
     updateHeatToProgress();
 }
 
@@ -1746,15 +1772,25 @@ async function updateModalChartData() {
 /**
  * Open history modal
  */
-function openHistoryModal(type) {
+async function openHistoryModal(type) {
     const modal = document.getElementById('history-modal');
     const title = document.getElementById('history-modal-title');
     const content = document.getElementById('history-modal-content');
 
     title.textContent = type === 'actions' ? 'Action History' : 'State Timeline';
 
+    // Show loading state
+    content.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading...</span></div>';
+    modal.classList.add('open');
+
+    // Fetch history - actions from attributes, states from HA history API
     const attrs = currentData.attributes || {};
-    const history = type === 'actions' ? (attrs.action_history || []) : (attrs.state_history || []);
+    let history;
+    if (type === 'actions') {
+        history = attrs.action_history || [];
+    } else {
+        history = await fetchStateHistory(48); // 48h for modal view
+    }
 
     if (history.length === 0) {
         content.innerHTML = '<div class="empty-state"><span class="mdi mdi-history"></span><p>No history available</p></div>';
@@ -1765,13 +1801,17 @@ function openHistoryModal(type) {
             const absTime = time.toLocaleString('pl-PL');
 
             if (type === 'actions') {
-                const icon = item.action.includes('cwu') ? 'mdi-water-boiler' :
-                            item.action.includes('floor') ? 'mdi-heating-coil' : 'mdi-chevron-right';
+                const actionLower = (item.action || '').toLowerCase();
+                const icon = actionLower.includes('cwu') ? 'mdi-water-boiler' :
+                            actionLower.includes('floor') ? 'mdi-heating-coil' : 'mdi-chevron-right';
+                const reasoningHtml = item.reasoning ?
+                    `<span class="history-reasoning">${item.reasoning}</span>` : '';
                 return `
                     <div class="history-item-full">
                         <span class="history-icon mdi ${icon}"></span>
                         <div class="history-details">
                             <span class="history-action">${item.action}</span>
+                            ${reasoningHtml}
                             <span class="history-time-full">${absTime} (${relTime})</span>
                         </div>
                     </div>
@@ -1799,8 +1839,6 @@ function openHistoryModal(type) {
 
         content.innerHTML = items;
     }
-
-    modal.classList.add('open');
 }
 
 /**
