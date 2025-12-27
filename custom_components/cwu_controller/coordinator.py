@@ -2018,6 +2018,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if self._bsb_lan_unavailable_since is None:
                 self._bsb_lan_unavailable_since = datetime.now()
                 _LOGGER.warning("BSB-LAN became unavailable - starting safe mode countdown")
+                # Don't make any decisions - wait for BSB-LAN to recover
+                return
             else:
                 unavailable_minutes = (datetime.now() - self._bsb_lan_unavailable_since).total_seconds() / 60
                 if unavailable_minutes >= BSB_LAN_UNAVAILABLE_TIMEOUT:
@@ -2033,6 +2035,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     )
                     await self._enter_safe_mode()
                     self._change_state(STATE_SAFE_MODE)
+                    return
+                else:
+                    # Still waiting for timeout - don't make any decisions
+                    _LOGGER.debug(f"BSB-LAN unavailable for {unavailable_minutes:.1f}m, waiting for {BSB_LAN_UNAVAILABLE_TIMEOUT}m before safe mode")
                     return
         else:
             # BSB-LAN is available, clear the unavailable timestamp

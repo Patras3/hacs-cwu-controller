@@ -32,6 +32,9 @@ class BSBLanClient:
         self.host = host
         _LOGGER.info("BSB-LAN client initialized for host: %s", host)
 
+        # Request serialization - BSB-LAN handles only one request at a time
+        self._request_lock: asyncio.Lock = asyncio.Lock()
+
         # Health tracking
         self._consecutive_failures: int = 0
         self._last_success: datetime | None = None
@@ -73,26 +76,29 @@ class BSBLanClient:
             params = BSB_LAN_READ_PARAMS
 
         url = f"http://{self.host}/JQ={params}"
-        try:
-            timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        self._handle_success()
-                        return data
-                    else:
-                        self._handle_failure(Exception(f"HTTP {response.status}"))
-                        return {}
-        except asyncio.TimeoutError:
-            self._handle_failure(Exception("Timeout"))
-            return {}
-        except aiohttp.ClientError as e:
-            self._handle_failure(e)
-            return {}
-        except Exception as e:
-            self._handle_failure(e)
-            return {}
+
+        # Serialize requests - BSB-LAN handles only one request at a time
+        async with self._request_lock:
+            try:
+                timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            self._handle_success()
+                            return data
+                        else:
+                            self._handle_failure(Exception(f"HTTP {response.status}"))
+                            return {}
+            except asyncio.TimeoutError:
+                self._handle_failure(Exception("Timeout"))
+                return {}
+            except aiohttp.ClientError as e:
+                self._handle_failure(e)
+                return {}
+            except Exception as e:
+                self._handle_failure(e)
+                return {}
 
     async def async_write_parameter(self, param: int, value: int) -> bool:
         """Write a single parameter value.
@@ -109,30 +115,33 @@ class BSBLanClient:
             We check for "ERROR" in response to detect failures.
         """
         url = f"http://{self.host}/S{param}={value}"
-        try:
-            timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        # BSB-LAN returns HTML - check for error message in body
-                        body = await response.text()
-                        if "ERROR" in body:
-                            self._handle_failure(Exception(f"BSB-LAN set failed for {param}={value}"))
+
+        # Serialize requests - BSB-LAN handles only one request at a time
+        async with self._request_lock:
+            try:
+                timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            # BSB-LAN returns HTML - check for error message in body
+                            body = await response.text()
+                            if "ERROR" in body:
+                                self._handle_failure(Exception(f"BSB-LAN set failed for {param}={value}"))
+                                return False
+                            self._handle_success()
+                            return True
+                        else:
+                            self._handle_failure(Exception(f"HTTP {response.status}"))
                             return False
-                        self._handle_success()
-                        return True
-                    else:
-                        self._handle_failure(Exception(f"HTTP {response.status}"))
-                        return False
-        except asyncio.TimeoutError:
-            self._handle_failure(Exception("Timeout"))
-            return False
-        except aiohttp.ClientError as e:
-            self._handle_failure(e)
-            return False
-        except Exception as e:
-            self._handle_failure(e)
-            return False
+            except asyncio.TimeoutError:
+                self._handle_failure(Exception("Timeout"))
+                return False
+            except aiohttp.ClientError as e:
+                self._handle_failure(e)
+                return False
+            except Exception as e:
+                self._handle_failure(e)
+                return False
 
     async def async_set_cwu_mode(self, mode: int) -> bool:
         """Set CWU mode (0=Off, 1=On, 2=Eco)."""
