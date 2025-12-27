@@ -2013,11 +2013,19 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 # Still in safe mode, nothing to do
                 return
 
-        # Check if we need to enter safe mode due to BSB-LAN unavailability
-        if not self._bsb_client.is_available:
+        # Check if we have BSB-LAN data - if not, don't make any decisions
+        # Note: is_available becomes False after 3 failures, but _bsb_lan_data
+        # becomes empty on first failure. Check both to catch all cases.
+        bsb_lan_has_data = bool(self._bsb_lan_data)
+
+        if not self._bsb_client.is_available or not bsb_lan_has_data:
             if self._bsb_lan_unavailable_since is None:
                 self._bsb_lan_unavailable_since = datetime.now()
-                _LOGGER.warning("BSB-LAN became unavailable - starting safe mode countdown")
+                _LOGGER.warning(
+                    "BSB-LAN data unavailable (is_available=%s, has_data=%s) - "
+                    "starting safe mode countdown, NOT making any decisions",
+                    self._bsb_client.is_available, bsb_lan_has_data
+                )
                 # Don't make any decisions - wait for BSB-LAN to recover
                 return
             else:
@@ -2038,10 +2046,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     return
                 else:
                     # Still waiting for timeout - don't make any decisions
-                    _LOGGER.debug(f"BSB-LAN unavailable for {unavailable_minutes:.1f}m, waiting for {BSB_LAN_UNAVAILABLE_TIMEOUT}m before safe mode")
+                    _LOGGER.debug(
+                        f"BSB-LAN unavailable for {unavailable_minutes:.1f}m, "
+                        f"waiting for {BSB_LAN_UNAVAILABLE_TIMEOUT}m before safe mode"
+                    )
                     return
         else:
-            # BSB-LAN is available, clear the unavailable timestamp
+            # BSB-LAN is available with data, clear the unavailable timestamp
             if self._bsb_lan_unavailable_since is not None:
                 self._log_action("BSB-LAN connection restored")
                 self._bsb_lan_unavailable_since = None
