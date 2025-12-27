@@ -125,6 +125,7 @@ from .const import (
     CONF_BEDROOM_MIN_TEMP,
 )
 from .bsb_lan import BSBLanClient
+from .modes import BrokenHeaterMode, WinterMode, SummerMode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -262,6 +263,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Config overrides from number entities (runtime changes)
         self._config_overrides: dict[str, float] = {}
+
+        # Mode handlers - encapsulate mode-specific control logic
+        self._modes = {
+            MODE_BROKEN_HEATER: BrokenHeaterMode(self),
+            MODE_WINTER: WinterMode(self),
+            MODE_SUMMER: SummerMode(self),
+        }
 
         # Register shutdown handler to save data
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_save_on_shutdown)
@@ -2041,22 +2049,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._bsb_lan_unavailable_since = None
                 self._control_source = CONTROL_SOURCE_BSB_LAN
 
-        # Route based on operating mode
-        if self._operating_mode == MODE_WINTER:
-            await self._run_winter_mode_logic(cwu_urgency, floor_urgency, cwu_temp, salon_temp)
-            return
-        elif self._operating_mode == MODE_SUMMER:
-            # Summer mode not implemented yet
-            self._log_action("Summer mode not implemented - using floor heating")
-            if self._current_state != STATE_HEATING_FLOOR:
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-            return
-
-        # Default: Broken heater mode (original logic)
-        await self._run_broken_heater_mode_logic(
-            cwu_urgency, floor_urgency, fake_heating, cwu_temp, salon_temp
-        )
+        # Route to mode-specific handler
+        handler = self._modes.get(self._operating_mode)
+        if handler:
+            await handler.run_logic(
+                cwu_urgency=cwu_urgency,
+                floor_urgency=floor_urgency,
+                cwu_temp=cwu_temp,
+                salon_temp=salon_temp,
+                fake_heating=fake_heating,
+            )
+        else:
+            _LOGGER.warning("Unknown operating mode: %s, using broken_heater", self._operating_mode)
+            await self._modes[MODE_BROKEN_HEATER].run_logic(
+                cwu_urgency=cwu_urgency,
+                floor_urgency=floor_urgency,
+                cwu_temp=cwu_temp,
+                salon_temp=salon_temp,
+                fake_heating=fake_heating,
+            )
 
     # =========================================================================
     # BROKEN HEATER MODE - Helper Methods (Refactored)
@@ -2362,474 +2373,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._electric_fallback_history.clear()
 
     # =========================================================================
-    # BROKEN HEATER MODE - Main Logic (Refactored)
+    # Mode Switching Methods
     # =========================================================================
-
-    async def _run_broken_heater_mode_logic(
-        self,
-        cwu_urgency: int,
-        floor_urgency: int,
-        fake_heating: bool,
-        cwu_temp: float | None,
-        salon_temp: float | None,
-    ) -> None:
-        """Run control logic for broken heater mode (refactored).
-
-        Strategy:
-        - CWU priority almost all day (except 03:00-06:00)
-        - Night window 03:00-06:00: floor if CWU is OK
-        - Respect HP states (Compressor off time, Defrosting, Overrun)
-        - Anti-oscillation via minimum hold times
-        - Max temp detection - give pump a break when it can't heat more
-        - Rapid CWU drop detection - interrupt floor for hot water emergency
-        """
-        now = datetime.now()
-        current_hour = now.hour
-
-        # =====================================================================
-        # Phase 1: Handle fake heating detection (first detection)
-        # =====================================================================
-        if fake_heating and self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            self._change_state(STATE_FAKE_HEATING_DETECTED)
-            self._fake_heating_detected_at = now
-            self._low_power_start = None  # Reset to prevent duplicate detection
-            # Turn off BOTH CWU and floor
-            await self._async_set_cwu_off()
-            await self._async_set_floor_off()
-            await self._async_send_notification(
-                "CWU Controller Alert",
-                f"Fake heating detected! Pump tried to use broken heater. "
-                f"CWU temp: {cwu_temp}°C. Waiting {HP_RESTART_MIN_WAIT} min + HP ready check..."
-            )
-            self._log_action(
-                "Fake heating",
-                f"CWU+Floor OFF, CWU at {cwu_temp:.1f}°C, waiting {HP_RESTART_MIN_WAIT}+ min"
-                if cwu_temp else f"CWU+Floor OFF, waiting {HP_RESTART_MIN_WAIT}+ min"
-            )
-            return
-
-        # =====================================================================
-        # Phase 2: Handle fake heating recovery (wait + HP ready check)
-        # =====================================================================
-        if self._current_state == STATE_FAKE_HEATING_DETECTED and self._fake_heating_detected_at:
-            elapsed = (now - self._fake_heating_detected_at).total_seconds() / 60
-
-            # Wait minimum time
-            if elapsed < HP_RESTART_MIN_WAIT:
-                return
-
-            # Check HP status before restarting
-            hp_ready, hp_reason = self._is_hp_ready_for_cwu()
-            if not hp_ready:
-                # Log only every 2 minutes to avoid spam
-                if int(elapsed) % 2 == 0:
-                    self._log_action(f"Fake heating recovery waiting: {hp_reason}")
-                return
-
-            # HP ready - restart CWU
-            self._change_state(STATE_FAKE_HEATING_RESTARTING)
-            self._log_action("HP ready - restarting CWU after fake heating")
-            await self._async_set_floor_off()
-            await self._async_set_cwu_on()
-            self._low_power_start = None
-            self._fake_heating_detected_at = None
-            self._change_state(STATE_HEATING_CWU)
-            self._cwu_heating_start = now
-            self._last_mode_switch = now
-            self._reset_max_temp_tracking()
-            # Set session start temp
-            cwu_start_temp = self._get_cwu_temperature()
-            self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
-            self._log_action(f"CWU restarted after fake heating (temp: {self._cwu_session_start_temp}°C)")
-            return
-
-        # =====================================================================
-        # Phase 3: Handle pause state (3h limit)
-        # =====================================================================
-        if self._current_state == STATE_PAUSE:
-            if self._is_pause_complete():
-                self._pause_start = None
-                # Resume CWU heating - start new session
-                await self._async_set_cwu_on()
-                self._change_state(STATE_HEATING_CWU)
-                self._cwu_heating_start = now
-                self._last_mode_switch = now
-                self._reset_max_temp_tracking()
-                cwu_start_temp = self._get_cwu_temperature()
-                if cwu_start_temp is None:
-                    cwu_start_temp = self._last_known_cwu_temp
-                self._cwu_session_start_temp = cwu_start_temp
-                self._log_action(f"Pause complete, starting new CWU session (temp: {cwu_start_temp}°C)")
-            return
-
-        # =====================================================================
-        # Phase 4: Check 3-hour CWU limit
-        # =====================================================================
-        if self._current_state == STATE_HEATING_CWU and self._should_restart_cwu_cycle():
-            self._change_state(STATE_PAUSE)
-            self._pause_start = now
-            self._cwu_heating_start = None
-            await self._async_set_cwu_off()
-            await self._async_set_floor_off()
-            self._log_action(f"CWU cycle limit reached, pausing for {CWU_PAUSE_TIME} minutes")
-            await self._async_send_notification(
-                "CWU Controller",
-                f"CWU heating paused for {CWU_PAUSE_TIME} min (3h limit). "
-                f"CWU: {cwu_temp}°C, Salon: {salon_temp}°C"
-            )
-            return
-
-        # =====================================================================
-        # Phase 5: Rapid drop detection (bath/shower) - highest priority
-        # =====================================================================
-        drop_detected, drop_amount = self._detect_rapid_drop()
-        if drop_detected and self._current_state == STATE_HEATING_FLOOR:
-            can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_EMERGENCY_CWU)
-            if can_switch:
-                self._log_action(f"Rapid CWU drop {drop_amount:.1f}°C - emergency switch to CWU")
-                await self._switch_to_cwu()
-                self._change_state(STATE_EMERGENCY_CWU)
-                self._cwu_heating_start = now
-                self._last_mode_switch = now
-                self._reset_max_temp_tracking()
-                await self._async_send_notification(
-                    "CWU Drop Detected",
-                    f"Hot water usage detected ({drop_amount:.1f}°C drop in {CWU_RAPID_DROP_WINDOW}min). "
-                    f"Starting emergency CWU heating."
-                )
-            else:
-                self._log_action(f"Rapid drop detected but switch blocked: {reason}")
-            return
-
-        # =====================================================================
-        # Phase 6: Max temp detection (pump can't heat more)
-        # =====================================================================
-        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            if self._detect_max_temp_achieved():
-                can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
-                if can_switch:
-                    self._log_action(f"Max temp {self._max_temp_achieved}°C reached - switching to floor")
-                    await self._switch_to_floor()
-                    self._change_state(STATE_HEATING_FLOOR)
-                    self._cwu_heating_start = None
-                    self._last_mode_switch = now
-                    await self._async_send_notification(
-                        "CWU Max Temp Reached",
-                        f"Pump reached maximum achievable temp: {self._max_temp_achieved}°C. "
-                        f"Switching to floor heating."
-                    )
-                else:
-                    self._log_action(f"Max temp reached but switch blocked: {reason}")
-                return
-
-        # =====================================================================
-        # Phase 7: Night window 03:00-06:00 - floor if CWU OK
-        # =====================================================================
-        if BROKEN_HEATER_FLOOR_WINDOW_START <= current_hour < BROKEN_HEATER_FLOOR_WINDOW_END:
-            if self._is_cwu_temp_acceptable(cwu_temp) and cwu_urgency < URGENCY_CRITICAL:
-                if self._current_state != STATE_HEATING_FLOOR:
-                    can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
-                    if can_switch:
-                        self._log_action(f"Night window: CWU OK ({cwu_temp}°C), switching to floor")
-                        await self._switch_to_floor()
-                        self._change_state(STATE_HEATING_FLOOR)
-                        self._cwu_heating_start = None
-                        self._last_mode_switch = now
-                    else:
-                        _LOGGER.debug(f"Night window floor switch blocked: {reason}")
-                return
-            # CWU not acceptable in night window - continue to normal logic
-
-        # =====================================================================
-        # Phase 8: Emergency handling (critical urgencies)
-        # =====================================================================
-        if cwu_urgency == URGENCY_CRITICAL and floor_urgency != URGENCY_CRITICAL:
-            if self._current_state != STATE_EMERGENCY_CWU:
-                can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_CWU)
-                if can_switch:
-                    await self._switch_to_cwu()
-                    self._change_state(STATE_EMERGENCY_CWU)
-                    self._cwu_heating_start = now
-                    self._last_mode_switch = now
-                    self._reset_max_temp_tracking()
-                    await self._async_send_notification(
-                        "CWU Emergency!",
-                        f"CWU critically low: {cwu_temp}°C! Switching to emergency CWU heating."
-                    )
-                else:
-                    self._log_action(f"CWU emergency delayed: {reason}")
-            return
-
-        if floor_urgency == URGENCY_CRITICAL and cwu_urgency != URGENCY_CRITICAL:
-            if self._current_state != STATE_EMERGENCY_FLOOR:
-                can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_FLOOR)
-                if can_switch:
-                    await self._switch_to_floor()
-                    self._change_state(STATE_EMERGENCY_FLOOR)
-                    self._cwu_heating_start = None
-                    self._last_mode_switch = now
-                    await self._async_send_notification(
-                        "Floor Emergency!",
-                        f"Room too cold: Salon {salon_temp}°C! Switching to floor heating."
-                    )
-                else:
-                    self._log_action(f"Floor emergency delayed: {reason}")
-            return
-
-        # Both critical - alternate every 45 minutes (longer than before)
-        if cwu_urgency == URGENCY_CRITICAL and floor_urgency == URGENCY_CRITICAL:
-            minutes_in_state = (now - self._last_state_change).total_seconds() / 60
-            if minutes_in_state >= 45:
-                if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-                    await self._switch_to_floor()
-                    self._change_state(STATE_EMERGENCY_FLOOR)
-                    self._last_mode_switch = now
-                else:
-                    await self._switch_to_cwu()
-                    self._change_state(STATE_EMERGENCY_CWU)
-                    self._cwu_heating_start = now
-                    self._last_mode_switch = now
-                    self._reset_max_temp_tracking()
-            return
-
-        # =====================================================================
-        # Phase 9: Normal operation - CWU priority (daytime)
-        # =====================================================================
-        target = self._get_target_temp()
-
-        # Currently heating floor - check if should resume CWU
-        if self._current_state == STATE_HEATING_FLOOR:
-            should_resume = False
-            resume_reason = ""
-
-            hysteresis = self.get_config_value(CONF_CWU_HYSTERESIS, DEFAULT_CWU_HYSTERESIS)
-            if cwu_temp is not None and cwu_temp < target - hysteresis:
-                should_resume = True
-                resume_reason = f"temp {cwu_temp:.1f}°C < target-{hysteresis:.0f} ({target - hysteresis:.1f}°C)"
-            elif cwu_urgency >= URGENCY_HIGH:
-                should_resume = True
-                resume_reason = f"urgency HIGH ({cwu_urgency})"
-            elif not self._is_cwu_temp_acceptable(cwu_temp):
-                should_resume = True
-                resume_reason = f"temp {cwu_temp}°C not acceptable"
-
-            if should_resume:
-                can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
-                if can_switch:
-                    self._log_action(f"Resuming CWU: {resume_reason}")
-                    await self._switch_to_cwu()
-                    self._change_state(STATE_HEATING_CWU)
-                    self._cwu_heating_start = now
-                    self._last_mode_switch = now
-                    self._reset_max_temp_tracking()
-                    # Set session start temp
-                    cwu_start_temp = self._get_cwu_temperature()
-                    self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
-                else:
-                    _LOGGER.debug(f"CWU resume blocked: {reason}")
-            return
-
-        # Currently heating CWU - check if should switch to floor
-        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            # Check if pump reports "Charged" (reached target)
-            if self._is_pump_charged():
-                # DHW Charged rest time - wait before switching to floor
-                if self._dhw_charged_at is None:
-                    self._dhw_charged_at = now
-                    self._log_action(
-                        "DHW Charged",
-                        f"Pump reports charged at {cwu_temp:.1f}°C, waiting {DHW_CHARGED_REST_TIME}min"
-                        if cwu_temp else f"Pump reports charged, waiting {DHW_CHARGED_REST_TIME}min"
-                    )
-
-                # Check if rest time elapsed
-                elapsed = (now - self._dhw_charged_at).total_seconds() / 60
-                if elapsed >= DHW_CHARGED_REST_TIME:
-                    can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
-                    if can_switch:
-                        await self._switch_to_floor()
-                        self._change_state(STATE_HEATING_FLOOR)
-                        self._cwu_heating_start = None
-                        self._last_mode_switch = now
-                        self._dhw_charged_at = None
-                        self._log_action(
-                            "Switch to floor",
-                            f"DHW rest complete ({elapsed:.0f}min), CWU at {cwu_temp:.1f}°C"
-                            if cwu_temp else f"DHW rest complete ({elapsed:.0f}min)"
-                        )
-                    else:
-                        _LOGGER.debug(f"Floor switch after Charged blocked: {reason}")
-            else:
-                # Not charged anymore - reset
-                self._dhw_charged_at = None
-            return
-
-        # Idle - start with CWU (priority)
-        if self._current_state == STATE_IDLE:
-            target = self._get_target_temp()
-            cwu_start_temp = self._get_cwu_temperature()
-            self._log_action(
-                "CWU ON",
-                f"CWU {cwu_start_temp:.1f}°C < target {target:.1f}°C" if cwu_start_temp else f"Starting CWU heating"
-            )
-            await self._switch_to_cwu()
-            self._change_state(STATE_HEATING_CWU)
-            self._cwu_heating_start = now
-            self._last_mode_switch = now
-            self._reset_max_temp_tracking()
-            self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
-
-    async def _run_winter_mode_logic(
-        self,
-        cwu_urgency: int,
-        floor_urgency: int,
-        cwu_temp: float | None,
-        salon_temp: float | None,
-    ) -> None:
-        """Run control logic for winter mode.
-
-        Winter mode features:
-        - Heat CWU during cheap tariff windows (03:00-06:00 and 13:00-15:00)
-        - No 3-hour session limit (heat until target reached)
-        - No fake heating detection (pump can use real heater)
-        - Higher CWU target temperature (+5°C)
-        - Only heat CWU outside windows if temperature drops significantly
-        - When not heating water -> heat house
-        """
-        now = datetime.now()
-        winter_target = self.get_winter_cwu_target()
-        emergency_threshold = self.get_winter_cwu_emergency_threshold()
-        is_heating_window = self.is_winter_cwu_heating_window()
-
-        # Emergency handling - critical floor temperature takes priority
-        if floor_urgency == URGENCY_CRITICAL:
-            if self._current_state != STATE_EMERGENCY_FLOOR:
-                await self._switch_to_floor()
-                self._change_state(STATE_EMERGENCY_FLOOR)
-                await self._async_send_notification(
-                    "Floor Emergency!",
-                    f"Room critically cold: Salon {salon_temp}°C! Switching to floor heating."
-                )
-            return
-
-        # Safety check: no progress after 3 hours of CWU heating
-        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            if self._check_winter_cwu_no_progress(cwu_temp):
-                start_temp = self._cwu_session_start_temp
-                elapsed_hours = (now - self._cwu_heating_start).total_seconds() / 3600 if self._cwu_heating_start else 0
-                self._log_action(
-                    f"Winter mode: No progress after {elapsed_hours:.1f}h "
-                    f"(start: {start_temp}°C, current: {cwu_temp}°C). Resetting to floor."
-                )
-                await self._async_send_notification(
-                    "CWU Heating Problem (Winter Mode)",
-                    f"CWU temperature hasn't increased after {elapsed_hours:.1f} hours of heating.\n"
-                    f"Started at: {start_temp}°C\n"
-                    f"Current: {cwu_temp}°C\n\n"
-                    f"Switching to floor heating. Please check the heat pump."
-                )
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-                self._cwu_heating_start = None
-                self._cwu_session_start_temp = None
-                return
-
-        # Handle CWU heating window (03:00-06:00 and 13:00-15:00)
-        if is_heating_window:
-            # During heating window: heat CWU if below target OR if temp unknown
-            # When temp is unknown, enable both floor+CWU and let heat pump decide
-            if cwu_temp is None:
-                # Temperature unknown - enable both, let pump decide (safe default)
-                if self._current_state != STATE_SAFE_MODE:
-                    self._log_action(
-                        "Winter mode: CWU temp UNKNOWN during heating window - enabling both (pump decides)"
-                    )
-                    _LOGGER.warning(
-                        "CWU temperature unavailable during heating window - enabling both floor+CWU"
-                    )
-                    await self._enter_safe_mode()
-                    self._change_state(STATE_SAFE_MODE)
-                return
-            elif cwu_temp < winter_target:
-                if self._current_state != STATE_HEATING_CWU:
-                    await self._switch_to_cwu()
-                    self._change_state(STATE_HEATING_CWU)
-                    self._cwu_heating_start = now
-                    self._log_action(
-                        f"Winter mode: Heating window started, CWU {cwu_temp}°C -> target {winter_target}°C"
-                    )
-                # Continue heating until target reached (no session limit in winter mode)
-                return
-            else:
-                # Target reached during window - switch to floor
-                if self._current_state == STATE_HEATING_CWU:
-                    self._log_action(
-                        f"Winter mode: CWU target reached ({cwu_temp}°C >= {winter_target}°C)"
-                    )
-                    await self._switch_to_floor()
-                    self._change_state(STATE_HEATING_FLOOR)
-                    self._cwu_heating_start = None
-                return
-
-        # Outside heating window: if temp unknown, enable both (pump decides)
-        if cwu_temp is None:
-            if self._current_state != STATE_SAFE_MODE:
-                self._log_action(
-                    "Winter mode: CWU temp UNKNOWN outside window - enabling both (pump decides)"
-                )
-                _LOGGER.warning(
-                    "CWU temperature unavailable outside heating window - enabling both floor+CWU"
-                )
-                await self._enter_safe_mode()
-                self._change_state(STATE_SAFE_MODE)
-            return
-
-        # Outside heating window: only heat CWU in emergency (below threshold)
-        if cwu_temp < emergency_threshold:
-            if self._current_state not in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-                await self._switch_to_cwu()
-                self._change_state(STATE_EMERGENCY_CWU)
-                self._cwu_heating_start = now
-                await self._async_send_notification(
-                    "CWU Emergency (Winter Mode)",
-                    f"CWU dropped to {cwu_temp}°C (below {emergency_threshold}°C threshold). "
-                    f"Starting emergency heating outside window."
-                )
-                self._log_action(
-                    f"Winter mode: Emergency CWU heating ({cwu_temp}°C < {emergency_threshold}°C)"
-                )
-            # If already in emergency heating, continue until buffer temp reached
-            return
-
-        # Check if we should exit emergency CWU heating (temp risen above buffer)
-        if self._current_state == STATE_EMERGENCY_CWU and cwu_temp is not None:
-            buffer_temp = emergency_threshold + 3.0
-            if cwu_temp >= buffer_temp:
-                self._log_action(
-                    f"Winter mode: Emergency CWU complete ({cwu_temp}°C >= {buffer_temp}°C)"
-                )
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-                self._cwu_heating_start = None
-                return
-
-        # Currently heating CWU but outside window and above emergency threshold
-        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            # Check if we should continue (during heating window check above already handles this)
-            if cwu_temp is not None and cwu_temp >= winter_target:
-                self._log_action(
-                    f"Winter mode: CWU at target ({cwu_temp}°C), switching to floor"
-                )
-                await self._switch_to_floor()
-                self._change_state(STATE_HEATING_FLOOR)
-                self._cwu_heating_start = None
-                return
-
-        # Default: heat floor (if not already heating something)
-        if self._current_state not in (STATE_HEATING_FLOOR, STATE_HEATING_CWU, STATE_EMERGENCY_CWU, STATE_SAFE_MODE):
-            self._log_action("Winter mode: Default to floor heating")
-            await self._switch_to_floor()
-            self._change_state(STATE_HEATING_FLOOR)
 
     async def _switch_to_cwu(self) -> None:
         """Switch to CWU heating mode with proper delays."""

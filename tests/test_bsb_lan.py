@@ -603,7 +603,7 @@ class TestWinterModeWithUnavailableTemp:
     @pytest.mark.asyncio
     async def test_safe_mode_when_temp_unavailable_during_window(self, mock_coordinator):
         """Test that safe mode (both floor+CWU) is enabled during window when temp unknown."""
-        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE
+        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE, MODE_WINTER
 
         mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._bsb_lan_data = {}  # No BSB-LAN data
@@ -611,7 +611,8 @@ class TestWinterModeWithUnavailableTemp:
         # Mock is_winter_cwu_heating_window to return True
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                # Call winter mode handler via mode handlers dict
+                await mock_coordinator._modes[MODE_WINTER].run_logic(
                     cwu_urgency=2,  # medium
                     floor_urgency=1,  # low
                     cwu_temp=None,  # CRITICAL: temp unavailable (BSB-LAN down)
@@ -625,14 +626,15 @@ class TestWinterModeWithUnavailableTemp:
     @pytest.mark.asyncio
     async def test_stays_in_safe_mode_when_temp_remains_unavailable(self, mock_coordinator):
         """Test that safe mode continues if temp remains unavailable."""
-        from custom_components.cwu_controller.const import STATE_SAFE_MODE
+        from custom_components.cwu_controller.const import STATE_SAFE_MODE, MODE_WINTER
 
         mock_coordinator._current_state = STATE_SAFE_MODE
         mock_coordinator._bsb_lan_data = {}
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=True):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                # Call winter mode handler via mode handlers dict
+                await mock_coordinator._modes[MODE_WINTER].run_logic(
                     cwu_urgency=2,
                     floor_urgency=1,
                     cwu_temp=None,
@@ -647,14 +649,15 @@ class TestWinterModeWithUnavailableTemp:
     @pytest.mark.asyncio
     async def test_safe_mode_when_temp_unavailable_outside_window(self, mock_coordinator):
         """Test that safe mode is also used outside window when temp unavailable."""
-        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE
+        from custom_components.cwu_controller.const import STATE_IDLE, STATE_SAFE_MODE, MODE_WINTER
 
         mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._bsb_lan_data = {}
 
         with patch.object(mock_coordinator, "is_winter_cwu_heating_window", return_value=False):
             with patch.object(mock_coordinator, "_enter_safe_mode", new_callable=AsyncMock) as mock_safe:
-                await mock_coordinator._run_winter_mode_logic(
+                # Call winter mode handler via mode handlers dict
+                await mock_coordinator._modes[MODE_WINTER].run_logic(
                     cwu_urgency=2,
                     floor_urgency=1,
                     cwu_temp=None,  # BSB-LAN temp unavailable
