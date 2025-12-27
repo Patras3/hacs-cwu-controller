@@ -1999,6 +1999,7 @@ function updateBsbLanDisplay(bsbData) {
     // Parse values from sensor data
     const dhwStatus = data.dhw_status || '---';
     const hpStatus = data.hp_status || '---';
+    const hc1Status = data.hc1_status || '---';
     const flowTemp = data.flow_temp || 0;
     const returnTemp = data.return_temp || 0;
     const cwuTemp = data.cwu_temp || 0;
@@ -2073,6 +2074,10 @@ function updateBsbLanDisplay(bsbData) {
                 <div class="bsb-raw-status">
                     <span class="bsb-raw-label">HP:</span>
                     <span class="bsb-raw-value">${hpStatus}</span>
+                </div>
+                <div class="bsb-raw-status">
+                    <span class="bsb-raw-label">HC1:</span>
+                    <span class="bsb-raw-value">${hc1Status}</span>
                 </div>
             </div>
             <div class="bsb-outside-temp">

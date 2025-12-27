@@ -171,7 +171,7 @@ CONTROL_SOURCE_BSB_LAN: Final = "bsb_lan"
 CONTROL_SOURCE_HA_CLOUD: Final = "ha_cloud"
 
 # BSB-LAN fake heating detection
-BSB_FAKE_HEATING_DETECTION_TIME: Final = 5  # Minutes of "charging but no compressor" before detection
+BSB_FAKE_HEATING_DETECTION_TIME: Final = 10  # Minutes of "charging but no compressor" before detection
 
 # =============================================================================
 # BROKEN HEATER MODE - Refactored Constants
@@ -191,6 +191,11 @@ MAX_TEMP_FLOW_STAGNATION: Final = 2.0        # Flow temp nie rośnie o >2°C = s
 MAX_TEMP_ELECTRIC_FALLBACK_COUNT: Final = 2  # 2x "Charging electric" = max osiągnięty
 MAX_TEMP_ACCEPTABLE_DROP: Final = 5.0        # Spadek o 5°C od max = OK
 MAX_TEMP_CRITICAL_THRESHOLD: Final = 38.0    # Poniżej 38°C spadek nieakceptowalny
+
+# Anti-fighting constants (avoid fighting for last few degrees for hours)
+MAX_TEMP_FIGHTING_TIME: Final = 60           # 60 min of heating = check if fighting
+MAX_TEMP_FIGHTING_PROGRESS: Final = 2.0      # Less than 2°C rise in 60 min = fighting
+MAX_TEMP_FIGHTING_THRESHOLD: Final = 3.0     # Within 3°C of target = close enough, stop fighting
 
 # Rapid Drop Detection (pobór CWU - kąpiel)
 CWU_RAPID_DROP_THRESHOLD: Final = 5.0   # 5°C spadek = ktoś się kąpie

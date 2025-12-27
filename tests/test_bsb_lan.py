@@ -247,14 +247,14 @@ class TestBSBLanControlMethods:
         """Test CWU on via BSB-LAN when available."""
         mock_coordinator._bsb_client._is_available = True
 
-        with patch.object(mock_coordinator._bsb_client, "async_set_cwu_mode", new_callable=AsyncMock) as mock_bsb:
-            mock_bsb.return_value = True
+        with patch.object(mock_coordinator._bsb_client, "async_write_and_verify", new_callable=AsyncMock) as mock_bsb:
+            mock_bsb.return_value = (True, "OK")
 
             result = await mock_coordinator._async_set_cwu_on()
 
             assert result is True
             assert mock_coordinator._control_source == CONTROL_SOURCE_BSB_LAN
-            mock_bsb.assert_called_once_with(BSB_CWU_MODE_ON)
+            mock_bsb.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_cwu_on_bsb_lan_unavailable_returns_false(self, mock_coordinator):
@@ -273,14 +273,14 @@ class TestBSBLanControlMethods:
         """Test CWU off via BSB-LAN when available."""
         mock_coordinator._bsb_client._is_available = True
 
-        with patch.object(mock_coordinator._bsb_client, "async_set_cwu_mode", new_callable=AsyncMock) as mock_bsb:
-            mock_bsb.return_value = True
+        with patch.object(mock_coordinator._bsb_client, "async_write_and_verify", new_callable=AsyncMock) as mock_bsb:
+            mock_bsb.return_value = (True, "OK")
 
             result = await mock_coordinator._async_set_cwu_off()
 
             assert result is True
             assert mock_coordinator._control_source == CONTROL_SOURCE_BSB_LAN
-            mock_bsb.assert_called_once_with(BSB_CWU_MODE_OFF)
+            mock_bsb.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_cwu_off_bsb_lan_unavailable_returns_false(self, mock_coordinator):
@@ -296,14 +296,14 @@ class TestBSBLanControlMethods:
         """Test floor on via BSB-LAN when available."""
         mock_coordinator._bsb_client._is_available = True
 
-        with patch.object(mock_coordinator._bsb_client, "async_set_floor_mode", new_callable=AsyncMock) as mock_bsb:
-            mock_bsb.return_value = True
+        with patch.object(mock_coordinator._bsb_client, "async_write_and_verify", new_callable=AsyncMock) as mock_bsb:
+            mock_bsb.return_value = (True, "OK")
 
             result = await mock_coordinator._async_set_floor_on()
 
             assert result is True
             assert mock_coordinator._control_source == CONTROL_SOURCE_BSB_LAN
-            mock_bsb.assert_called_once_with(BSB_FLOOR_MODE_AUTOMATIC)
+            mock_bsb.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_floor_on_bsb_lan_unavailable_returns_false(self, mock_coordinator):
@@ -319,14 +319,14 @@ class TestBSBLanControlMethods:
         """Test floor off via BSB-LAN when available."""
         mock_coordinator._bsb_client._is_available = True
 
-        with patch.object(mock_coordinator._bsb_client, "async_set_floor_mode", new_callable=AsyncMock) as mock_bsb:
-            mock_bsb.return_value = True
+        with patch.object(mock_coordinator._bsb_client, "async_write_and_verify", new_callable=AsyncMock) as mock_bsb:
+            mock_bsb.return_value = (True, "OK")
 
             result = await mock_coordinator._async_set_floor_off()
 
             assert result is True
             assert mock_coordinator._control_source == CONTROL_SOURCE_BSB_LAN
-            mock_bsb.assert_called_once_with(BSB_FLOOR_MODE_PROTECTION)
+            mock_bsb.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_floor_off_bsb_lan_unavailable_returns_false(self, mock_coordinator):

@@ -159,6 +159,57 @@ class BSBLanClient:
             return False
         return await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, int(temp))
 
+    async def async_write_and_verify(
+        self, param: int, value: int, verify_delay: float = 1.0
+    ) -> tuple[bool, str]:
+        """Write a parameter and verify it was set correctly.
+
+        Args:
+            param: Parameter ID to write.
+            value: Value to set.
+            verify_delay: Seconds to wait before verification read.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+            If verification fails, message contains the error details.
+        """
+        # Write the value
+        write_success = await self.async_write_parameter(param, value)
+        if not write_success:
+            return (False, f"Write failed for param {param}={value}")
+
+        # Wait before verification
+        await asyncio.sleep(verify_delay)
+
+        # Read back to verify
+        read_data = await self.async_read_parameters(str(param))
+        if not read_data:
+            return (False, f"Verification read failed for param {param}")
+
+        # Parse the actual value
+        param_data = read_data.get(str(param), {})
+        actual_value = param_data.get("value")
+
+        if actual_value is None:
+            return (False, f"No value in response for param {param}")
+
+        # Compare (allow for float/int differences)
+        try:
+            if abs(float(actual_value) - float(value)) > 0.5:
+                return (
+                    False,
+                    f"Param {param}: expected {value}, got {actual_value}"
+                )
+        except (ValueError, TypeError):
+            # For non-numeric values, do string comparison
+            if str(actual_value) != str(value):
+                return (
+                    False,
+                    f"Param {param}: expected {value}, got {actual_value}"
+                )
+
+        return (True, f"Param {param}={value} verified OK")
+
     def _handle_success(self) -> None:
         """Called after successful communication."""
         was_unavailable = not self._is_available

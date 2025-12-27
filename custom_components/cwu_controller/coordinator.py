@@ -74,6 +74,8 @@ from .const import (
     # BSB-LAN
     CONF_BSB_LAN_HOST,
     DEFAULT_BSB_LAN_HOST,
+    BSB_LAN_PARAM_CWU_MODE,
+    BSB_LAN_PARAM_FLOOR_MODE,
     BSB_CWU_MODE_OFF,
     BSB_CWU_MODE_ON,
     BSB_FLOOR_MODE_PROTECTION,
@@ -100,6 +102,9 @@ from .const import (
     MAX_TEMP_ELECTRIC_FALLBACK_COUNT,
     MAX_TEMP_ACCEPTABLE_DROP,
     MAX_TEMP_CRITICAL_THRESHOLD,
+    MAX_TEMP_FIGHTING_TIME,
+    MAX_TEMP_FIGHTING_PROGRESS,
+    MAX_TEMP_FIGHTING_THRESHOLD,
     CWU_RAPID_DROP_THRESHOLD,
     CWU_RAPID_DROP_WINDOW,
     HP_RESTART_MIN_WAIT,
@@ -200,6 +205,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._max_temp_at: datetime | None = None  # Kiedy zaczęliśmy sprawdzać
         self._electric_fallback_count: int = 0  # Ile razy "Charging electric"
         self._flow_temp_at_max_check: float | None = None  # Flow temp na początku okna
+
+        # Anti-fighting tracking (avoid fighting for last few degrees for hours)
+        self._cwu_heating_session_start: datetime | None = None  # Start of current CWU session
+        self._cwu_temp_at_session_start: float | None = None  # CWU temp at session start
 
         # Rapid drop detection (pobór CWU - kąpiel)
         self._cwu_temp_history_bsb: list[tuple[datetime, float]] = []  # Historia temp BSB 8830
@@ -830,59 +839,83 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     # -------------------------------------------------------------------------
 
     async def _async_set_cwu_on(self) -> bool:
-        """Turn CWU heating on via BSB-LAN."""
+        """Turn CWU heating on via BSB-LAN with verification."""
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - CWU ON skipped")
             return False
 
-        success = await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_ON)
+        success, msg = await self._bsb_client.async_write_and_verify(
+            BSB_LAN_PARAM_CWU_MODE, BSB_CWU_MODE_ON
+        )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
             self._log_action("CWU ON")
         else:
-            _LOGGER.error("BSB-LAN CWU ON failed")
+            _LOGGER.error("BSB-LAN CWU ON failed: %s", msg)
+            await self._async_send_notification(
+                "BSB-LAN Write Error",
+                f"Failed to set CWU ON: {msg}"
+            )
         return success
 
     async def _async_set_cwu_off(self) -> bool:
-        """Turn CWU heating off via BSB-LAN."""
+        """Turn CWU heating off via BSB-LAN with verification."""
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - CWU OFF skipped")
             return False
 
-        success = await self._bsb_client.async_set_cwu_mode(BSB_CWU_MODE_OFF)
+        success, msg = await self._bsb_client.async_write_and_verify(
+            BSB_LAN_PARAM_CWU_MODE, BSB_CWU_MODE_OFF
+        )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
             self._log_action("CWU OFF")
         else:
-            _LOGGER.error("BSB-LAN CWU OFF failed")
+            _LOGGER.error("BSB-LAN CWU OFF failed: %s", msg)
+            await self._async_send_notification(
+                "BSB-LAN Write Error",
+                f"Failed to set CWU OFF: {msg}"
+            )
         return success
 
     async def _async_set_floor_on(self) -> bool:
-        """Turn floor heating on via BSB-LAN."""
+        """Turn floor heating on via BSB-LAN with verification."""
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - Floor ON skipped")
             return False
 
-        success = await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_AUTOMATIC)
+        success, msg = await self._bsb_client.async_write_and_verify(
+            BSB_LAN_PARAM_FLOOR_MODE, BSB_FLOOR_MODE_AUTOMATIC
+        )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
             self._log_action("Floor ON")
         else:
-            _LOGGER.error("BSB-LAN Floor ON failed")
+            _LOGGER.error("BSB-LAN Floor ON failed: %s", msg)
+            await self._async_send_notification(
+                "BSB-LAN Write Error",
+                f"Failed to set Floor ON: {msg}"
+            )
         return success
 
     async def _async_set_floor_off(self) -> bool:
-        """Turn floor heating off via BSB-LAN."""
+        """Turn floor heating off via BSB-LAN with verification."""
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - Floor OFF skipped")
             return False
 
-        success = await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_PROTECTION)
+        success, msg = await self._bsb_client.async_write_and_verify(
+            BSB_LAN_PARAM_FLOOR_MODE, BSB_FLOOR_MODE_PROTECTION
+        )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
             self._log_action("Floor OFF")
         else:
-            _LOGGER.error("BSB-LAN Floor OFF failed")
+            _LOGGER.error("BSB-LAN Floor OFF failed: %s", msg)
+            await self._async_send_notification(
+                "BSB-LAN Write Error",
+                f"Failed to set Floor OFF: {msg}"
+            )
         return success
 
     # -------------------------------------------------------------------------
@@ -899,6 +932,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._bsb_lan_data = {
             "floor_mode": raw_data.get("700", {}).get("desc", "---"),
             "cwu_mode": raw_data.get("1600", {}).get("desc", "---"),
+            "cwu_target_setpoint": self._parse_bsb_value(raw_data.get("1610", {})),
             "hc1_status": raw_data.get("8000", {}).get("desc", "---"),
             "dhw_status": raw_data.get("8003", {}).get("desc", "---"),
             "hp_status": raw_data.get("8006", {}).get("desc", "---"),
@@ -929,7 +963,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         Fake heating detected when:
         1. DHW status shows "Charging electric" = broken heater scenario
-        2. DHW status shows "Charging" but compressor not running for 5+ minutes
+        2. DHW status shows "Charging" but compressor not running for 10+ minutes
            EXCEPT when compressor is in mandatory off time ("off time min active")
         """
         if not self._bsb_lan_data:
@@ -2127,10 +2161,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def _detect_max_temp_achieved(self) -> bool:
         """Detect if pump reached max temp for current outside temperature.
 
-        Criteria:
-        1. Flow temp (8412) not rising significantly for 30 min
-        2. Pump tried electric heater 2+ times (Charging electric)
-        3. Remember this temp as max
+        Criteria (any of these triggers max temp detection):
+        1. Flow temp (8412) not rising significantly for 30 min + electric fallback 2+ times
+        2. Anti-fighting: 60+ min heating with <2°C progress AND within 3°C of target
+           (avoid fighting for 55°C when at 53°C for hours)
 
         Returns True if max temp detected (should switch to floor).
         """
@@ -2140,38 +2174,65 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         flow_temp = self._bsb_lan_data.get("flow_temp")
         dhw_status = self._bsb_lan_data.get("dhw_status", "")
         cwu_temp = self._bsb_lan_data.get("cwu_temp")
+        target_temp = self._get_target_temp()
+        now = datetime.now()
 
         # Count "Charging electric" occurrences
         if "electric" in dhw_status.lower():
             self._electric_fallback_count += 1
             _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count}")
 
-        # Initialize flow temp tracking
+        # Initialize session tracking (for anti-fighting)
+        if self._cwu_heating_session_start is None:
+            self._cwu_heating_session_start = now
+            self._cwu_temp_at_session_start = cwu_temp
+
+        # Initialize flow temp tracking (for electric fallback detection)
         if self._flow_temp_at_max_check is None:
             self._flow_temp_at_max_check = flow_temp
-            self._max_temp_at = datetime.now()
+            self._max_temp_at = now
             return False
 
         if flow_temp is None or self._flow_temp_at_max_check is None:
             return False
 
         flow_rise = flow_temp - self._flow_temp_at_max_check
-        elapsed = (datetime.now() - self._max_temp_at).total_seconds() / 60 if self._max_temp_at else 0
+        elapsed = (now - self._max_temp_at).total_seconds() / 60 if self._max_temp_at else 0
 
+        # Check 1: Electric fallback + flow stagnation (original logic)
         if elapsed >= MAX_TEMP_DETECTION_WINDOW:
-            # Check if flow stagnated AND electric fallback happened
             if flow_rise < MAX_TEMP_FLOW_STAGNATION and self._electric_fallback_count >= MAX_TEMP_ELECTRIC_FALLBACK_COUNT:
-                # Max reached
+                # Max reached via electric fallback
                 self._max_temp_achieved = cwu_temp
                 self._log_action(
-                    f"Max temp detected: {cwu_temp}°C (flow stagnant +{flow_rise:.1f}°C, electric x{self._electric_fallback_count})"
+                    "Max temp detected",
+                    f"Flow stagnant +{flow_rise:.1f}°C, electric x{self._electric_fallback_count}, CWU={cwu_temp:.1f}°C"
                 )
                 return True
 
             # Reset for next window
             self._flow_temp_at_max_check = flow_temp
-            self._max_temp_at = datetime.now()
+            self._max_temp_at = now
             self._electric_fallback_count = 0
+
+        # Check 2: Anti-fighting - avoid fighting for last few degrees for hours
+        if cwu_temp is not None and self._cwu_temp_at_session_start is not None:
+            session_elapsed = (now - self._cwu_heating_session_start).total_seconds() / 60 if self._cwu_heating_session_start else 0
+            session_progress = cwu_temp - self._cwu_temp_at_session_start
+            distance_to_target = target_temp - cwu_temp
+
+            # 60+ min heating, <2°C progress, within 3°C of target
+            if (session_elapsed >= MAX_TEMP_FIGHTING_TIME and
+                session_progress < MAX_TEMP_FIGHTING_PROGRESS and
+                distance_to_target <= MAX_TEMP_FIGHTING_THRESHOLD and
+                distance_to_target >= 0):
+                # Fighting for last few degrees - give up
+                self._max_temp_achieved = cwu_temp
+                self._log_action(
+                    "Max temp detected (anti-fighting)",
+                    f"{session_elapsed:.0f}min heating, only +{session_progress:.1f}°C progress, {cwu_temp:.1f}°C is close enough to {target_temp:.1f}°C"
+                )
+                return True
 
         return False
 
@@ -2258,6 +2319,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._max_temp_at = None
         self._electric_fallback_count = 0
         self._flow_temp_at_max_check = None
+        # Reset anti-fighting session tracking
+        self._cwu_heating_session_start = None
+        self._cwu_temp_at_session_start = None
 
     # =========================================================================
     # BROKEN HEATER MODE - Main Logic (Refactored)
