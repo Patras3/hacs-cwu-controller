@@ -541,6 +541,7 @@ async function refreshData() {
             outside_temp: parseFloat(bsbOutsideTemp?.state) || 0,
             available: bsbAvailable?.state === 'on',
             control_source: controlSource?.state || 'unknown',
+            last_updated: bsbCwuTemp?.last_updated || bsbAvailable?.last_updated || null,
         };
         currentData.bsbLan = bsbData;
 
@@ -2161,9 +2162,9 @@ function updateBsbLanDisplay(bsbData) {
         deltaTDesc = 'High';
     }
 
-    // Control source indicator
-    const sourceIcon = controlSource === 'bsb_lan' ? 'mdi-lan-connect' : 'mdi-cloud';
-    const sourceLabel = controlSource === 'bsb_lan' ? 'BSB-LAN' : 'HA Cloud';
+    // Last update time
+    const lastUpdated = data.last_updated ? new Date(data.last_updated) : null;
+    const lastUpdateText = lastUpdated ? getRelativeTime(lastUpdated) : '---';
 
     // Get additional controller data from attributes
     const attrs = currentData.attributes || {};
@@ -2267,8 +2268,8 @@ function updateBsbLanDisplay(bsbData) {
         </div>
         ` : ''}
         <div class="bsb-control-source">
-            <span class="mdi ${sourceIcon}"></span>
-            <span>Control: ${sourceLabel}</span>
+            <span class="mdi mdi-update"></span>
+            <span>Last update: ${lastUpdateText}</span>
         </div>
     `;
 
