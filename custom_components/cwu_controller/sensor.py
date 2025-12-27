@@ -45,6 +45,9 @@ async def async_setup_entry(
         # BSB-LAN sensors
         BsbDhwStatusSensor(coordinator, entry),
         BsbHpStatusSensor(coordinator, entry),
+        BsbHc1StatusSensor(coordinator, entry),
+        BsbCwuModeSensor(coordinator, entry),
+        BsbFloorModeSensor(coordinator, entry),
         BsbCwuTempSensor(coordinator, entry),
         BsbFlowTempSensor(coordinator, entry),
         BsbReturnTempSensor(coordinator, entry),
@@ -75,7 +78,7 @@ class CWUControllerBaseSensor(CoordinatorEntity, SensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.5",
+            "sw_version": "4.3.0",
         }
 
 
@@ -527,6 +530,77 @@ class BsbHpStatusSensor(CWUControllerBaseSensor):
             return None
         bsb = self.coordinator.data.get("bsb_lan", {})
         return bsb.get("hp_status", "---")
+
+
+class BsbHc1StatusSensor(CWUControllerBaseSensor):
+    """Sensor showing HC1 (Heating Circuit 1) status from BSB-LAN (param 8000)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_hc1_status", "BSB HC1 Status")
+        self._attr_icon = "mdi:heating-coil"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return HC1 status."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("hc1_status", "---")
+
+
+class BsbCwuModeSensor(CWUControllerBaseSensor):
+    """Sensor showing CWU mode from BSB-LAN (param 1600: Off/On/Eco)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_cwu_mode", "BSB CWU Mode")
+        self._attr_icon = "mdi:water-boiler"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return CWU mode."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("cwu_mode", "---")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes with ON/OFF status."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        mode = bsb.get("cwu_mode", "").lower()
+        is_on = mode in ("on", "eco", "1")
+        return {"is_on": is_on}
+
+
+class BsbFloorModeSensor(CWUControllerBaseSensor):
+    """Sensor showing Floor mode from BSB-LAN (param 700: Protection/Automatic/Reduced/Comfort)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_floor_mode", "BSB Floor Mode")
+        self._attr_icon = "mdi:heating-coil"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return Floor mode."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("floor_mode", "---")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes with ON/OFF status."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        mode = bsb.get("floor_mode", "").lower()
+        is_on = mode in ("automatic", "comfort", "1")
+        return {"is_on": is_on}
 
 
 class BsbCwuTempSensor(CWUControllerBaseSensor):

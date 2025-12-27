@@ -39,6 +39,9 @@ const ENTITIES = {
     // BSB-LAN sensors (fetched via coordinator, not direct API)
     bsbDhwStatus: 'sensor.cwu_controller_bsb_dhw_status',
     bsbHpStatus: 'sensor.cwu_controller_bsb_heat_pump_status',
+    bsbHc1Status: 'sensor.cwu_controller_bsb_hc1_status',
+    bsbCwuMode: 'sensor.cwu_controller_bsb_cwu_mode',
+    bsbFloorMode: 'sensor.cwu_controller_bsb_floor_mode',
     bsbCwuTemp: 'sensor.cwu_controller_bsb_cwu_temperature',
     bsbFlowTemp: 'sensor.cwu_controller_bsb_flow_temperature',
     bsbReturnTemp: 'sensor.cwu_controller_bsb_return_temperature',
@@ -108,6 +111,7 @@ let chartUpdateTimer = null;
 let tempChart = null;
 let powerChart = null;
 let techChart = null;
+let outsideChart = null;
 let modalChart = null;
 let quickPowerChart = null;
 let stateStartTime = null;
@@ -121,6 +125,7 @@ let chartRanges = {
     tempChart: '6h',
     powerChart: '6h',
     techChart: '6h',
+    outsideChart: '24h',
 };
 let modalChartType = 'temp';
 let modalChartRange = '24h';
@@ -128,6 +133,7 @@ let modalChartRange = '24h';
 // Mode selection modal state
 let selectedModeType = null; // 'cwu' or 'floor'
 let selectedDuration = 3; // hours
+let selectedModeTab = 'duration'; // 'duration' or 'heat-to'
 
 /**
  * Initialize the panel
@@ -504,9 +510,12 @@ async function refreshData() {
         if (floorInlet) currentData.floorInlet = parseFloat(floorInlet.state);
 
         // Fetch BSB-LAN sensor data (from coordinator, not direct API)
-        const [bsbDhwStatus, bsbHpStatus, bsbCwuTemp, bsbFlowTemp, bsbReturnTemp, bsbDeltaT, bsbOutsideTemp, bsbAvailable, controlSource] = await Promise.all([
+        const [bsbDhwStatus, bsbHpStatus, bsbHc1Status, bsbCwuMode, bsbFloorMode, bsbCwuTemp, bsbFlowTemp, bsbReturnTemp, bsbDeltaT, bsbOutsideTemp, bsbAvailable, controlSource] = await Promise.all([
             fetchState(ENTITIES.bsbDhwStatus),
             fetchState(ENTITIES.bsbHpStatus),
+            fetchState(ENTITIES.bsbHc1Status),
+            fetchState(ENTITIES.bsbCwuMode),
+            fetchState(ENTITIES.bsbFloorMode),
             fetchState(ENTITIES.bsbCwuTemp),
             fetchState(ENTITIES.bsbFlowTemp),
             fetchState(ENTITIES.bsbReturnTemp),
@@ -520,6 +529,11 @@ async function refreshData() {
         const bsbData = {
             dhw_status: bsbDhwStatus?.state || '---',
             hp_status: bsbHpStatus?.state || '---',
+            hc1_status: bsbHc1Status?.state || '---',
+            cwu_mode: bsbCwuMode?.state || '---',
+            cwu_mode_on: bsbCwuMode?.attributes?.is_on || false,
+            floor_mode: bsbFloorMode?.state || '---',
+            floor_mode_on: bsbFloorMode?.attributes?.is_on || false,
             cwu_temp: parseFloat(bsbCwuTemp?.state) || 0,
             flow_temp: parseFloat(bsbFlowTemp?.state) || 0,
             return_temp: parseFloat(bsbReturnTemp?.state) || 0,
@@ -653,6 +667,7 @@ async function updateUI() {
 
     updateActionHistory(attrs.action_history || []);
     updateStateHistory(attrs.state_history || []);
+    updateHeatToProgress();
 }
 
 /**
@@ -1473,19 +1488,50 @@ function initCharts() {
         options: { ...commonOptions, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: 0, suggestedMax: 2000 } } }
     });
 
-    // Technical temps chart
+    // Technical temps chart (BSB-LAN data)
     techChart = new Chart(document.getElementById('techChart').getContext('2d'), {
         type: 'line',
         data: {
             datasets: [
                 { label: 'CWU', data: [], borderColor: '#00d9ff', borderWidth: 2, tension: 0.4, pointRadius: 0 },
-                { label: 'Pump Inlet', data: [], borderColor: '#fc8181', borderWidth: 2, tension: 0.4, pointRadius: 0 },
-                { label: 'Pump Outlet', data: [], borderColor: '#68d391', borderWidth: 2, tension: 0.4, pointRadius: 0 },
-                { label: 'CWU Inlet', data: [], borderColor: '#ed8936', borderWidth: 2, tension: 0.4, pointRadius: 0 },
-                { label: 'Floor Inlet', data: [], borderColor: '#9f7aea', borderWidth: 2, tension: 0.4, pointRadius: 0 }
+                { label: 'Flow', data: [], borderColor: '#fc8181', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                { label: 'Return', data: [], borderColor: '#68d391', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                { label: 'ΔT', data: [], borderColor: '#f6e05e', borderWidth: 2, tension: 0.4, pointRadius: 0, yAxisID: 'y1' }
             ]
         },
-        options: { ...commonOptions, plugins: { ...commonOptions.plugins, legend: { display: false } }, scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: 20, suggestedMax: 60 } } }
+        options: {
+            ...commonOptions,
+            plugins: { ...commonOptions.plugins, legend: { display: false } },
+            scales: {
+                ...commonOptions.scales,
+                y: { ...commonOptions.scales.y, suggestedMin: 20, suggestedMax: 60, position: 'left' },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    suggestedMin: 0,
+                    suggestedMax: 15,
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: '#f6e05e', callback: (v) => v + '°' },
+                    title: { display: true, text: 'ΔT', color: '#f6e05e' }
+                }
+            }
+        }
+    });
+
+    // Outside temperature chart
+    outsideChart = new Chart(document.getElementById('outsideChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            datasets: [
+                { label: 'Outside', data: [], borderColor: '#b794f4', backgroundColor: 'rgba(183, 148, 244, 0.1)', borderWidth: 2, tension: 0.4, pointRadius: 0, fill: true }
+            ]
+        },
+        options: {
+            ...commonOptions,
+            plugins: { ...commonOptions.plugins, legend: { display: false } },
+            scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, suggestedMin: -10, suggestedMax: 30 } }
+        }
     });
 }
 
@@ -1496,6 +1542,7 @@ async function updateAllChartData() {
     await updateChartData('tempChart', chartRanges.tempChart);
     await updateChartData('powerChart', chartRanges.powerChart);
     await updateChartData('techChart', chartRanges.techChart);
+    await updateChartData('outsideChart', chartRanges.outsideChart);
 }
 
 /**
@@ -1529,19 +1576,21 @@ async function updateChartData(chartId, range) {
         powerChart.data.datasets[0].data = convertToChartData(power);
         powerChart.update('none');
     } else if (chartId === 'techChart' && techChart) {
-        const [cwu, pumpIn, pumpOut, cwuIn, floorIn] = await Promise.all([
+        const [cwu, flow, ret, deltaT] = await Promise.all([
             fetchHistory(ENTITIES.bsbCwuTemp, hours),
-            fetchHistory(EXTERNAL_ENTITIES.pumpInlet, hours),
-            fetchHistory(EXTERNAL_ENTITIES.pumpOutlet, hours),
-            fetchHistory(EXTERNAL_ENTITIES.cwuInlet, hours),
-            fetchHistory(EXTERNAL_ENTITIES.floorInlet, hours),
+            fetchHistory(ENTITIES.bsbFlowTemp, hours),
+            fetchHistory(ENTITIES.bsbReturnTemp, hours),
+            fetchHistory(ENTITIES.bsbDeltaT, hours),
         ]);
         techChart.data.datasets[0].data = convertToChartData(cwu);
-        techChart.data.datasets[1].data = convertToChartData(pumpIn);
-        techChart.data.datasets[2].data = convertToChartData(pumpOut);
-        techChart.data.datasets[3].data = convertToChartData(cwuIn);
-        techChart.data.datasets[4].data = convertToChartData(floorIn);
+        techChart.data.datasets[1].data = convertToChartData(flow);
+        techChart.data.datasets[2].data = convertToChartData(ret);
+        techChart.data.datasets[3].data = convertToChartData(deltaT);
         techChart.update('none');
+    } else if (chartId === 'outsideChart' && outsideChart) {
+        const outside = await fetchHistory(ENTITIES.bsbOutsideTemp, hours);
+        outsideChart.data.datasets[0].data = convertToChartData(outside);
+        outsideChart.update('none');
     }
 }
 
@@ -1857,30 +1906,63 @@ async function setModeAuto() {
 function openModeModal(type) {
     selectedModeType = type;
     selectedDuration = 3;
+    selectedModeTab = 'duration';
 
     const modal = document.getElementById('mode-modal');
     const title = document.getElementById('mode-modal-title');
     const icon = document.getElementById('mode-modal-icon');
     const desc = document.getElementById('mode-modal-description');
     const slider = document.getElementById('duration-slider');
+    const tabs = document.getElementById('mode-tabs');
 
     if (type === 'cwu') {
         title.textContent = 'Force CWU Heating';
         icon.innerHTML = '<span class="mdi mdi-water-boiler"></span>';
         icon.querySelector('.mdi').style.color = 'var(--accent-cyan)';
-        desc.textContent = 'Force CWU (hot water) heating for:';
+        desc.textContent = 'Force CWU heating for:';
+        // Show tabs for CWU (duration + heat-to)
+        tabs.style.display = 'flex';
     } else {
         title.textContent = 'Force Floor Heating';
         icon.innerHTML = '<span class="mdi mdi-heating-coil"></span>';
         icon.querySelector('.mdi').style.color = 'var(--accent-orange)';
         desc.textContent = 'Force floor heating for:';
+        // Hide tabs for floor (only duration)
+        tabs.style.display = 'none';
     }
+
+    // Reset to duration tab
+    switchModeTab('duration');
 
     slider.value = selectedDuration;
     updateDurationDisplay();
     updatePresetButtons();
 
     modal.classList.add('open');
+}
+
+function switchModeTab(tab) {
+    selectedModeTab = tab;
+
+    const tabDuration = document.getElementById('tab-duration');
+    const tabHeatTo = document.getElementById('tab-heat-to');
+    const panelDuration = document.getElementById('panel-duration');
+    const panelHeatTo = document.getElementById('panel-heat-to');
+    const confirmBtn = document.getElementById('mode-confirm-btn');
+
+    if (tab === 'duration') {
+        tabDuration.classList.add('active');
+        tabHeatTo.classList.remove('active');
+        panelDuration.style.display = 'block';
+        panelHeatTo.style.display = 'none';
+        confirmBtn.innerHTML = '<span class="mdi mdi-check"></span> Confirm';
+    } else {
+        tabDuration.classList.remove('active');
+        tabHeatTo.classList.add('active');
+        panelDuration.style.display = 'none';
+        panelHeatTo.style.display = 'block';
+        confirmBtn.innerHTML = '<span class="mdi mdi-fire"></span> Start Heating';
+    }
 }
 
 function updateDurationDisplay() {
@@ -1909,14 +1991,29 @@ function updatePresetButtons() {
 }
 
 async function confirmMode() {
-    const durationMinutes = selectedDuration * 60;
-
     closeModal('mode-modal');
 
-    if (selectedModeType === 'cwu') {
-        await callService('cwu_controller', 'force_cwu', { duration: durationMinutes });
+    if (selectedModeTab === 'heat-to' && selectedModeType === 'cwu') {
+        // Heat-to mode
+        const targetTemp = parseInt(document.getElementById('heat-to-temp').value);
+        if (targetTemp < 36 || targetTemp > 55) {
+            showNotification('Temperature must be between 36°C and 55°C', 'error');
+            return;
+        }
+        try {
+            await callService('cwu_controller', 'heat_to_temp', { target_temp: targetTemp });
+            showNotification(`Heating CWU to ${targetTemp}°C`, 'success');
+        } catch (error) {
+            showNotification('Failed to start heat-to: ' + error.message, 'error');
+        }
     } else {
-        await callService('cwu_controller', 'force_floor', { duration: durationMinutes });
+        // Duration mode (force CWU or force floor)
+        const durationMinutes = selectedDuration * 60;
+        if (selectedModeType === 'cwu') {
+            await callService('cwu_controller', 'force_cwu', { duration: durationMinutes });
+        } else {
+            await callService('cwu_controller', 'force_floor', { duration: durationMinutes });
+        }
     }
 }
 
@@ -1932,6 +2029,42 @@ async function testAction(action) {
     };
     const entityId = entityMap[action];
     if (entityId) await callService('button', 'press', { entity_id: entityId });
+}
+
+/**
+ * Heat-to temperature functions
+ */
+function setHeatToTemp(temp) {
+    document.getElementById('heat-to-temp').value = temp;
+    // Update active preset button
+    document.querySelectorAll('.heat-to-presets .preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.textContent.includes(temp + '°C')) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+function updateHeatToProgress() {
+    const attrs = currentData.attributes || {};
+    const heatToActive = attrs.manual_heat_to_active;
+    const heatToTarget = attrs.manual_heat_to_target;
+    const cwuTemp = currentData.cwuTemp;
+
+    const progressContainer = document.getElementById('heat-to-progress');
+    const progressFill = document.getElementById('heat-to-progress-fill');
+    const progressText = document.getElementById('heat-to-progress-text');
+
+    if (heatToActive && heatToTarget) {
+        progressContainer.style.display = 'block';
+
+        const startTemp = Math.max(35, cwuTemp - 10); // Approximate start
+        const progress = Math.min(100, Math.max(0, ((cwuTemp - startTemp) / (heatToTarget - startTemp)) * 100));
+        progressFill.style.width = progress + '%';
+        progressText.textContent = `${cwuTemp?.toFixed(1) || '--'}°C / ${heatToTarget}°C`;
+    } else {
+        progressContainer.style.display = 'none';
+    }
 }
 
 /**
@@ -2000,6 +2133,10 @@ function updateBsbLanDisplay(bsbData) {
     const dhwStatus = data.dhw_status || '---';
     const hpStatus = data.hp_status || '---';
     const hc1Status = data.hc1_status || '---';
+    const cwuMode = data.cwu_mode || '---';
+    const cwuModeOn = data.cwu_mode_on || false;
+    const floorMode = data.floor_mode || '---';
+    const floorModeOn = data.floor_mode_on || false;
     const flowTemp = data.flow_temp || 0;
     const returnTemp = data.return_temp || 0;
     const cwuTemp = data.cwu_temp || 0;
@@ -2065,6 +2202,20 @@ function updateBsbLanDisplay(bsbData) {
     }
 
     contentEl.innerHTML = `
+        <div class="bsb-modes-row">
+            <div class="bsb-mode-badge ${cwuModeOn ? 'on' : 'off'}">
+                <span class="mdi mdi-water-boiler"></span>
+                <span class="bsb-mode-label">CWU</span>
+                <span class="bsb-mode-state">${cwuModeOn ? 'ON' : 'OFF'}</span>
+                <span class="bsb-mode-detail">${cwuMode}</span>
+            </div>
+            <div class="bsb-mode-badge ${floorModeOn ? 'on' : 'off'}">
+                <span class="mdi mdi-heating-coil"></span>
+                <span class="bsb-mode-label">Floor</span>
+                <span class="bsb-mode-state">${floorModeOn ? 'ON' : 'OFF'}</span>
+                <span class="bsb-mode-detail">${floorMode}</span>
+            </div>
+        </div>
         <div class="bsb-status-row">
             <div class="bsb-raw-statuses">
                 <div class="bsb-raw-status">

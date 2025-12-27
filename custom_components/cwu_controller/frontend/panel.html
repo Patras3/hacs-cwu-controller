@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.0.0">
+    <link rel="stylesheet" href="styles.css?v=8.1.0">
 </head>
 <body>
     <div class="container">
@@ -644,12 +644,12 @@
                 </div>
             </div>
 
-            <!-- Technical Temps Chart - NEW -->
+            <!-- Technical Temps Chart (BSB-LAN) -->
             <div class="card glass-effect chart-card">
                 <div class="card-header">
                     <span class="card-title">
                         <span class="icon mdi mdi-thermometer-lines"></span>
-                        Technical Temperatures
+                        Heat Pump Temps (BSB-LAN)
                     </span>
                     <div class="chart-controls">
                         <button class="btn btn-sm" onclick="updateChartRange('techChart', '1h')">1H</button>
@@ -665,10 +665,28 @@
                 </div>
                 <div class="chart-legend-custom">
                     <span class="legend-item"><span class="legend-color" style="background:#00d9ff"></span>CWU</span>
-                    <span class="legend-item"><span class="legend-color" style="background:#fc8181"></span>Pump Inlet</span>
-                    <span class="legend-item"><span class="legend-color" style="background:#68d391"></span>Pump Outlet</span>
-                    <span class="legend-item"><span class="legend-color" style="background:#ed8936"></span>CWU Inlet</span>
-                    <span class="legend-item"><span class="legend-color" style="background:#9f7aea"></span>Floor Inlet</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#fc8181"></span>Flow</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#68d391"></span>Return</span>
+                    <span class="legend-item"><span class="legend-color" style="background:#f6e05e"></span>ΔT</span>
+                </div>
+            </div>
+
+            <!-- Outside Temperature Chart -->
+            <div class="card glass-effect chart-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-weather-partly-cloudy"></span>
+                        Outside Temperature
+                    </span>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm" onclick="updateChartRange('outsideChart', '6h')">6H</button>
+                        <button class="btn btn-sm active" onclick="updateChartRange('outsideChart', '24h')" id="outside-24h-btn">24H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('outsideChart', '48h')">48H</button>
+                        <button class="btn btn-sm" onclick="updateChartRange('outsideChart', '7d')">7D</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="outsideChart"></canvas>
                 </div>
             </div>
 
@@ -845,22 +863,60 @@
                 <div class="mode-modal-icon" id="mode-modal-icon">
                     <span class="mdi mdi-water-boiler"></span>
                 </div>
-                <p class="mode-modal-description" id="mode-modal-description">Force CWU heating for:</p>
-                <div class="duration-slider-container">
-                    <input type="range" id="duration-slider" min="1" max="12" step="0.5" value="3"
-                           oninput="updateDurationDisplay()">
-                    <div class="duration-display">
-                        <span class="duration-value" id="duration-value">3</span>
-                        <span class="duration-unit">hours</span>
+
+                <!-- Tabs (only visible for CWU) -->
+                <div class="mode-tabs" id="mode-tabs">
+                    <button class="mode-tab active" id="tab-duration" onclick="switchModeTab('duration')">
+                        <span class="mdi mdi-timer-outline"></span> Duration
+                    </button>
+                    <button class="mode-tab" id="tab-heat-to" onclick="switchModeTab('heat-to')">
+                        <span class="mdi mdi-target"></span> Heat to °C
+                    </button>
+                </div>
+
+                <!-- Duration Panel -->
+                <div class="mode-panel" id="panel-duration">
+                    <p class="mode-modal-description" id="mode-modal-description">Force CWU heating for:</p>
+                    <div class="duration-slider-container">
+                        <input type="range" id="duration-slider" min="1" max="12" step="0.5" value="3"
+                               oninput="updateDurationDisplay()">
+                        <div class="duration-display">
+                            <span class="duration-value" id="duration-value">3</span>
+                            <span class="duration-unit">hours</span>
+                        </div>
+                    </div>
+                    <div class="duration-presets">
+                        <button class="preset-btn" onclick="setDuration(1)">1h</button>
+                        <button class="preset-btn" onclick="setDuration(2)">2h</button>
+                        <button class="preset-btn active" onclick="setDuration(3)">3h</button>
+                        <button class="preset-btn" onclick="setDuration(6)">6h</button>
+                        <button class="preset-btn" onclick="setDuration(12)">12h</button>
                     </div>
                 </div>
-                <div class="duration-presets">
-                    <button class="preset-btn" onclick="setDuration(1)">1h</button>
-                    <button class="preset-btn" onclick="setDuration(2)">2h</button>
-                    <button class="preset-btn active" onclick="setDuration(3)">3h</button>
-                    <button class="preset-btn" onclick="setDuration(6)">6h</button>
-                    <button class="preset-btn" onclick="setDuration(12)">12h</button>
+
+                <!-- Heat-to Panel (CWU only) -->
+                <div class="mode-panel" id="panel-heat-to" style="display: none;">
+                    <p class="mode-modal-description">Heat CWU to target temperature, then return to AUTO:</p>
+                    <div class="heat-to-input-group">
+                        <input type="number" id="heat-to-temp" class="heat-to-input" value="50" min="36" max="55" step="1">
+                        <span class="heat-to-unit">°C</span>
+                    </div>
+                    <div class="heat-to-presets">
+                        <button class="preset-btn" onclick="setHeatToTemp(40)">40°C</button>
+                        <button class="preset-btn" onclick="setHeatToTemp(45)">45°C</button>
+                        <button class="preset-btn active" onclick="setHeatToTemp(50)">50°C</button>
+                        <button class="preset-btn" onclick="setHeatToTemp(55)">55°C</button>
+                    </div>
                 </div>
+
+                <!-- Heat-to progress (shown when active) -->
+                <div class="heat-to-progress" id="heat-to-progress" style="display: none;">
+                    <div class="heat-to-progress-bar">
+                        <div class="heat-to-progress-fill" id="heat-to-progress-fill"></div>
+                    </div>
+                    <span class="heat-to-progress-text" id="heat-to-progress-text">--°C / --°C</span>
+                </div>
+
                 <button class="btn btn-primary btn-block" id="mode-confirm-btn" onclick="confirmMode()">
                     <span class="mdi mdi-check"></span>
                     Confirm
@@ -872,6 +928,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.0.0"></script>
+    <script src="panel.js?v=8.1.0"></script>
 </body>
 </html>

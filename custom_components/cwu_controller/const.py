@@ -41,12 +41,16 @@ CONF_SALON_MIN_TEMP: Final = "salon_min_temp"
 CONF_BEDROOM_MIN_TEMP: Final = "bedroom_min_temp"
 
 # Default values
-DEFAULT_CWU_TARGET_TEMP: Final = 45.0
+DEFAULT_CWU_TARGET_TEMP: Final = 55.0
 DEFAULT_CWU_MIN_TEMP: Final = 40.0
 DEFAULT_CWU_CRITICAL_TEMP: Final = 35.0
 DEFAULT_SALON_TARGET_TEMP: Final = 22.0
 DEFAULT_SALON_MIN_TEMP: Final = 21.0
 DEFAULT_BEDROOM_MIN_TEMP: Final = 19.0
+
+# CWU Hysteresis (pump won't heat if difference < this value)
+CONF_CWU_HYSTERESIS: Final = "cwu_hysteresis"
+DEFAULT_CWU_HYSTERESIS: Final = 5.0  # Heat pump typically needs 5°C difference to heat
 
 # Power thresholds
 POWER_IDLE_THRESHOLD: Final = 10  # Below this = pump waiting for broken heater

@@ -47,6 +47,8 @@ from .const import (
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
+    CONF_CWU_HYSTERESIS,
+    DEFAULT_CWU_HYSTERESIS,
     # Mode constants
     MODE_BROKEN_HEATER,
     MODE_WINTER,
@@ -2291,9 +2293,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 return True
             return False
 
-        # No max recorded - use standard target (already BSB-adjusted)
+        # No max recorded - use standard target with hysteresis
         target = self._get_target_temp()
-        return cwu_temp >= target - 3.0  # 3°C margin
+        hysteresis = self.get_config_value(CONF_CWU_HYSTERESIS, DEFAULT_CWU_HYSTERESIS)
+        return cwu_temp >= target - hysteresis
 
     def _detect_rapid_drop(self) -> tuple[bool, float]:
         """Detect rapid CWU temperature drop (hot water usage / bath).
@@ -2599,9 +2602,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             should_resume = False
             resume_reason = ""
 
-            if cwu_temp is not None and cwu_temp < target - 3.0:
+            hysteresis = self.get_config_value(CONF_CWU_HYSTERESIS, DEFAULT_CWU_HYSTERESIS)
+            if cwu_temp is not None and cwu_temp < target - hysteresis:
                 should_resume = True
-                resume_reason = f"temp {cwu_temp}°C < target-3 ({target - 3.0}°C)"
+                resume_reason = f"temp {cwu_temp:.1f}°C < target-{hysteresis:.0f} ({target - hysteresis:.1f}°C)"
             elif cwu_urgency >= URGENCY_HIGH:
                 should_resume = True
                 resume_reason = f"urgency HIGH ({cwu_urgency})"

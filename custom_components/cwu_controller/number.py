@@ -13,12 +13,14 @@ from .const import (
     CONF_CWU_TARGET_TEMP,
     CONF_CWU_MIN_TEMP,
     CONF_CWU_CRITICAL_TEMP,
+    CONF_CWU_HYSTERESIS,
     CONF_SALON_TARGET_TEMP,
     CONF_SALON_MIN_TEMP,
     CONF_BEDROOM_MIN_TEMP,
     DEFAULT_CWU_TARGET_TEMP,
     DEFAULT_CWU_MIN_TEMP,
     DEFAULT_CWU_CRITICAL_TEMP,
+    DEFAULT_CWU_HYSTERESIS,
     DEFAULT_SALON_TARGET_TEMP,
     DEFAULT_SALON_MIN_TEMP,
     DEFAULT_BEDROOM_MIN_TEMP,
@@ -38,6 +40,7 @@ async def async_setup_entry(
         CWUTargetTempNumber(coordinator, entry),
         CWUMinTempNumber(coordinator, entry),
         CWUCriticalTempNumber(coordinator, entry),
+        CWUHysteresisNumber(coordinator, entry),
         SalonTargetTempNumber(coordinator, entry),
         SalonMinTempNumber(coordinator, entry),
         BedroomMinTempNumber(coordinator, entry),
@@ -79,7 +82,7 @@ class CWUControllerNumberEntity(CoordinatorEntity, NumberEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.5",
+            "sw_version": "4.3.0",
         }
 
     @property
@@ -144,6 +147,28 @@ class CWUCriticalTempNumber(CWUControllerNumberEntity):
             icon="mdi:thermometer-alert",
             min_value=30.0,
             max_value=40.0,
+        )
+
+
+class CWUHysteresisNumber(CWUControllerNumberEntity):
+    """CWU hysteresis margin number entity.
+
+    Controls how many degrees below target before resuming CWU heating.
+    Heat pumps typically need 5°C difference to start heating.
+    """
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize CWU hysteresis number."""
+        super().__init__(
+            coordinator=coordinator,
+            entry=entry,
+            config_key=CONF_CWU_HYSTERESIS,
+            default_value=DEFAULT_CWU_HYSTERESIS,
+            unique_id_suffix="cwu_hysteresis",
+            name="CWU Hysteresis",
+            icon="mdi:arrow-up-down",
+            min_value=3.0,
+            max_value=15.0,
         )
 
 

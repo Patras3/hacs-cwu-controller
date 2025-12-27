@@ -190,9 +190,9 @@ class TestWinterCWUTargets:
 
     def test_winter_cwu_target_default(self, mock_coordinator):
         """Test winter CWU target with default config."""
-        # Default target is 45, winter adds 5, max 55
+        # Default target is 55, winter adds 5, capped at max 55
         target = mock_coordinator.get_winter_cwu_target()
-        assert target == 50.0
+        assert target == 55.0  # 55 + 5 = 60, capped at 55
 
     def test_winter_cwu_target_capped_at_max(self, mock_coordinator):
         """Test winter CWU target is capped at 55C."""
@@ -202,9 +202,9 @@ class TestWinterCWUTargets:
 
     def test_winter_cwu_emergency_threshold(self, mock_coordinator):
         """Test winter CWU emergency threshold calculation."""
-        # Target 50, emergency offset 10, so threshold = 40
+        # Winter target 55 (capped), emergency offset 10, so threshold = 45
         threshold = mock_coordinator.get_winter_cwu_emergency_threshold()
-        assert threshold == 40.0
+        assert threshold == 45.0
 
     def test_winter_cwu_emergency_with_high_target(self, mock_coordinator):
         """Test winter CWU emergency threshold with high target."""

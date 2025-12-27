@@ -1114,8 +1114,8 @@ class TestIsCWUTempAcceptable:
         """Test temp acceptable above critical when no max recorded."""
         mock_coordinator._max_temp_achieved = None
         # Should check against target - 3°C margin
-        # Target is 45, so >= 42 is acceptable
-        assert mock_coordinator._is_cwu_temp_acceptable(43.0) is True
+        # Target is 55, so >= 52 is acceptable
+        assert mock_coordinator._is_cwu_temp_acceptable(53.0) is True
 
     def test_temp_acceptable_within_max_drop(self, mock_coordinator):
         """Test temp acceptable when within acceptable drop from max."""
