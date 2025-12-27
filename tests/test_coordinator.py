@@ -499,24 +499,23 @@ class TestStateManagement:
         assert mock_coordinator.is_enabled is False
 
     def test_change_state(self, mock_coordinator):
-        """Test _change_state updates state and history."""
+        """Test _change_state updates state correctly."""
         mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._change_state(STATE_HEATING_CWU)
 
         assert mock_coordinator._current_state == STATE_HEATING_CWU
         assert mock_coordinator._previous_state == STATE_IDLE
-        assert len(mock_coordinator._state_history) == 1
-        assert mock_coordinator._state_history[0]["from_state"] == STATE_IDLE
-        assert mock_coordinator._state_history[0]["to_state"] == STATE_HEATING_CWU
 
     def test_change_state_same_state_no_op(self, mock_coordinator):
         """Test _change_state does nothing when state unchanged."""
         mock_coordinator._current_state = STATE_IDLE
-        mock_coordinator._state_history = []
+        mock_coordinator._previous_state = None
 
         mock_coordinator._change_state(STATE_IDLE)
 
-        assert len(mock_coordinator._state_history) == 0
+        # State should remain unchanged
+        assert mock_coordinator._current_state == STATE_IDLE
+        assert mock_coordinator._previous_state is None
 
 
 class TestFakeHeatingDetection:

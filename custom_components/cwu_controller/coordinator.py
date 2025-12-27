@@ -174,8 +174,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # CWU Session tracking (for UI)
         self._cwu_session_start_temp: float | None = None
 
-        # History for UI
-        self._state_history: list[dict] = []
+        # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
 
         # Power tracking for trend analysis
@@ -276,11 +275,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def is_enabled(self) -> bool:
         """Return if controller is enabled."""
         return self._enabled
-
-    @property
-    def state_history(self) -> list[dict]:
-        """Return state history (today + yesterday)."""
-        return self._state_history
 
     @property
     def action_history(self) -> list[dict]:
@@ -570,7 +564,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         old_mode = self._operating_mode
         self._operating_mode = mode
-        self._log_action(f"Operating mode changed: {old_mode} -> {mode}")
+        self._log_action(f"Operating mode changed: {old_mode} -> {mode}", "User selected new operating mode")
 
         # Reset state when changing modes
         self._change_state(STATE_IDLE)
@@ -627,17 +621,26 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._current_state = STATE_HEATING_CWU
             self._cwu_heating_start = datetime.now()  # Approximate - we don't know exact start
             self._cwu_session_start_temp = cwu_temp  # Current temp as start (approximate)
-            self._log_action(f"Detected CWU heating in progress after restart (temp: {cwu_temp}°C)")
+            self._log_action(
+                f"Detected CWU heating in progress after restart (temp: {cwu_temp}°C)",
+                f"BSB CWU mode ON, power {power:.0f}W > {POWER_IDLE_THRESHOLD}W"
+            )
             _LOGGER.info("CWU Controller: Detected active CWU heating, resuming tracking")
 
         elif floor_active:
             self._current_state = STATE_HEATING_FLOOR
-            self._log_action("Detected floor heating in progress after restart")
+            self._log_action(
+                "Detected floor heating in progress after restart",
+                f"BSB floor mode: {climate_state}"
+            )
             _LOGGER.info("CWU Controller: Detected active floor heating")
 
         else:
             self._current_state = STATE_IDLE
-            self._log_action("Started in idle state after restart")
+            self._log_action(
+                "Started in idle state after restart",
+                f"No active heating detected (CWU mode: {wh_state}, Floor mode: {climate_state})"
+            )
             _LOGGER.info("CWU Controller: Starting in idle state")
 
     def _get_min_temp(self) -> float:
@@ -814,7 +817,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 {"entity_id": SAFE_MODE_WATER_HEATER, "operation_mode": "heat_pump"},
                 blocking=True,
             )
-            self._log_action("Safe mode: CWU ON (cloud)")
+            _LOGGER.debug("Safe mode: CWU ON (cloud)")
             return True
         except Exception as e:
             _LOGGER.error("Safe mode CWU ON failed: %s", e)
@@ -832,7 +835,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 {"entity_id": SAFE_MODE_CLIMATE},
                 blocking=True,
             )
-            self._log_action("Safe mode: Floor ON (cloud)")
+            _LOGGER.debug("Safe mode: Floor ON (cloud)")
             return True
         except Exception as e:
             _LOGGER.error("Safe mode Floor ON failed: %s", e)
@@ -843,7 +846,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     # -------------------------------------------------------------------------
 
     async def _async_set_cwu_on(self) -> bool:
-        """Turn CWU heating on via BSB-LAN with verification."""
+        """Turn CWU heating on via BSB-LAN with verification.
+
+        Note: This is a low-level function. Caller should log the decision.
+        """
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - CWU ON skipped")
             return False
@@ -853,17 +859,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
-            self._log_action("CWU ON")
+            _LOGGER.debug("BSB-LAN: CWU ON success")
         else:
             _LOGGER.error("BSB-LAN CWU ON failed: %s", msg)
-            await self._async_send_notification(
-                "BSB-LAN Write Error",
-                f"Failed to set CWU ON: {msg}"
-            )
+            self._log_action("BSB-LAN error", f"CWU ON failed: {msg}")
         return success
 
     async def _async_set_cwu_off(self) -> bool:
-        """Turn CWU heating off via BSB-LAN with verification."""
+        """Turn CWU heating off via BSB-LAN with verification.
+
+        Note: This is a low-level function. Caller should log the decision.
+        """
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - CWU OFF skipped")
             return False
@@ -873,17 +879,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
-            self._log_action("CWU OFF")
+            _LOGGER.debug("BSB-LAN: CWU OFF success")
         else:
             _LOGGER.error("BSB-LAN CWU OFF failed: %s", msg)
-            await self._async_send_notification(
-                "BSB-LAN Write Error",
-                f"Failed to set CWU OFF: {msg}"
-            )
+            self._log_action("BSB-LAN error", f"CWU OFF failed: {msg}")
         return success
 
     async def _async_set_floor_on(self) -> bool:
-        """Turn floor heating on via BSB-LAN with verification."""
+        """Turn floor heating on via BSB-LAN with verification.
+
+        Note: This is a low-level function. Caller should log the decision.
+        """
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - Floor ON skipped")
             return False
@@ -893,17 +899,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
-            self._log_action("Floor ON")
+            _LOGGER.debug("BSB-LAN: Floor ON success")
         else:
             _LOGGER.error("BSB-LAN Floor ON failed: %s", msg)
-            await self._async_send_notification(
-                "BSB-LAN Write Error",
-                f"Failed to set Floor ON: {msg}"
-            )
+            self._log_action("BSB-LAN error", f"Floor ON failed: {msg}")
         return success
 
     async def _async_set_floor_off(self) -> bool:
-        """Turn floor heating off via BSB-LAN with verification."""
+        """Turn floor heating off via BSB-LAN with verification.
+
+        Note: This is a low-level function. Caller should log the decision.
+        """
         if not self._bsb_client.is_available:
             _LOGGER.warning("BSB-LAN unavailable - Floor OFF skipped")
             return False
@@ -913,13 +919,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
         if success:
             self._control_source = CONTROL_SOURCE_BSB_LAN
-            self._log_action("Floor OFF")
+            _LOGGER.debug("BSB-LAN: Floor OFF success")
         else:
             _LOGGER.error("BSB-LAN Floor OFF failed: %s", msg)
-            await self._async_send_notification(
-                "BSB-LAN Write Error",
-                f"Failed to set Floor OFF: {msg}"
-            )
+            self._log_action("BSB-LAN error", f"Floor OFF failed: {msg}")
         return success
 
     # -------------------------------------------------------------------------
@@ -988,7 +991,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Immediate detection: electric heater is charging (broken heater mode)
         if BSB_DHW_STATUS_CHARGING_ELECTRIC.lower() in dhw_status.lower():
-            self._log_action("BSB-LAN: Detected electric heater charging (broken heater)")
+            _LOGGER.debug("BSB-LAN: Detected electric heater charging (broken heater), DHW status: %s", dhw_status)
             return True
 
         # DHW charging but compressor not running
@@ -1001,7 +1004,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # If compressor is in mandatory off time, this is normal - reset tracking
             if compressor_off_time:
                 if self._bsb_dhw_charging_no_compressor_since is not None:
-                    self._log_action("BSB-LAN: Compressor in mandatory off time - not fake heating")
+                    _LOGGER.debug("BSB-LAN: Compressor in mandatory off time - not fake heating, HP status: %s", hp_status)
                 self._bsb_dhw_charging_no_compressor_since = None
                 return False
 
@@ -1012,7 +1015,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Check if threshold reached
             elapsed = (datetime.now() - self._bsb_dhw_charging_no_compressor_since).total_seconds() / 60
             if elapsed >= BSB_FAKE_HEATING_DETECTION_TIME:
-                self._log_action(f"BSB-LAN: DHW charging but no compressor for {elapsed:.1f} min")
+                _LOGGER.debug("BSB-LAN: DHW charging but no compressor for %.1f min (threshold: %d min)", elapsed, BSB_FAKE_HEATING_DETECTION_TIME)
                 return True
         else:
             # Reset tracking
@@ -1091,18 +1094,30 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if cwu_mismatch:
                 if expected_cwu_on:
                     await self._async_set_cwu_on()
-                    self._log_action("State verify: Fixed CWU → ON")
+                    self._log_action(
+                        "State verify: Fixed CWU → ON",
+                        f"Expected ON for state {self._current_state}, was {actual_cwu_mode}"
+                    )
                 else:
                     await self._async_set_cwu_off()
-                    self._log_action("State verify: Fixed CWU → OFF")
+                    self._log_action(
+                        "State verify: Fixed CWU → OFF",
+                        f"Expected OFF for state {self._current_state}, was {actual_cwu_mode}"
+                    )
 
             if floor_mismatch:
                 if expected_floor_on:
                     await self._async_set_floor_on()
-                    self._log_action("State verify: Fixed Floor → ON")
+                    self._log_action(
+                        "State verify: Fixed Floor → ON",
+                        f"Expected ON for state {self._current_state}, was {actual_floor_mode}"
+                    )
                 else:
                     await self._async_set_floor_off()
-                    self._log_action("State verify: Fixed Floor → OFF")
+                    self._log_action(
+                        "State verify: Fixed Floor → OFF",
+                        f"Expected OFF for state {self._current_state}, was {actual_floor_mode}"
+                    )
 
     def _get_expected_pump_state(self) -> tuple[bool, bool]:
         """Get expected CWU and Floor state based on current controller state.
@@ -1164,7 +1179,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             except (KeyError, ValueError):
                 return False
 
-        self._state_history = [e for e in self._state_history if is_recent(e)]
         self._action_history = [e for e in self._action_history if is_recent(e)]
 
     def _log_action(self, action: str, reasoning: str = "") -> None:
@@ -1193,13 +1207,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._previous_state = self._current_state
             self._current_state = new_state
             self._last_state_change = datetime.now()
-
-            entry = {
-                "timestamp": datetime.now().isoformat(),
-                "from_state": self._previous_state,
-                "to_state": new_state,
-            }
-            self._state_history.append(entry)
             self._cleanup_old_history()
             _LOGGER.info("CWU Controller state: %s -> %s", self._previous_state, new_state)
 
@@ -1498,19 +1505,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Enable the controller."""
         self._enabled = True
         self._manual_override = False
-        self._log_action("Controller enabled")
+        self._log_action("Controller enabled", "User toggled enable switch")
 
     async def async_disable(self) -> None:
         """Disable the controller and enter safe mode (heat pump takes control)."""
         self._enabled = False
-        self._log_action("Controller disabled - entering safe mode")
 
         # Enter safe mode - turn on both floor and CWU, let heat pump decide
         await self._async_set_floor_on()
-        self._log_action("Floor heating enabled, waiting 60s...")
+        _LOGGER.debug("Disable: Floor heating enabled, waiting 60s...")
         await asyncio.sleep(60)
         await self._async_set_cwu_on()
-        self._log_action("Safe mode active - heat pump in control")
+        self._log_action("Controller disabled - safe mode active", "User toggled enable switch, heat pump takes control")
 
     async def async_force_cwu(self, duration_minutes: int = 60) -> None:
         """Force CWU heating for specified duration."""
@@ -1518,16 +1524,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_override_until = datetime.now() + timedelta(minutes=duration_minutes)
 
         # First turn off everything with delays between commands
-        self._log_action("Force CWU: Stopping CWU...")
+        _LOGGER.debug("Force CWU: Stopping CWU")
         await self._async_set_cwu_off()
-        self._log_action("Waiting 30s...")
         await asyncio.sleep(30)
 
-        self._log_action("Force CWU: Stopping floor heating...")
+        _LOGGER.debug("Force CWU: Stopping floor heating")
         await self._async_set_floor_off()
 
         # Wait for pump to settle
-        self._log_action("Waiting 60s for pump to settle...")
+        _LOGGER.debug("Force CWU: Waiting 60s for pump to settle")
         await asyncio.sleep(60)
 
         # Now enable CWU
@@ -1538,7 +1543,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Set session start temp for UI tracking (BSB-LAN preferred)
         cwu_temp = self._get_cwu_temperature()
         self._cwu_session_start_temp = cwu_temp if cwu_temp is not None else self._last_known_cwu_temp
-        self._log_action(f"Force CWU for {duration_minutes} minutes")
+        self._log_action("Force CWU", f"Manual override for {duration_minutes} min")
 
     async def async_force_floor(self, duration_minutes: int = 60) -> None:
         """Force floor heating for specified duration."""
@@ -1546,23 +1551,22 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_override_until = datetime.now() + timedelta(minutes=duration_minutes)
 
         # First turn off everything with delays between commands
-        self._log_action("Force Floor: Stopping CWU...")
+        _LOGGER.debug("Force Floor: Stopping CWU")
         await self._async_set_cwu_off()
-        self._log_action("Waiting 30s...")
         await asyncio.sleep(30)
 
-        self._log_action("Force Floor: Stopping floor heating...")
+        _LOGGER.debug("Force Floor: Stopping floor heating")
         await self._async_set_floor_off()
 
         # Wait for pump to settle
-        self._log_action("Waiting 60s for pump to settle...")
+        _LOGGER.debug("Force Floor: Waiting 60s for pump to settle")
         await asyncio.sleep(60)
 
         # Now enable floor heating
         await self._async_set_floor_on()
 
         self._change_state(STATE_HEATING_FLOOR)
-        self._log_action(f"Force floor heating for {duration_minutes} minutes")
+        self._log_action("Force Floor", f"Manual override for {duration_minutes} min")
 
     async def async_force_auto(self) -> None:
         """Cancel manual override and let controller decide from scratch."""
@@ -1793,7 +1797,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "manual_override": self._manual_override,
             "manual_override_until": self._manual_override_until.isoformat() if self._manual_override_until else None,
             "cwu_heating_minutes": 0,
-            "state_history": self._state_history[-20:],
             "action_history": self._action_history[-20:],
             "cwu_target_temp": self._get_target_temp(),
             "cwu_min_temp": self._get_min_temp(),
@@ -1902,7 +1905,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if now > self._manual_override_until:
                 self._manual_override = False
                 self._manual_override_until = None
-                self._log_action("Manual override expired")
+                self._log_action("Manual override expired", "Timer reached, returning to auto mode")
 
         # Handle fake heating even in manual CWU mode
         # (don't switch to floor, just restart CWU after wait period)
@@ -1918,7 +1921,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     f"Fake heating detected! Pump trying electric heater (broken). "
                     f"CWU temp: {cwu_temp}°C. Waiting {HP_RESTART_MIN_WAIT}+ min for HP ready..."
                 )
-                self._log_action(f"Manual mode: Fake heating detected - all OFF, waiting {HP_RESTART_MIN_WAIT}+ min")
+                self._log_action(
+                    "Manual mode: Fake heating detected",
+                    f"CWU {cwu_temp:.1f}°C, all OFF, waiting {HP_RESTART_MIN_WAIT}+ min for HP ready"
+                    if cwu_temp else f"All OFF, waiting {HP_RESTART_MIN_WAIT}+ min for HP ready"
+                )
 
         # Handle fake heating restart in manual mode (with HP ready check)
         if self._manual_override and self._current_state == STATE_FAKE_HEATING_DETECTED:
@@ -1934,7 +1941,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 if not hp_ready:
                     # Log every 2 minutes while waiting
                     if int(elapsed) % 2 == 0 and int(elapsed) != int(elapsed - 1):
-                        self._log_action(f"Manual mode: Waiting for HP ready - {hp_reason}")
+                        _LOGGER.debug("Manual mode: Waiting for HP ready - %s (%.1f min elapsed)", hp_reason, elapsed)
                     return data  # Keep waiting
 
                 # HP ready - restart CWU
@@ -1944,7 +1951,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._cwu_heating_start = now  # Reset heating start for next detection
                 self._last_mode_switch = now  # For anti-oscillation
                 self._reset_max_temp_tracking()  # Reset max temp for new session
-                self._log_action(f"Manual mode: HP ready - CWU restarted after {elapsed:.1f} min wait")
+                cwu_temp_now = self._get_cwu_temperature()
+                self._log_action(
+                    "Manual mode: CWU restarted after fake heating",
+                    f"HP ready after {elapsed:.1f} min wait, CWU at {cwu_temp_now:.1f}°C" if cwu_temp_now else f"HP ready after {elapsed:.1f} min wait"
+                )
 
         # Check heat-to completion (manual heating to specific temp)
         if self._manual_heat_to_active and cwu_temp is not None:
@@ -2009,7 +2020,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if self._current_state == STATE_SAFE_MODE:
             # Check if BSB-LAN recovered
             if self._bsb_client.is_available and cwu_temp is not None:
-                self._log_action("BSB-LAN recovered - exiting safe mode")
+                self._log_action(
+                    "BSB-LAN recovered - exiting safe mode",
+                    f"CWU: {cwu_temp:.1f}°C, Salon: {salon_temp:.1f}°C, resuming BSB-LAN control"
+                    if salon_temp else f"CWU: {cwu_temp:.1f}°C, resuming BSB-LAN control"
+                )
                 await self._async_send_notification(
                     "CWU Controller Recovered",
                     f"BSB-LAN connection restored.\n"
@@ -2040,7 +2055,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
             # Data is too stale - enter safe mode
             self._log_action(
-                f"BSB-LAN data stale for {data_stale_minutes:.0f} minutes - entering safe mode"
+                "Entering safe mode",
+                f"BSB-LAN data stale for {data_stale_minutes:.0f} min (threshold: {BSB_LAN_UNAVAILABLE_TIMEOUT} min)"
             )
             await self._async_send_notification(
                 "CWU Controller - Safe Mode",
@@ -2058,7 +2074,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Data is fresh enough - continue with cached data
         # Clear any previous unavailable state if we have fresh data
         if self._bsb_lan_unavailable_since is not None and data_stale_minutes < 2:
-            self._log_action("BSB-LAN connection restored")
+            self._log_action(
+                "BSB-LAN connection restored",
+                f"Data fresh ({data_stale_minutes:.1f} min old), resuming normal control"
+            )
             self._bsb_lan_unavailable_since = None
             self._control_source = CONTROL_SOURCE_BSB_LAN
 
@@ -2068,8 +2087,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             return
         elif self._operating_mode == MODE_SUMMER:
             # Summer mode not implemented yet
-            self._log_action("Summer mode not implemented - using floor heating")
             if self._current_state != STATE_HEATING_FLOOR:
+                self._log_action(
+                    "Summer mode: using floor heating",
+                    "Summer mode not fully implemented, defaulting to floor heating"
+                )
                 await self._switch_to_floor()
                 self._change_state(STATE_HEATING_FLOOR)
             return
@@ -2444,12 +2466,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if not hp_ready:
                 # Log only every 2 minutes to avoid spam
                 if int(elapsed) % 2 == 0:
-                    self._log_action(f"Fake heating recovery waiting: {hp_reason}")
+                    _LOGGER.debug("Fake heating recovery waiting: %s (%.1f min elapsed)", hp_reason, elapsed)
                 return
 
             # HP ready - restart CWU
             self._change_state(STATE_FAKE_HEATING_RESTARTING)
-            self._log_action("HP ready - restarting CWU after fake heating")
             await self._async_set_floor_off()
             await self._async_set_cwu_on()
             self._low_power_start = None
@@ -2461,7 +2482,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Set session start temp
             cwu_start_temp = self._get_cwu_temperature()
             self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
-            self._log_action(f"CWU restarted after fake heating (temp: {self._cwu_session_start_temp}°C)")
+            self._log_action(
+                "CWU restarted after fake heating",
+                f"HP ready after {elapsed:.1f} min wait, starting at {self._cwu_session_start_temp:.1f}°C"
+                if self._cwu_session_start_temp else f"HP ready after {elapsed:.1f} min wait"
+            )
             return
 
         # =====================================================================
@@ -2480,7 +2505,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 if cwu_start_temp is None:
                     cwu_start_temp = self._last_known_cwu_temp
                 self._cwu_session_start_temp = cwu_start_temp
-                self._log_action(f"Pause complete, starting new CWU session (temp: {cwu_start_temp}°C)")
+                self._log_action(
+                    "Pause complete - new CWU session",
+                    f"Starting at {cwu_start_temp:.1f}°C after {CWU_PAUSE_TIME} min pause"
+                    if cwu_start_temp else f"Starting after {CWU_PAUSE_TIME} min pause"
+                )
             return
 
         # =====================================================================
@@ -2492,7 +2521,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             self._cwu_heating_start = None
             await self._async_set_cwu_off()
             await self._async_set_floor_off()
-            self._log_action(f"CWU cycle limit reached, pausing for {CWU_PAUSE_TIME} minutes")
+            self._log_action(
+                "CWU cycle limit reached - pause",
+                f"CWU at {cwu_temp:.1f}°C after {CWU_MAX_HEATING_TIME} min, pausing for {CWU_PAUSE_TIME} min"
+                if cwu_temp else f"Pausing for {CWU_PAUSE_TIME} min after {CWU_MAX_HEATING_TIME} min heating"
+            )
             await self._async_send_notification(
                 "CWU Controller",
                 f"CWU heating paused for {CWU_PAUSE_TIME} min (3h limit). "
@@ -2507,7 +2540,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if drop_detected and self._current_state == STATE_HEATING_FLOOR:
             can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_EMERGENCY_CWU)
             if can_switch:
-                self._log_action(f"Rapid CWU drop {drop_amount:.1f}°C - emergency switch to CWU")
+                self._log_action(
+                    "Rapid CWU drop - emergency CWU",
+                    f"{drop_amount:.1f}°C drop in {CWU_RAPID_DROP_WINDOW} min (threshold: {CWU_RAPID_DROP_THRESHOLD}°C)"
+                )
                 await self._switch_to_cwu()
                 self._change_state(STATE_EMERGENCY_CWU)
                 self._cwu_heating_start = now
@@ -2519,7 +2555,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     f"Starting emergency CWU heating."
                 )
             else:
-                self._log_action(f"Rapid drop detected but switch blocked: {reason}")
+                _LOGGER.debug("Rapid drop detected but switch blocked: %s", reason)
             return
 
         # =====================================================================
@@ -2529,7 +2565,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if self._detect_max_temp_achieved():
                 can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
                 if can_switch:
-                    self._log_action(f"Max temp {self._max_temp_achieved}°C reached - switching to floor")
+                    self._log_action(
+                        "Max temp reached - switch to floor",
+                        f"CWU at {self._max_temp_achieved:.1f}°C, pump cannot heat higher"
+                    )
                     await self._switch_to_floor()
                     self._change_state(STATE_HEATING_FLOOR)
                     self._cwu_heating_start = None
@@ -2540,7 +2579,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                         f"Switching to floor heating."
                     )
                 else:
-                    self._log_action(f"Max temp reached but switch blocked: {reason}")
+                    _LOGGER.debug("Max temp reached but switch blocked: %s", reason)
                 return
 
         # =====================================================================
@@ -2551,13 +2590,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 if self._current_state != STATE_HEATING_FLOOR:
                     can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
                     if can_switch:
-                        self._log_action(f"Night window: CWU OK ({cwu_temp}°C), switching to floor")
+                        min_temp = self._get_min_temp()
+                        self._log_action(
+                            "Night window - switch to floor",
+                            f"CWU OK at {cwu_temp:.1f}°C >= {min_temp:.0f}°C, {BROKEN_HEATER_FLOOR_WINDOW_START}:00-{BROKEN_HEATER_FLOOR_WINDOW_END}:00 window"
+                        )
                         await self._switch_to_floor()
                         self._change_state(STATE_HEATING_FLOOR)
                         self._cwu_heating_start = None
                         self._last_mode_switch = now
                     else:
-                        _LOGGER.debug(f"Night window floor switch blocked: {reason}")
+                        _LOGGER.debug("Night window floor switch blocked: %s", reason)
                 return
             # CWU not acceptable in night window - continue to normal logic
 
@@ -2568,6 +2611,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if self._current_state != STATE_EMERGENCY_CWU:
                 can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_CWU)
                 if can_switch:
+                    critical_temp = self._get_critical_temp()
+                    self._log_action(
+                        "CWU Emergency - switch to CWU",
+                        f"CWU critically low: {cwu_temp:.1f}°C < {critical_temp:.0f}°C"
+                    )
                     await self._switch_to_cwu()
                     self._change_state(STATE_EMERGENCY_CWU)
                     self._cwu_heating_start = now
@@ -2578,13 +2626,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                         f"CWU critically low: {cwu_temp}°C! Switching to emergency CWU heating."
                     )
                 else:
-                    self._log_action(f"CWU emergency delayed: {reason}")
+                    _LOGGER.debug("CWU emergency delayed: %s", reason)
             return
 
         if floor_urgency == URGENCY_CRITICAL and cwu_urgency != URGENCY_CRITICAL:
             if self._current_state != STATE_EMERGENCY_FLOOR:
                 can_switch, reason = self._can_switch_mode(self._current_state, STATE_EMERGENCY_FLOOR)
                 if can_switch:
+                    self._log_action(
+                        "Floor Emergency - switch to floor",
+                        f"Room critically cold: Salon {salon_temp:.1f}°C"
+                    )
                     await self._switch_to_floor()
                     self._change_state(STATE_EMERGENCY_FLOOR)
                     self._cwu_heating_start = None
@@ -2594,7 +2646,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                         f"Room too cold: Salon {salon_temp}°C! Switching to floor heating."
                     )
                 else:
-                    self._log_action(f"Floor emergency delayed: {reason}")
+                    _LOGGER.debug("Floor emergency delayed: %s", reason)
             return
 
         # Both critical - alternate every 45 minutes (longer than before)
@@ -2637,7 +2689,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if should_resume:
                 can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR, STATE_HEATING_CWU)
                 if can_switch:
-                    self._log_action(f"Resuming CWU: {resume_reason}")
+                    self._log_action("Resuming CWU", resume_reason)
                     await self._switch_to_cwu()
                     self._change_state(STATE_HEATING_CWU)
                     self._cwu_heating_start = now
@@ -2647,7 +2699,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                     cwu_start_temp = self._get_cwu_temperature()
                     self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
                 else:
-                    _LOGGER.debug(f"CWU resume blocked: {reason}")
+                    _LOGGER.debug("CWU resume blocked: %s", reason)
             return
 
         # Currently heating CWU - check if should switch to floor
@@ -2850,7 +2902,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Check if we should continue (during heating window check above already handles this)
             if cwu_temp is not None and cwu_temp >= winter_target:
                 self._log_action(
-                    f"Winter mode: CWU at target ({cwu_temp}°C), switching to floor"
+                    "Winter mode: CWU target reached - switch to floor",
+                    f"CWU at {cwu_temp:.1f}°C >= target {winter_target:.0f}°C"
                 )
                 await self._switch_to_floor()
                 self._change_state(STATE_HEATING_FLOOR)
@@ -2859,23 +2912,26 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Default: heat floor (if not already heating something)
         if self._current_state not in (STATE_HEATING_FLOOR, STATE_HEATING_CWU, STATE_EMERGENCY_CWU, STATE_SAFE_MODE):
-            self._log_action("Winter mode: Default to floor heating")
+            self._log_action(
+                "Winter mode: Default to floor heating",
+                f"State {self._current_state}, CWU at {cwu_temp:.1f}°C" if cwu_temp else f"State {self._current_state}"
+            )
             await self._switch_to_floor()
             self._change_state(STATE_HEATING_FLOOR)
 
     async def _switch_to_cwu(self) -> None:
-        """Switch to CWU heating mode with proper delays."""
+        """Switch to CWU heating mode with proper delays.
+
+        Note: Caller should log the decision with reasoning before calling.
+        """
         if self._transition_in_progress:
-            self._log_action("Switch to CWU skipped - transition in progress")
+            _LOGGER.debug("Switch to CWU skipped - transition in progress")
             return
 
         self._transition_in_progress = True
         try:
-            self._log_action("Switching to CWU heating...")
-
             # First turn off floor heating (BSB-LAN)
             await self._async_set_floor_off()
-            self._log_action("Floor heating off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
             # Then enable CWU (BSB-LAN)
@@ -2890,18 +2946,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._cwu_session_start_temp = cwu_temp
 
     async def _switch_to_floor(self) -> None:
-        """Switch to floor heating mode with proper delays."""
+        """Switch to floor heating mode with proper delays.
+
+        Note: Caller should log the decision with reasoning before calling.
+        """
         if self._transition_in_progress:
-            self._log_action("Switch to floor skipped - transition in progress")
+            _LOGGER.debug("Switch to floor skipped - transition in progress")
             return
 
         self._transition_in_progress = True
         try:
-            self._log_action("Switching to floor heating...")
-
             # First turn off CWU (BSB-LAN)
             await self._async_set_cwu_off()
-            self._log_action("CWU off, waiting 60s...")
             await asyncio.sleep(60)  # Wait 1 minute for pump to settle
 
             # Then enable floor heating (BSB-LAN)
@@ -2920,17 +2976,16 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         Always sends commands even if devices appear on (cloud state unreliable).
         """
         if self._transition_in_progress:
-            self._log_action("Enter safe mode skipped - transition in progress")
+            _LOGGER.debug("Enter safe mode skipped - transition in progress")
             return
 
         self._transition_in_progress = True
         try:
             self._control_source = CONTROL_SOURCE_HA_CLOUD
-            self._log_action("Entering safe mode - BSB-LAN unavailable, using cloud fallback")
 
             # Turn on CWU via cloud (always send command)
             await self._async_safe_mode_cwu_on()
-            self._log_action(f"Safe mode: CWU enabled, waiting {SAFE_MODE_DELAY}s before floor...")
+            _LOGGER.debug("Safe mode: CWU enabled via cloud, waiting %ds before floor...", SAFE_MODE_DELAY)
 
             # Wait 2 minutes before enabling floor
             await asyncio.sleep(SAFE_MODE_DELAY)
@@ -2938,6 +2993,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Turn on floor via cloud (always send command)
             await self._async_safe_mode_floor_on()
 
-            self._log_action("Safe mode active - heat pump in control via cloud")
+            self._log_action(
+                "Safe mode active",
+                "BSB-LAN unavailable, CWU+Floor ON via cloud, heat pump in control"
+            )
         finally:
             self._transition_in_progress = False
