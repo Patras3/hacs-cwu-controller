@@ -2345,10 +2345,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Detect rapid CWU temperature drop (hot water usage / bath).
 
         Uses BSB 8830 (bottom of tank) for fast detection.
+        Skips detection if already heating CWU (pointless to detect when already acting).
 
         Returns:
             Tuple of (drop_detected: bool, drop_amount: float)
         """
+        # Skip if already heating CWU - we're already doing what rapid drop would trigger
+        if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
+            return (False, 0.0)
+
         if not self._bsb_lan_data:
             return (False, 0.0)
 
@@ -2944,6 +2949,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if cwu_temp is None:
             cwu_temp = self._last_known_cwu_temp
         self._cwu_session_start_temp = cwu_temp
+
+        # Clear rapid drop history - will start fresh when we stop heating
+        self._cwu_temp_history_bsb.clear()
 
     async def _switch_to_floor(self) -> None:
         """Switch to floor heating mode with proper delays.
