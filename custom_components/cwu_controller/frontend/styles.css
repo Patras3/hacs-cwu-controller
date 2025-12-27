@@ -3006,16 +3006,14 @@ body {
     margin-top: 8px;
 }
 
-/* Temp Widget with State */
+/* Temp Widget with State Badge */
 .temp-widget {
     position: relative;
 }
 
+/* State badge header - positioned like icon in power widget */
 .quick-widget-header {
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
+    margin-bottom: 8px;
 }
 
 .quick-state-badge {
@@ -3072,7 +3070,7 @@ body {
     color: var(--accent-yellow);
 }
 
-/* Widget state colors */
+/* Widget state colors - applied to temp-widget */
 .temp-widget.state-cwu {
     border-color: rgba(0, 217, 255, 0.3);
     background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), var(--bg-card));
