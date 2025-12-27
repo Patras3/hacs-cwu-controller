@@ -196,7 +196,9 @@ MAX_TEMP_CRITICAL_THRESHOLD: Final = 38.0    # Poniżej 38°C spadek nieakceptow
 MAX_TEMP_FIGHTING_WINDOW: Final = 60         # Rolling window: last 60 min
 MAX_TEMP_FIGHTING_PROGRESS: Final = 2.0      # Less than 2°C rise in window = fighting
 MAX_TEMP_FIGHTING_THRESHOLD: Final = 5.0     # Within 5°C of target = close enough, stop fighting
-MAX_TEMP_FIGHTING_ELECTRIC_COUNT: Final = 2  # 2+ electric fallbacks in window = fighting
+MAX_TEMP_FIGHTING_ELECTRIC_COUNT: Final = 4  # 4+ electric fallbacks in window = fighting
+# Note: Each electric fallback cycle takes 5-15 min (fake heating detection + HP wait)
+# So 4 events in 60 min = pump struggling for ~45+ min = clear sign of fighting
 
 # Rapid Drop Detection (pobór CWU - kąpiel)
 CWU_RAPID_DROP_THRESHOLD: Final = 5.0   # 5°C spadek = ktoś się kąpie

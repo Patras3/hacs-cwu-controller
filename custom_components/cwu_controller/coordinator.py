@@ -2260,12 +2260,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                         self._max_temp_achieved = cwu_temp
                         reason_parts = []
                         if slow_progress:
-                            reason_parts.append(f"only +{window_progress:.1f}°C in {window_elapsed:.0f}min")
+                            reason_parts.append(f"progress +{window_progress:.1f}°C/{window_elapsed:.0f}min")
                         if electric_fighting:
-                            reason_parts.append(f"electric x{electric_in_window} in 60min")
+                            reason_parts.append(f"electric fallback x{electric_in_window}/60min")
                         self._log_action(
-                            "Max temp (anti-fighting)",
-                            f"{cwu_temp:.1f}°C close to target {target_temp:.1f}°C, {', '.join(reason_parts)}"
+                            "Anti-fighting: stop",
+                            f"CWU {cwu_temp:.1f}°C (target {target_temp:.1f}°C, -{distance_to_target:.1f}°C), {', '.join(reason_parts)}"
                         )
                         return True
 
