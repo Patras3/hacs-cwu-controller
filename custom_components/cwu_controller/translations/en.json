@@ -144,6 +144,26 @@
       "force_floor_6h": {
         "name": "Force Floor 6 Hours"
       }
+    },
+    "number": {
+      "cwu_target_temp": {
+        "name": "CWU Target Temperature"
+      },
+      "cwu_min_temp": {
+        "name": "CWU Minimum Temperature"
+      },
+      "cwu_critical_temp": {
+        "name": "CWU Critical Temperature"
+      },
+      "salon_target_temp": {
+        "name": "Living Room Target Temperature"
+      },
+      "salon_min_temp": {
+        "name": "Living Room Minimum Temperature"
+      },
+      "bedroom_min_temp": {
+        "name": "Bedroom Minimum Temperature"
+      }
     }
   },
   "services": {
@@ -174,6 +194,16 @@
     "disable": {
       "name": "Disable Controller",
       "description": "Disable the automatic CWU controller"
+    },
+    "heat_to_temp": {
+      "name": "Heat CWU to Temperature",
+      "description": "Heat CWU to a specific temperature, then return to automatic mode.",
+      "fields": {
+        "target_temp": {
+          "name": "Target Temperature",
+          "description": "Target temperature in °C (36-55)"
+        }
+      }
     }
   }
 }

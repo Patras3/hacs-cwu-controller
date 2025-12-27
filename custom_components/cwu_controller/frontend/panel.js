@@ -1312,16 +1312,26 @@ function updateActionHistory(history) {
         const time = new Date(item.timestamp);
         const relTime = getRelativeTime(time);
         const absTime = time.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-        const icon = item.action.includes('cwu') ? 'mdi-water-boiler' :
-                    item.action.includes('floor') ? 'mdi-heating-coil' :
-                    item.action.includes('enable') ? 'mdi-power' :
-                    item.action.includes('disable') ? 'mdi-power-off' : 'mdi-chevron-right';
+        const action = item.action.toLowerCase();
+        const icon = action.includes('cwu') || action.includes('dhw') || action.includes('heat-to') ? 'mdi-water-boiler' :
+                    action.includes('floor') ? 'mdi-heating-coil' :
+                    action.includes('enable') ? 'mdi-power' :
+                    action.includes('disable') ? 'mdi-power-off' :
+                    action.includes('fake') ? 'mdi-alert' :
+                    action.includes('rapid') ? 'mdi-water-thermometer-outline' : 'mdi-chevron-right';
+
+        const reasoning = item.reasoning || '';
+        const reasoningHtml = reasoning ?
+            `<div class="history-reasoning">${reasoning}</div>` : '';
 
         return `
             <div class="history-item" onclick="showHistoryDetail('action', '${item.action}', '${item.timestamp}')">
                 <span class="history-time" title="${absTime}">${relTime}</span>
                 <span class="history-icon mdi ${icon}"></span>
-                <span class="history-text">${item.action}</span>
+                <div class="history-content">
+                    <span class="history-text">${item.action}</span>
+                    ${reasoningHtml}
+                </div>
             </div>
         `;
     }).join('');

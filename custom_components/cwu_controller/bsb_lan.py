@@ -15,7 +15,10 @@ from .const import (
     BSB_LAN_READ_PARAMS,
     BSB_LAN_PARAM_CWU_MODE,
     BSB_LAN_PARAM_FLOOR_MODE,
+    BSB_LAN_PARAM_CWU_TARGET_NOMINAL,
+    BSB_LAN_CWU_MAX_TEMP,
     BSB_LAN_STATE_VERIFY_INTERVAL,
+    MANUAL_HEAT_TO_MIN_TEMP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,6 +141,23 @@ class BSBLanClient:
     async def async_set_floor_mode(self, mode: int) -> bool:
         """Set floor heating mode (0=Protection, 1=Automatic)."""
         return await self.async_write_parameter(BSB_LAN_PARAM_FLOOR_MODE, mode)
+
+    async def async_set_cwu_target_temp(self, temp: float) -> bool:
+        """Set CWU target temperature (param 1610).
+
+        Args:
+            temp: Target temperature in °C (36-55).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if temp < MANUAL_HEAT_TO_MIN_TEMP or temp > BSB_LAN_CWU_MAX_TEMP:
+            _LOGGER.warning(
+                "CWU target temp %s°C out of range (%s-%s°C)",
+                temp, MANUAL_HEAT_TO_MIN_TEMP, BSB_LAN_CWU_MAX_TEMP
+            )
+            return False
+        return await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, int(temp))
 
     def _handle_success(self) -> None:
         """Called after successful communication."""

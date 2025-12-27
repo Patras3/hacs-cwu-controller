@@ -39,3 +39,40 @@ enable:
 disable:
   name: Disable Controller
   description: Disable the automatic CWU controller
+
+force_auto:
+  name: Return to Auto Mode
+  description: Cancel manual override and return to automatic control
+
+set_mode:
+  name: Set Operating Mode
+  description: Set the operating mode (broken_heater, winter, summer)
+  fields:
+    mode:
+      name: Mode
+      description: Operating mode to set
+      required: true
+      example: "winter"
+      selector:
+        select:
+          options:
+            - "broken_heater"
+            - "winter"
+            - "summer"
+
+heat_to_temp:
+  name: Heat CWU to Temperature
+  description: Heat CWU to a specific temperature, then return to automatic mode
+  fields:
+    target_temp:
+      name: Target Temperature
+      description: Target temperature in °C (36-55)
+      required: false
+      default: 50
+      example: 50
+      selector:
+        number:
+          min: 36
+          max: 55
+          step: 1
+          unit_of_measurement: "°C"

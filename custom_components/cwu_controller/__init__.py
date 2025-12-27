@@ -15,7 +15,7 @@ from .coordinator import CWUControllerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SELECT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SELECT, Platform.NUMBER]
 
 # Panel configuration
 PANEL_URL_PATH = DOMAIN
@@ -124,9 +124,15 @@ async def _async_register_services(hass: HomeAssistant, coordinator: CWUControll
         if mode:
             await coordinator.async_set_operating_mode(mode)
 
+    async def handle_heat_to_temp(call):
+        """Handle heat-to-temp service - heat CWU to specific temp then return to AUTO."""
+        target_temp = call.data.get("target_temp", 50)
+        await coordinator.async_heat_to_temp(target_temp)
+
     hass.services.async_register(DOMAIN, "force_cwu", handle_force_cwu)
     hass.services.async_register(DOMAIN, "force_floor", handle_force_floor)
     hass.services.async_register(DOMAIN, "force_auto", handle_force_auto)
     hass.services.async_register(DOMAIN, "enable", handle_enable)
     hass.services.async_register(DOMAIN, "disable", handle_disable)
     hass.services.async_register(DOMAIN, "set_mode", handle_set_mode)
+    hass.services.async_register(DOMAIN, "heat_to_temp", handle_heat_to_temp)

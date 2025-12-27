@@ -25,6 +25,7 @@ class MockPlatform:
     BINARY_SENSOR = "binary_sensor"
     BUTTON = "button"
     SELECT = "select"
+    NUMBER = "number"
 
 
 class MockUnitOfTemperature:

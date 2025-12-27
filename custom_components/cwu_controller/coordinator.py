@@ -6,8 +6,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-import aiohttp
-
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
@@ -108,6 +106,15 @@ from .const import (
     HP_STATUS_DEFROSTING,
     HP_STATUS_OVERRUN,
     DHW_STATUS_CHARGED,
+    DHW_CHARGED_REST_TIME,
+    MANUAL_HEAT_TO_MIN_TEMP,
+    MANUAL_HEAT_TO_MAX_TEMP,
+    CONF_CWU_TARGET_TEMP,
+    CONF_CWU_MIN_TEMP,
+    CONF_CWU_CRITICAL_TEMP,
+    CONF_SALON_TARGET_TEMP,
+    CONF_SALON_MIN_TEMP,
+    CONF_BEDROOM_MIN_TEMP,
 )
 from .bsb_lan import BSBLanClient
 
@@ -232,6 +239,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # BSB-LAN unavailability tracking for safe mode
         self._bsb_lan_unavailable_since: datetime | None = None
+
+        # DHW Charged handling - rest time before switching to floor
+        self._dhw_charged_at: datetime | None = None
+
+        # Manual heat-to feature - one-time heating to specific temp
+        self._manual_heat_to_target: float | None = None
+        self._manual_heat_to_original_target: float | None = None
+        self._manual_heat_to_active: bool = False
+
+        # Config overrides from number entities (runtime changes)
+        self._config_overrides: dict[str, float] = {}
 
         # Register shutdown handler to save data
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_save_on_shutdown)
@@ -610,12 +628,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             _LOGGER.info("CWU Controller: Starting in idle state")
 
     def _get_min_temp(self) -> float:
-        """Get CWU min temperature from config."""
-        return self.config.get("cwu_min_temp", DEFAULT_CWU_MIN_TEMP)
+        """Get CWU min temperature (with runtime overrides)."""
+        return self.get_config_value(CONF_CWU_MIN_TEMP, DEFAULT_CWU_MIN_TEMP)
 
     def _get_critical_temp(self) -> float:
-        """Get CWU critical temperature from config."""
-        return self.config.get("cwu_critical_temp", DEFAULT_CWU_CRITICAL_TEMP)
+        """Get CWU critical temperature (with runtime overrides)."""
+        return self.get_config_value(CONF_CWU_CRITICAL_TEMP, DEFAULT_CWU_CRITICAL_TEMP)
 
     def _calculate_cwu_urgency(self, cwu_temp: float | None, current_hour: int) -> int:
         """Calculate CWU heating urgency."""
@@ -1101,16 +1119,25 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._state_history = [e for e in self._state_history if is_recent(e)]
         self._action_history = [e for e in self._action_history if is_recent(e)]
 
-    def _log_action(self, action: str) -> None:
-        """Log an action to history (today + yesterday only)."""
+    def _log_action(self, action: str, reasoning: str = "") -> None:
+        """Log an action to history with optional reasoning.
+
+        Args:
+            action: Short action description (e.g., "CWU ON", "Switch to floor")
+            reasoning: Specific reasoning at this decision point
+        """
         entry = {
             "timestamp": datetime.now().isoformat(),
             "action": action,
             "state": self._current_state,
+            "reasoning": reasoning,
         }
         self._action_history.append(entry)
         self._cleanup_old_history()
-        _LOGGER.info("CWU Controller: %s", action)
+        if reasoning:
+            _LOGGER.info("CWU Controller: %s (%s)", action, reasoning)
+        else:
+            _LOGGER.info("CWU Controller: %s", action)
 
     def _change_state(self, new_state: str) -> None:
         """Change controller state."""
@@ -1493,11 +1520,97 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Cancel manual override and let controller decide from scratch."""
         self._manual_override = False
         self._manual_override_until = None
+        self._manual_heat_to_active = False
+        self._manual_heat_to_target = None
         self._change_state(STATE_IDLE)
         self._cwu_heating_start = None
         self._cwu_session_start_temp = None
-        self._log_action("Manual override cancelled - switching to auto mode")
+        self._log_action("Manual override cancelled", "Switching to auto mode")
         # Next coordinator update will run control logic and decide
+
+    async def async_heat_to_temp(self, target_temp: float) -> None:
+        """Heat CWU to specific temperature, then return to AUTO.
+
+        Args:
+            target_temp: Target temperature in °C (36-55)
+        """
+        if target_temp < MANUAL_HEAT_TO_MIN_TEMP or target_temp > MANUAL_HEAT_TO_MAX_TEMP:
+            _LOGGER.warning(
+                "Heat-to target %s°C out of range (%s-%s°C)",
+                target_temp, MANUAL_HEAT_TO_MIN_TEMP, MANUAL_HEAT_TO_MAX_TEMP
+            )
+            return
+
+        cwu_temp = self._get_cwu_temperature()
+
+        # Store original target for restoration
+        self._manual_heat_to_original_target = self.get_config_value(
+            CONF_CWU_TARGET_TEMP, DEFAULT_CWU_TARGET_TEMP
+        )
+        self._manual_heat_to_target = target_temp
+        self._manual_heat_to_active = True
+        self._manual_override = True
+
+        # Sync target to BSB-LAN
+        await self._bsb_client.async_set_cwu_target_temp(target_temp)
+
+        # Start CWU heating
+        await self._async_set_floor_off()
+        await asyncio.sleep(30)
+        await self._async_set_cwu_on()
+
+        self._change_state(STATE_HEATING_CWU)
+        self._cwu_heating_start = datetime.now()
+        self._cwu_session_start_temp = cwu_temp
+        self._log_action(
+            "Heat-to started",
+            f"Target {target_temp:.0f}°C, current {cwu_temp:.1f}°C" if cwu_temp else f"Target {target_temp:.0f}°C"
+        )
+
+    def get_config_value(self, key: str, default: float) -> float:
+        """Get config value with runtime overrides.
+
+        Args:
+            key: Config key (e.g., CONF_CWU_TARGET_TEMP)
+            default: Default value if not set
+
+        Returns:
+            Current value (override or config or default)
+        """
+        if key in self._config_overrides:
+            return self._config_overrides[key]
+        return self.config.get(key, default)
+
+    async def async_set_config_value(self, key: str, value: float) -> None:
+        """Set config override value (from number entities).
+
+        Args:
+            key: Config key to override
+            value: New value
+        """
+        self._config_overrides[key] = value
+        _LOGGER.info("Config override: %s = %s", key, value)
+
+        # Sync CWU target to BSB-LAN if changed
+        if key == CONF_CWU_TARGET_TEMP:
+            await self._bsb_client.async_set_cwu_target_temp(value)
+
+    @property
+    def manual_heat_to_active(self) -> bool:
+        """Return if manual heat-to is active."""
+        return self._manual_heat_to_active
+
+    @property
+    def manual_heat_to_target(self) -> float | None:
+        """Return manual heat-to target temperature."""
+        return self._manual_heat_to_target
+
+    @property
+    def last_reasoning(self) -> str:
+        """Return reasoning from last action."""
+        if self._action_history:
+            return self._action_history[-1].get("reasoning", "")
+        return ""
 
     async def async_test_cwu_on(self) -> None:
         """Test action: turn on CWU via BSB-LAN."""
@@ -1636,7 +1749,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "action_history": self._action_history[-20:],
             "cwu_target_temp": self._get_target_temp(),
             "cwu_min_temp": self._get_min_temp(),
+            "cwu_critical_temp": self._get_critical_temp(),
             "salon_target_temp": self.config.get("salon_target_temp", DEFAULT_SALON_TARGET_TEMP),
+            # Manual heat-to feature
+            "manual_heat_to_active": self._manual_heat_to_active,
+            "manual_heat_to_target": self._manual_heat_to_target,
+            "dhw_charged_at": self._dhw_charged_at.isoformat() if self._dhw_charged_at else None,
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
             "cwu_session_start_temp": self._cwu_session_start_temp,
@@ -1779,6 +1897,26 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._last_mode_switch = now  # For anti-oscillation
                 self._reset_max_temp_tracking()  # Reset max temp for new session
                 self._log_action(f"Manual mode: HP ready - CWU restarted after {elapsed:.1f} min wait")
+
+        # Check heat-to completion (manual heating to specific temp)
+        if self._manual_heat_to_active and cwu_temp is not None:
+            if cwu_temp >= self._manual_heat_to_target:
+                # Target reached - restore original target and return to AUTO
+                if self._manual_heat_to_original_target:
+                    await self._bsb_client.async_set_cwu_target_temp(self._manual_heat_to_original_target)
+
+                self._log_action(
+                    "Heat-to complete",
+                    f"Reached {cwu_temp:.1f}°C (target {self._manual_heat_to_target:.0f}°C)"
+                )
+
+                # Reset and return to AUTO
+                self._manual_heat_to_active = False
+                self._manual_heat_to_target = None
+                self._manual_override = False
+                self._manual_override_until = None
+                self._change_state(STATE_IDLE)
+                # Next update will run control logic
 
         if self._manual_override:
             return data
@@ -2091,7 +2229,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         drop = max_temp - cwu_temp
 
         if drop >= CWU_RAPID_DROP_THRESHOLD:  # >= 5°C
-            self._log_action(f"Rapid CWU drop detected: {drop:.1f}°C in {CWU_RAPID_DROP_WINDOW}min (bath?)")
+            self._log_action(
+                "Rapid CWU drop",
+                f"{max_temp:.1f}→{cwu_temp:.1f}°C ({drop:.1f}°C drop in {CWU_RAPID_DROP_WINDOW}min)"
+            )
             return (True, drop)
 
         return (False, drop)
@@ -2108,8 +2249,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         return DHW_STATUS_CHARGED in dhw_status.lower()
 
     def _get_target_temp(self) -> float:
-        """Get CWU target temperature from config."""
-        return self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
+        """Get CWU target temperature (with runtime overrides)."""
+        return self.get_config_value(CONF_CWU_TARGET_TEMP, DEFAULT_CWU_TARGET_TEMP)
 
     def _reset_max_temp_tracking(self) -> None:
         """Reset max temp tracking for new CWU session."""
@@ -2158,7 +2299,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 f"Fake heating detected! Pump tried to use broken heater. "
                 f"CWU temp: {cwu_temp}°C. Waiting {HP_RESTART_MIN_WAIT} min + HP ready check..."
             )
-            self._log_action(f"Fake heating detected - CWU+Floor OFF, waiting {HP_RESTART_MIN_WAIT} min + HP ready")
+            self._log_action(
+                "Fake heating",
+                f"CWU+Floor OFF, CWU at {cwu_temp:.1f}°C, waiting {HP_RESTART_MIN_WAIT}+ min"
+                if cwu_temp else f"CWU+Floor OFF, waiting {HP_RESTART_MIN_WAIT}+ min"
+            )
             return
 
         # =====================================================================
@@ -2385,26 +2530,50 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             # Check if pump reports "Charged" (reached target)
             if self._is_pump_charged():
-                can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
-                if can_switch:
-                    self._log_action(f"Pump reports Charged ({cwu_temp}°C), switching to floor")
-                    await self._switch_to_floor()
-                    self._change_state(STATE_HEATING_FLOOR)
-                    self._cwu_heating_start = None
-                    self._last_mode_switch = now
-                else:
-                    _LOGGER.debug(f"Floor switch after Charged blocked: {reason}")
+                # DHW Charged rest time - wait before switching to floor
+                if self._dhw_charged_at is None:
+                    self._dhw_charged_at = now
+                    self._log_action(
+                        "DHW Charged",
+                        f"Pump reports charged at {cwu_temp:.1f}°C, waiting {DHW_CHARGED_REST_TIME}min"
+                        if cwu_temp else f"Pump reports charged, waiting {DHW_CHARGED_REST_TIME}min"
+                    )
+
+                # Check if rest time elapsed
+                elapsed = (now - self._dhw_charged_at).total_seconds() / 60
+                if elapsed >= DHW_CHARGED_REST_TIME:
+                    can_switch, reason = self._can_switch_mode(self._current_state, STATE_HEATING_FLOOR)
+                    if can_switch:
+                        await self._switch_to_floor()
+                        self._change_state(STATE_HEATING_FLOOR)
+                        self._cwu_heating_start = None
+                        self._last_mode_switch = now
+                        self._dhw_charged_at = None
+                        self._log_action(
+                            "Switch to floor",
+                            f"DHW rest complete ({elapsed:.0f}min), CWU at {cwu_temp:.1f}°C"
+                            if cwu_temp else f"DHW rest complete ({elapsed:.0f}min)"
+                        )
+                    else:
+                        _LOGGER.debug(f"Floor switch after Charged blocked: {reason}")
+            else:
+                # Not charged anymore - reset
+                self._dhw_charged_at = None
             return
 
         # Idle - start with CWU (priority)
         if self._current_state == STATE_IDLE:
-            self._log_action("Starting CWU heating (idle → CWU)")
+            target = self._get_target_temp()
+            cwu_start_temp = self._get_cwu_temperature()
+            self._log_action(
+                "CWU ON",
+                f"CWU {cwu_start_temp:.1f}°C < target {target:.1f}°C" if cwu_start_temp else f"Starting CWU heating"
+            )
             await self._switch_to_cwu()
             self._change_state(STATE_HEATING_CWU)
             self._cwu_heating_start = now
             self._last_mode_switch = now
             self._reset_max_temp_tracking()
-            cwu_start_temp = self._get_cwu_temperature()
             self._cwu_session_start_temp = cwu_start_temp if cwu_start_temp else self._last_known_cwu_temp
 
     async def _run_winter_mode_logic(

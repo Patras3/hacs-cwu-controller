@@ -1069,6 +1069,23 @@ body {
     color: var(--text-secondary);
 }
 
+.history-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.history-reasoning {
+    font-size: 11px;
+    color: var(--text-muted, #888);
+    font-style: italic;
+    padding-left: 0;
+    border-left: 2px solid var(--accent-cyan);
+    padding-left: 8px;
+    margin-top: 2px;
+}
+
 /* Timeline */
 .timeline {
     position: relative;

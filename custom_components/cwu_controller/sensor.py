@@ -169,6 +169,8 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             "max_temp_detected": data.get("max_temp_detected", False),
             # Night floor window (broken_heater mode)
             "is_night_floor_window": data.get("is_night_floor_window", False),
+            # Last action reasoning
+            "last_reasoning": self.coordinator.last_reasoning,
         }
 
 

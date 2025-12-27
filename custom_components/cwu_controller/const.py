@@ -133,12 +133,17 @@ BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
 BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before marking unavailable
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
-# BSB-LAN Parameters for reading
-BSB_LAN_READ_PARAMS: Final = "700,1600,8000,8003,8006,8412,8410,8830,8700"
+# BSB-LAN Parameters for reading (includes 1610 for CWU target setpoint)
+BSB_LAN_READ_PARAMS: Final = "700,1600,1610,8000,8003,8006,8412,8410,8830,8700"
 
 # BSB-LAN Control Parameters (write)
 BSB_LAN_PARAM_CWU_MODE: Final = 1600  # 0=Off, 1=On, 2=Eco
 BSB_LAN_PARAM_FLOOR_MODE: Final = 700  # 0=Protection, 1=Automatic, 2=Reduced, 3=Comfort
+
+# BSB-LAN CWU Target Setpoint Parameters
+BSB_LAN_PARAM_CWU_TARGET_NOMINAL: Final = 1610  # DHW nominal setpoint
+BSB_LAN_PARAM_CWU_TARGET_REDUCED: Final = 1612  # DHW reduced setpoint
+BSB_LAN_CWU_MAX_TEMP: Final = 55  # Maximum CWU temperature settable
 
 # BSB-LAN CWU Modes (parameter 1600)
 BSB_CWU_MODE_OFF: Final = 0
@@ -198,6 +203,11 @@ HP_STATUS_OVERRUN: Final = "Overrun"     # substring - dobieg pompy
 
 # DHW Status Check
 DHW_STATUS_CHARGED: Final = "charged"  # substring - pompa osiągnęła cel (case insensitive)
+DHW_CHARGED_REST_TIME: Final = 5  # minutes - rest time after pump reports charged before switching
+
+# Manual Heat-to Feature
+MANUAL_HEAT_TO_MIN_TEMP: Final = 36  # Minimum temperature for manual heat-to
+MANUAL_HEAT_TO_MAX_TEMP: Final = 55  # Maximum temperature for manual heat-to
 
 # Outside Temp Thresholds (info only, nie zmieniamy targetu)
 OUTSIDE_TEMP_COLD: Final = 0      # < 0°C - pompa mniej wydajna
