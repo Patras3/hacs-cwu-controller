@@ -63,7 +63,7 @@ class BSBLanClient:
         return self._consecutive_failures
 
     async def async_read_parameters(self, params: str | None = None) -> dict[str, Any]:
-        """Read multiple parameters in one batch request.
+        """Read multiple parameters in one batch request with retry.
 
         Args:
             params: Comma-separated parameter IDs (e.g., "8003,8006,8830").
@@ -76,32 +76,43 @@ class BSBLanClient:
             params = BSB_LAN_READ_PARAMS
 
         url = f"http://{self.host}/JQ={params}"
+        max_retries = 3
+        retry_delay = 1.0  # seconds
 
         # Serialize requests - BSB-LAN handles only one request at a time
         async with self._request_lock:
-            try:
-                timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            self._handle_success()
-                            return data
-                        else:
-                            self._handle_failure(Exception(f"HTTP {response.status}"))
-                            return {}
-            except asyncio.TimeoutError:
-                self._handle_failure(Exception("Timeout"))
-                return {}
-            except aiohttp.ClientError as e:
-                self._handle_failure(e)
-                return {}
-            except Exception as e:
-                self._handle_failure(e)
-                return {}
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    timeout = aiohttp.ClientTimeout(total=BSB_LAN_READ_TIMEOUT)
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(url) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if attempt > 0:
+                                    _LOGGER.info(f"BSB-LAN read succeeded on retry {attempt + 1}")
+                                self._handle_success()
+                                return data
+                            else:
+                                last_error = Exception(f"HTTP {response.status}")
+                except asyncio.TimeoutError:
+                    last_error = Exception("Timeout")
+                except aiohttp.ClientError as e:
+                    last_error = e
+                except Exception as e:
+                    last_error = e
+
+                # Retry if not last attempt
+                if attempt < max_retries - 1:
+                    _LOGGER.debug(f"BSB-LAN read failed (attempt {attempt + 1}/{max_retries}): {last_error}, retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+
+            # All retries failed
+            self._handle_failure(last_error)
+            return {}
 
     async def async_write_parameter(self, param: int, value: int) -> bool:
-        """Write a single parameter value.
+        """Write a single parameter value with retry.
 
         Args:
             param: Parameter ID (e.g., 1600 for CWU mode).
@@ -115,33 +126,44 @@ class BSBLanClient:
             We check for "ERROR" in response to detect failures.
         """
         url = f"http://{self.host}/S{param}={value}"
+        max_retries = 3
+        retry_delay = 1.0  # seconds
 
         # Serialize requests - BSB-LAN handles only one request at a time
         async with self._request_lock:
-            try:
-                timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            # BSB-LAN returns HTML - check for error message in body
-                            body = await response.text()
-                            if "ERROR" in body:
-                                self._handle_failure(Exception(f"BSB-LAN set failed for {param}={value}"))
-                                return False
-                            self._handle_success()
-                            return True
-                        else:
-                            self._handle_failure(Exception(f"HTTP {response.status}"))
-                            return False
-            except asyncio.TimeoutError:
-                self._handle_failure(Exception("Timeout"))
-                return False
-            except aiohttp.ClientError as e:
-                self._handle_failure(e)
-                return False
-            except Exception as e:
-                self._handle_failure(e)
-                return False
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    timeout = aiohttp.ClientTimeout(total=BSB_LAN_WRITE_TIMEOUT)
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(url) as response:
+                            if response.status == 200:
+                                # BSB-LAN returns HTML - check for error message in body
+                                body = await response.text()
+                                if "ERROR" in body:
+                                    last_error = Exception(f"BSB-LAN set failed for {param}={value}")
+                                else:
+                                    if attempt > 0:
+                                        _LOGGER.info(f"BSB-LAN write succeeded on retry {attempt + 1}")
+                                    self._handle_success()
+                                    return True
+                            else:
+                                last_error = Exception(f"HTTP {response.status}")
+                except asyncio.TimeoutError:
+                    last_error = Exception("Timeout")
+                except aiohttp.ClientError as e:
+                    last_error = e
+                except Exception as e:
+                    last_error = e
+
+                # Retry if not last attempt
+                if attempt < max_retries - 1:
+                    _LOGGER.debug(f"BSB-LAN write failed (attempt {attempt + 1}/{max_retries}): {last_error}, retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+
+            # All retries failed
+            self._handle_failure(last_error)
+            return False
 
     async def async_set_cwu_mode(self, mode: int) -> bool:
         """Set CWU mode (0=Off, 1=On, 2=Eco)."""
