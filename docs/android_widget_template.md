@@ -7,7 +7,7 @@ Template do użycia w Home Assistant Android Widget (Markdown lub Text).
 ```jinja2
 {# --- CWU Controller Widget --- #}
 {% set state = states('sensor.cwu_controller_state') %}
-{% set state_attr = state_attr('sensor.cwu_controller_state', 'hold_time_remaining') | default(0) %}
+{% set hold_time = state_attr('sensor.cwu_controller_state', 'hold_time_remaining') | default(0) %}
 {% set hp_ready = state_attr('sensor.cwu_controller_state', 'hp_ready') | default(true) %}
 {% set hp_reason = state_attr('sensor.cwu_controller_state', 'hp_ready_reason') | default('OK') %}
 
@@ -31,8 +31,8 @@ Template do użycia w Home Assistant Android Widget (Markdown lub Text).
 {% endif %}
 
 {# --- Hold timer --- #}
-{% if state_attr > 0 %}
-<br>⏱️ Hold: {{ state_attr }}min
+{% if hold_time > 0 %}
+<br>⏱️ Hold: {{ hold_time }}min
 {% endif %}
 
 <br><br>
