@@ -42,6 +42,10 @@ class BSBLanClient:
         self._is_available: bool = True
         self._first_connection: bool = True
 
+        # Daily error counter (reset at midnight)
+        self._errors_today: int = 0
+        self._errors_date: datetime.date = datetime.now().date()
+
     @property
     def is_available(self) -> bool:
         """Return if BSB-LAN is considered available."""
@@ -61,6 +65,15 @@ class BSBLanClient:
     def consecutive_failures(self) -> int:
         """Return number of consecutive failures."""
         return self._consecutive_failures
+
+    @property
+    def errors_today(self) -> int:
+        """Return number of errors today (resets at midnight)."""
+        today = datetime.now().date()
+        if today != self._errors_date:
+            self._errors_today = 0
+            self._errors_date = today
+        return self._errors_today
 
     async def async_read_parameters(self, params: str | None = None) -> dict[str, Any]:
         """Read multiple parameters in one batch request with retry.
@@ -257,6 +270,13 @@ class BSBLanClient:
         """Called after failed communication."""
         self._consecutive_failures += 1
         self._last_failure = datetime.now()
+
+        # Increment daily error counter (with midnight reset check)
+        today = datetime.now().date()
+        if today != self._errors_date:
+            self._errors_today = 0
+            self._errors_date = today
+        self._errors_today += 1
 
         if self._first_connection:
             _LOGGER.warning(

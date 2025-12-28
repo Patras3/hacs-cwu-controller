@@ -171,6 +171,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # CWU Session tracking (for UI)
         self._cwu_session_start_temp: float | None = None
+        self._cwu_session_start_energy_kwh: float | None = None  # Energy meter at session start
 
         # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
@@ -210,6 +211,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # Anti-fighting tracking (rolling window - avoid fighting for last few degrees)
         self._cwu_temp_history_fighting: list[tuple[datetime, float]] = []  # Rolling 60min history
         self._electric_fallback_history: list[datetime] = []  # Timestamps of electric fallback events
+
+        # Daily counters (reset at midnight)
+        self._electric_fallback_count_today: int = 0
+        self._daily_counters_date: datetime.date = datetime.now().date()
 
         # Rapid drop detection (pobór CWU - kąpiel)
         self._cwu_temp_history_bsb: list[tuple[datetime, float]] = []  # Historia temp BSB 8830
@@ -1006,6 +1011,35 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         energy_sensor = self.config.get(CONF_ENERGY_SENSOR, DEFAULT_ENERGY_SENSOR)
         return self._get_sensor_value(energy_sensor)
 
+    def _check_daily_counters_reset(self) -> None:
+        """Reset daily counters at midnight."""
+        today = datetime.now().date()
+        if today != self._daily_counters_date:
+            _LOGGER.info("Daily counters reset (new day: %s)", today)
+            self._electric_fallback_count_today = 0
+            self._daily_counters_date = today
+
+    @property
+    def electric_fallback_count_today(self) -> int:
+        """Return electric fallback count for today."""
+        self._check_daily_counters_reset()
+        return self._electric_fallback_count_today
+
+    @property
+    def bsb_lan_errors_today(self) -> int:
+        """Return BSB-LAN communication errors for today."""
+        return self._bsb_client.errors_today
+
+    @property
+    def session_energy_kwh(self) -> float | None:
+        """Return energy consumed in current CWU session (kWh)."""
+        if self._cwu_session_start_energy_kwh is None:
+            return None
+        current_energy = self._get_energy_meter_value()
+        if current_energy is None:
+            return None
+        return max(0.0, current_energy - self._cwu_session_start_energy_kwh)
+
 
     async def async_enable(self) -> None:
         """Enable the controller."""
@@ -1392,6 +1426,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "max_temp_detected": self._max_temp_achieved is not None,
             # Night floor window (broken_heater mode)
             "is_night_floor_window": BROKEN_HEATER_FLOOR_WINDOW_START <= now.hour < BROKEN_HEATER_FLOOR_WINDOW_END if self._operating_mode == MODE_BROKEN_HEATER else False,
+            # Daily counters (reset at midnight)
+            "electric_fallback_count_today": self.electric_fallback_count_today,
+            "bsb_lan_errors_today": self.bsb_lan_errors_today,
+            # Session energy tracking
+            "session_energy_kwh": self.session_energy_kwh,
         }
 
         if self._fake_heating_detected_at:
@@ -1728,7 +1767,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                (now - self._electric_fallback_history[-1]).total_seconds() > 60:
                 self._electric_fallback_history.append(now)
                 self._electric_fallback_count += 1
-                _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count}")
+                self._electric_fallback_count_today += 1  # Daily counter
+                _LOGGER.debug(f"Electric fallback count: {self._electric_fallback_count} (today: {self._electric_fallback_count_today})")
 
         # Prune old electric fallback history (keep only last 60 min)
         self._electric_fallback_history = [
@@ -1925,11 +1965,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         finally:
             self._transition_in_progress = False
 
-        # Track session start - get current temp
+        # Track session start - get current temp and energy
         cwu_temp = self._get_cwu_temperature()
         if cwu_temp is None:
             cwu_temp = self._last_known_cwu_temp
         self._cwu_session_start_temp = cwu_temp
+        self._cwu_session_start_energy_kwh = self._get_energy_meter_value()
 
         # Clear rapid drop history - will start fresh when we stop heating
         self._cwu_temp_history_bsb.clear()
@@ -1954,6 +1995,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
             # Clear CWU session
             self._cwu_session_start_temp = None
+            self._cwu_session_start_energy_kwh = None
         finally:
             self._transition_in_progress = False
 

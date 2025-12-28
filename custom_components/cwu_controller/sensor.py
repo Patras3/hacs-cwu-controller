@@ -54,6 +54,10 @@ async def async_setup_entry(
         BsbDeltaTSensor(coordinator, entry),
         BsbOutsideTempSensor(coordinator, entry),
         ControlSourceSensor(coordinator, entry),
+        # Daily counters and diagnostics
+        ElectricFallbackCountTodaySensor(coordinator, entry),
+        BsbLanErrorsTodaySensor(coordinator, entry),
+        SessionEnergySensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -78,7 +82,7 @@ class CWUControllerBaseSensor(CoordinatorEntity, SensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.3.0",
+            "sw_version": "4.7.0",
         }
 
 
@@ -755,4 +759,96 @@ class ControlSourceSensor(CWUControllerBaseSensor):
             return {}
         return {
             "bsb_lan_available": self.coordinator.data.get("bsb_lan_available", False),
+        }
+
+
+# -----------------------------------------------------------------------------
+# Daily Counters and Diagnostics
+# -----------------------------------------------------------------------------
+
+class ElectricFallbackCountTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing electric fallback count today (resets at midnight)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "electric_fallback_today", "Electric Fallback Today")
+        self._attr_icon = "mdi:lightning-bolt-circle"
+        self._attr_state_class = SensorStateClass.TOTAL
+
+    @property
+    def native_value(self) -> int | None:
+        """Return electric fallback count today."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("electric_fallback_count_today", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "session_count": self.coordinator.data.get("electric_fallback_count", 0),
+            "note": "Count of times heat pump fell back to electric heater today",
+        }
+
+
+class BsbLanErrorsTodaySensor(CWUControllerBaseSensor):
+    """Sensor showing BSB-LAN communication errors today (resets at midnight)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_lan_errors_today", "BSB-LAN Errors Today")
+        self._attr_icon = "mdi:alert-circle-outline"
+        self._attr_state_class = SensorStateClass.TOTAL
+
+    @property
+    def native_value(self) -> int | None:
+        """Return BSB-LAN error count today."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("bsb_lan_errors_today", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "last_reset": datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+            "bsb_lan_available": self.coordinator.data.get("bsb_lan_available", False),
+            "note": "Count of BSB-LAN communication failures today",
+        }
+
+
+class SessionEnergySensor(CWUControllerBaseSensor):
+    """Sensor showing energy consumed in current CWU session."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "session_energy", "CWU Session Energy")
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+        self._attr_icon = "mdi:water-boiler"
+        self._attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self) -> float | None:
+        """Return session energy in kWh."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("session_energy_kwh")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra attributes."""
+        if self.coordinator.data is None:
+            return {}
+        return {
+            "session_start_time": self.coordinator.data.get("cwu_session_start_time"),
+            "session_start_temp": self.coordinator.data.get("cwu_session_start_temp"),
+            "cwu_heating_minutes": self.coordinator.data.get("cwu_heating_minutes", 0),
+            "note": "Energy consumed since CWU heating session started",
         }
