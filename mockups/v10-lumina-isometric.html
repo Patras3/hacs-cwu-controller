@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Controller - Lumina Isometric</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #001428;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: sans-serif;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 420px;
+            aspect-ratio: 16/9;
+            background:
+                radial-gradient(ellipse 60% 50% at 30% 80%, rgba(0, 255, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 40% at 75% 70%, rgba(255, 100, 50, 0.05) 0%, transparent 50%),
+                linear-gradient(180deg, #000a14 0%, #001832 100%);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        svg { width: 100%; height: 100%; }
+
+        /* Lumina dual-layer glow */
+        .glow {
+            filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.5))
+                    drop-shadow(0 0 12px rgba(0, 255, 255, 0.25));
+        }
+
+        .glow-intense {
+            filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.8))
+                    drop-shadow(0 0 20px rgba(0, 255, 255, 0.4));
+        }
+
+        .glow-hot {
+            filter: drop-shadow(0 0 8px rgba(255, 100, 50, 0.7))
+                    drop-shadow(0 0 16px rgba(255, 100, 50, 0.35));
+        }
+
+        /* Isometric wireframe */
+        .iso-line {
+            fill: none;
+            stroke: #00FFFF;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+        }
+
+        .iso-dim {
+            fill: none;
+            stroke: rgba(0, 255, 255, 0.25);
+            stroke-width: 1;
+        }
+
+        .iso-face {
+            fill: rgba(0, 255, 255, 0.03);
+            stroke: rgba(0, 255, 255, 0.4);
+            stroke-width: 1;
+        }
+
+        .iso-hot {
+            stroke: #FF6432;
+            stroke-width: 1.5;
+        }
+
+        /* Flow pipes */
+        .pipe-bg {
+            fill: none;
+            stroke: rgba(80, 100, 120, 0.2);
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .flow {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 18 12;
+        }
+
+        .flow-hot {
+            stroke: #FF6432;
+            animation: dash 0.5s linear infinite;
+        }
+
+        .flow-cold {
+            stroke: #00FFFF;
+            animation: dashReverse 0.5s linear infinite;
+        }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -30; }
+        }
+
+        @keyframes dashReverse {
+            to { stroke-dashoffset: 30; }
+        }
+
+        /* Fan rotation */
+        .fan {
+            animation: rotate 1.2s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes rotate {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Breathing pulse */
+        .breathe {
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.8; }
+        }
+
+        /* Active dot */
+        .active-dot {
+            fill: #00FF88;
+            animation: dotPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes dotPulse {
+            0%, 100% { r: 5; opacity: 1; }
+            50% { r: 3; opacity: 0.5; }
+        }
+
+        /* Text */
+        .txt-label {
+            font-size: 7px;
+            fill: rgba(0, 255, 255, 0.4);
+            font-weight: bold;
+            letter-spacing: 1.5px;
+        }
+
+        .txt-value {
+            font-weight: bold;
+            text-shadow: 0 0 4px black;
+        }
+
+        .txt-cyan { fill: #00FFFF; }
+        .txt-hot { fill: #FF6432; }
+        .txt-amber { fill: #FFB800; }
+        .txt-green { fill: #00FF88; }
+
+        /* Water gradient */
+        .water-fill {
+            fill: url(#waterGradient);
+            opacity: 0.55;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <svg viewBox="0 0 420 236">
+            <defs>
+                <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#FF6432" stop-opacity="0.5"/>
+                    <stop offset="50%" stop-color="#00DDFF" stop-opacity="0.6"/>
+                    <stop offset="100%" stop-color="#0066FF" stop-opacity="0.7"/>
+                </linearGradient>
+
+                <!-- Isometric skew for 3D text -->
+                <filter id="perspective">
+                    <feOffset dx="0" dy="0"/>
+                </filter>
+            </defs>
+
+            <!-- ========== HEAT PUMP - Isometric Box ========== -->
+            <g transform="translate(25, 50)">
+                <!-- Isometric cube wireframe -->
+                <!-- Bottom face -->
+                <polygon class="iso-face" points="40,120 0,100 40,80 80,100"/>
+
+                <!-- Back left edge -->
+                <line class="iso-dim" x1="0" y1="100" x2="0" y2="30"/>
+                <!-- Back right edge -->
+                <line class="iso-dim" x1="80" y1="100" x2="80" y2="30"/>
+                <!-- Back top edge -->
+                <line class="iso-dim" x1="0" y1="30" x2="80" y2="30"/>
+
+                <!-- Top face -->
+                <polygon class="iso-face glow" points="40,10 0,30 40,50 80,30"/>
+
+                <!-- Left face -->
+                <polygon class="iso-face" points="0,30 40,50 40,120 0,100"/>
+
+                <!-- Right face (main visible) -->
+                <polygon class="iso-face glow" points="40,50 80,30 80,100 40,120"/>
+
+                <!-- Front edges (bright) -->
+                <line class="iso-line glow" x1="40" y1="50" x2="40" y2="120"/>
+                <line class="iso-line glow" x1="0" y1="30" x2="40" y2="50"/>
+                <line class="iso-line glow" x1="40" y1="50" x2="80" y2="30"/>
+
+                <!-- Compressor fan on front face -->
+                <g transform="translate(55, 70)">
+                    <ellipse class="iso-line glow-intense" cx="0" cy="0" rx="22" ry="30"/>
+                    <ellipse class="iso-dim" cx="0" cy="0" rx="14" ry="20"/>
+
+                    <!-- Rotating blades (skewed for isometric) -->
+                    <g class="fan" style="transform-origin: 0px 0px;">
+                        <line class="iso-line glow-intense" x1="0" y1="-26" x2="0" y2="26"/>
+                        <line class="iso-line glow-intense" x1="-18" y1="0" x2="18" y2="0"/>
+                        <line class="iso-line" x1="-13" y1="-18" x2="13" y2="18"/>
+                        <line class="iso-line" x1="13" y1="-18" x2="-13" y2="18"/>
+                    </g>
+                </g>
+
+                <!-- Connection ports on right side -->
+                <g class="glow-hot">
+                    <polygon class="iso-hot" points="78,50 88,45 88,55 78,60" fill="rgba(255,100,50,0.2)"/>
+                </g>
+                <g class="glow">
+                    <polygon class="iso-line" points="78,85 88,80 88,90 78,95" fill="rgba(0,255,255,0.1)"/>
+                </g>
+
+                <!-- Active indicator -->
+                <circle class="active-dot" cx="70" cy="20" r="5" style="filter: drop-shadow(0 0 8px rgba(0,255,136,0.8));"/>
+            </g>
+
+            <!-- Pump label & power -->
+            <text class="txt-label" x="65" y="185" text-anchor="middle">HEAT PUMP</text>
+            <text class="txt-value txt-amber" x="65" y="200" text-anchor="middle" font-size="14" style="filter: drop-shadow(0 0 6px rgba(255,184,0,0.5));">805W</text>
+
+            <!-- ========== PIPES ========== -->
+            <!-- Hot flow -->
+            <path class="pipe-bg" d="M113 100 Q155 100 180 65 Q200 35 230 35"/>
+            <path class="flow flow-hot glow-hot" d="M113 100 Q155 100 180 65 Q200 35 230 35"/>
+
+            <!-- Cold return -->
+            <path class="pipe-bg" d="M230 165 Q200 165 175 195 Q155 220 113 210"/>
+            <path class="flow flow-cold glow" d="M230 165 Q200 165 175 195 Q155 220 113 210"/>
+
+            <!-- Pipe labels -->
+            <g transform="translate(175, 25)">
+                <text class="txt-label" x="0" y="0" text-anchor="middle">FLOW →</text>
+                <text class="txt-value txt-hot glow-hot" x="0" y="15" text-anchor="middle" font-size="13">46.0°C</text>
+            </g>
+
+            <g transform="translate(160, 218)">
+                <text class="txt-label" x="0" y="0" text-anchor="middle">← RETURN</text>
+                <text class="txt-value txt-cyan glow" x="0" y="12" text-anchor="middle" font-size="13">45.7°C</text>
+            </g>
+
+            <!-- Delta T -->
+            <g transform="translate(120, 155)">
+                <rect x="-20" y="-12" width="40" height="24" rx="4" fill="rgba(0,255,136,0.1)" stroke="rgba(0,255,136,0.3)"/>
+                <text class="txt-label" x="0" y="-2" text-anchor="middle" style="fill:rgba(0,255,136,0.6);">ΔT</text>
+                <text class="txt-value txt-green" x="0" y="10" text-anchor="middle" font-size="10">+0.3°C</text>
+            </g>
+
+            <!-- ========== CWU TANK - Isometric Cylinder ========== -->
+            <g transform="translate(230, 20)">
+                <!-- Cylinder body using isometric perspective -->
+                <!-- Back ellipse (top) -->
+                <ellipse class="iso-dim breathe" cx="55" cy="15" rx="48" ry="15"/>
+
+                <!-- Cylinder sides -->
+                <line class="iso-line glow" x1="7" y1="15" x2="7" y2="175"/>
+                <line class="iso-line glow" x1="103" y1="15" x2="103" y2="175"/>
+
+                <!-- Front ellipse (bottom) - brightest -->
+                <ellipse class="iso-line glow-intense" cx="55" cy="175" rx="48" ry="15"/>
+
+                <!-- Middle section indicator -->
+                <ellipse class="iso-dim breathe" cx="55" cy="95" rx="48" ry="15" stroke-dasharray="10 8"/>
+
+                <!-- Water level (clip region) -->
+                <clipPath id="tankWater">
+                    <path d="M7,60 L7,175 A48,15 0 0,0 103,175 L103,60 A48,15 0 0,1 7,60"/>
+                </clipPath>
+
+                <g clip-path="url(#tankWater)">
+                    <rect class="water-fill" x="7" y="60" width="96" height="130"/>
+                </g>
+
+                <!-- Input port (hot) -->
+                <ellipse class="iso-hot glow-hot" cx="10" cy="40" rx="6" ry="4"/>
+                <!-- Output port (cold) -->
+                <ellipse class="iso-line glow" cx="10" cy="150" rx="6" ry="4"/>
+            </g>
+
+            <!-- Tank labels -->
+            <g transform="translate(348, 40)">
+                <text class="txt-label" x="0" y="0">TARGET</text>
+                <text class="txt-value txt-amber" x="0" y="20" font-size="24" style="filter: drop-shadow(0 0 10px rgba(255,184,0,0.5));">55°C</text>
+            </g>
+
+            <g transform="translate(348, 115)">
+                <text class="txt-label" x="0" y="0">CURRENT</text>
+                <text class="txt-value txt-cyan glow-intense" x="0" y="20" font-size="24">49°C</text>
+            </g>
+
+            <text class="txt-label" x="285" y="210" text-anchor="middle">CWU TANK</text>
+
+            <!-- Status badge -->
+            <g transform="translate(345, 170)">
+                <rect x="0" y="0" width="65" height="20" rx="10" fill="rgba(0,255,136,0.15)" stroke="rgba(0,255,136,0.4)"/>
+                <circle class="active-dot" cx="12" cy="10" r="4"/>
+                <text class="txt-value txt-green" x="22" y="14" font-size="8">HEATING</text>
+            </g>
+        </svg>
+    </div>
+</body>
+</html>

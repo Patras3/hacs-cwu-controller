@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Controller - Realistic Heat Pump</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #001428;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: sans-serif;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 420px;
+            aspect-ratio: 16/9;
+            background:
+                radial-gradient(ellipse 50% 60% at 25% 70%, rgba(0, 255, 255, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse 40% 50% at 70% 60%, rgba(255, 100, 50, 0.04) 0%, transparent 50%),
+                linear-gradient(180deg, #000810 0%, #001832 100%);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        svg { width: 100%; height: 100%; }
+
+        /* Lumina glow effects */
+        .glow-cyan {
+            filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.6))
+                    drop-shadow(0 0 14px rgba(0, 255, 255, 0.3));
+        }
+
+        .glow-cyan-strong {
+            filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.8))
+                    drop-shadow(0 0 22px rgba(0, 255, 255, 0.4));
+        }
+
+        .glow-hot {
+            filter: drop-shadow(0 0 8px rgba(255, 100, 50, 0.7))
+                    drop-shadow(0 0 18px rgba(255, 100, 50, 0.35));
+        }
+
+        .glow-green {
+            filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.7))
+                    drop-shadow(0 0 14px rgba(0, 255, 136, 0.35));
+        }
+
+        /* Heat pump wireframe */
+        .pump-wire {
+            fill: none;
+            stroke: #00FFFF;
+            stroke-width: 1.2;
+        }
+
+        .pump-wire-dim {
+            fill: none;
+            stroke: rgba(0, 255, 255, 0.3);
+            stroke-width: 0.8;
+        }
+
+        .pump-fill {
+            fill: rgba(0, 255, 255, 0.02);
+        }
+
+        /* Fan rotation */
+        .fan-blades {
+            animation: rotateFan 1s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes rotateFan {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Flow animation */
+        .pipe-bg {
+            fill: none;
+            stroke: rgba(60, 80, 100, 0.15);
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+
+        .flow {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 18 12;
+        }
+
+        .flow-hot {
+            stroke: #FF6432;
+            animation: flowAnim 0.5s linear infinite;
+        }
+
+        .flow-cold {
+            stroke: #00FFFF;
+            animation: flowAnimReverse 0.5s linear infinite;
+        }
+
+        @keyframes flowAnim {
+            to { stroke-dashoffset: -30; }
+        }
+
+        @keyframes flowAnimReverse {
+            to { stroke-dashoffset: 30; }
+        }
+
+        /* Tank styles */
+        .tank-wire {
+            fill: none;
+            stroke: #00FFFF;
+            stroke-width: 1.5;
+        }
+
+        .tank-dim {
+            fill: none;
+            stroke: rgba(0, 255, 255, 0.25);
+            stroke-width: 1;
+        }
+
+        .water {
+            fill: url(#waterGrad);
+            opacity: 0.5;
+        }
+
+        /* Breathing animation */
+        .breathe {
+            animation: breatheAnim 3s ease-in-out infinite;
+        }
+
+        @keyframes breatheAnim {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Text styles */
+        .lbl {
+            font-size: 7px;
+            fill: rgba(0, 255, 255, 0.45);
+            font-weight: bold;
+            letter-spacing: 1.2px;
+        }
+
+        .val {
+            font-weight: bold;
+            text-shadow: 0 0 4px black;
+        }
+
+        .cyan { fill: #00FFFF; }
+        .hot { fill: #FF6432; }
+        .amber { fill: #FFB800; }
+        .green { fill: #00FF88; }
+
+        /* Status dot */
+        .status-dot {
+            animation: dotPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes dotPulse {
+            0%, 100% { r: 4; opacity: 1; }
+            50% { r: 2.5; opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <svg viewBox="0 0 420 236">
+            <defs>
+                <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#FF6432" stop-opacity="0.5"/>
+                    <stop offset="50%" stop-color="#00DDFF" stop-opacity="0.55"/>
+                    <stop offset="100%" stop-color="#0066FF" stop-opacity="0.6"/>
+                </linearGradient>
+            </defs>
+
+            <!-- ========== HEAT PUMP - Realistic Outdoor Unit ========== -->
+            <g transform="translate(15, 45) scale(0.95)">
+                <!-- Main housing -->
+                <rect class="pump-wire pump-fill glow-cyan" x="0" y="0" width="100" height="130" rx="6"/>
+
+                <!-- Top ventilation grille (horizontal lines) -->
+                <g class="pump-wire-dim">
+                    <line x1="55" y1="15" x2="90" y2="15"/>
+                    <line x1="55" y1="25" x2="90" y2="25"/>
+                    <line x1="55" y1="35" x2="90" y2="35"/>
+                    <line x1="55" y1="45" x2="90" y2="45"/>
+                    <line x1="55" y1="55" x2="90" y2="55"/>
+                    <line x1="55" y1="65" x2="90" y2="65"/>
+                    <line x1="55" y1="75" x2="90" y2="75"/>
+                    <line x1="55" y1="85" x2="90" y2="85"/>
+                    <line x1="55" y1="95" x2="90" y2="95"/>
+                    <line x1="55" y1="105" x2="90" y2="105"/>
+                    <line x1="55" y1="115" x2="90" y2="115"/>
+                </g>
+
+                <!-- Fan section (left side) -->
+                <circle class="pump-wire glow-cyan-strong" cx="30" cy="55" r="38"/>
+                <circle class="pump-wire" cx="30" cy="55" r="28"/>
+                <circle class="pump-wire-dim" cx="30" cy="55" r="18"/>
+                <circle class="pump-wire-dim" cx="30" cy="55" r="8"/>
+
+                <!-- Fan protective grille (concentric arcs) -->
+                <g class="pump-wire-dim">
+                    <circle cx="30" cy="55" r="35" stroke-dasharray="12 8"/>
+                    <circle cx="30" cy="55" r="32" stroke-dasharray="8 12"/>
+                </g>
+
+                <!-- Rotating fan blades -->
+                <g class="fan-blades glow-cyan-strong" style="transform-origin: 30px 55px;">
+                    <!-- 4 main blades -->
+                    <path class="pump-wire" d="M30,20 Q42,35 30,55 Q18,35 30,20" fill="rgba(0,255,255,0.1)"/>
+                    <path class="pump-wire" d="M65,55 Q50,67 30,55 Q50,43 65,55" fill="rgba(0,255,255,0.1)"/>
+                    <path class="pump-wire" d="M30,90 Q18,75 30,55 Q42,75 30,90" fill="rgba(0,255,255,0.1)"/>
+                    <path class="pump-wire" d="M-5,55 Q10,43 30,55 Q10,67 -5,55" fill="rgba(0,255,255,0.1)"/>
+                </g>
+
+                <!-- Base/feet -->
+                <rect class="pump-wire glow-cyan" x="5" y="130" width="20" height="8" rx="2"/>
+                <rect class="pump-wire glow-cyan" x="75" y="130" width="20" height="8" rx="2"/>
+
+                <!-- Connection pipes on right side -->
+                <g transform="translate(95, 35)">
+                    <rect class="pump-wire glow-hot" x="0" y="0" width="12" height="16" rx="3" fill="rgba(255,100,50,0.1)" stroke="#FF6432"/>
+                    <text class="lbl" x="6" y="26" text-anchor="middle" style="font-size:5px;">HOT</text>
+                </g>
+                <g transform="translate(95, 80)">
+                    <rect class="pump-wire glow-cyan" x="0" y="0" width="12" height="16" rx="3" fill="rgba(0,255,255,0.1)"/>
+                    <text class="lbl" x="6" y="26" text-anchor="middle" style="font-size:5px;">COLD</text>
+                </g>
+
+                <!-- Status LED -->
+                <circle class="status-dot glow-green" cx="85" cy="8" r="4" fill="#00FF88"/>
+            </g>
+
+            <!-- Pump labels -->
+            <text class="lbl" x="60" y="195" text-anchor="middle">HEAT PUMP</text>
+            <text class="val amber" x="60" y="212" text-anchor="middle" font-size="15" style="filter: drop-shadow(0 0 8px rgba(255,184,0,0.6));">805W</text>
+
+            <!-- ========== PIPES ========== -->
+            <!-- Hot flow pipe -->
+            <path class="pipe-bg" d="M122 82 Q160 82 185 55 Q205 30 235 30"/>
+            <path class="flow flow-hot glow-hot" d="M122 82 Q160 82 185 55 Q205 30 235 30"/>
+
+            <!-- Cold return pipe -->
+            <path class="pipe-bg" d="M235 160 Q205 160 180 185 Q155 210 122 200"/>
+            <path class="flow flow-cold glow-cyan" d="M235 160 Q205 160 180 185 Q155 210 122 200"/>
+
+            <!-- Flow/Return labels -->
+            <g transform="translate(175, 18)">
+                <text class="lbl" x="0" y="0" text-anchor="middle">FLOW →</text>
+                <text class="val hot glow-hot" x="0" y="14" text-anchor="middle" font-size="14">46.0°C</text>
+            </g>
+
+            <g transform="translate(165, 220)">
+                <text class="lbl" x="0" y="0" text-anchor="middle">← RETURN</text>
+                <text class="val cyan glow-cyan" x="0" y="12" text-anchor="middle" font-size="14">45.7°C</text>
+            </g>
+
+            <!-- Delta T badge -->
+            <g transform="translate(135, 140)">
+                <rect x="-22" y="-14" width="44" height="28" rx="5" fill="rgba(0,255,136,0.08)" stroke="rgba(0,255,136,0.35)" stroke-width="1"/>
+                <text class="lbl" x="0" y="-3" text-anchor="middle" style="fill:rgba(0,255,136,0.6);">ΔT</text>
+                <text class="val green" x="0" y="11" text-anchor="middle" font-size="12" style="filter: drop-shadow(0 0 6px rgba(0,255,136,0.5));">+0.3°C</text>
+            </g>
+
+            <!-- ========== CWU TANK - Realistic Water Heater ========== -->
+            <g transform="translate(235, 15)">
+                <!-- Tank body - vertical cylinder -->
+                <ellipse class="tank-dim breathe" cx="50" cy="12" rx="42" ry="12"/>
+                <rect class="tank-wire pump-fill glow-cyan" x="8" y="12" width="84" height="170" rx="2"/>
+                <ellipse class="tank-wire glow-cyan-strong" cx="50" cy="182" rx="42" ry="12"/>
+
+                <!-- Middle indicator ring -->
+                <ellipse class="tank-dim breathe" cx="50" cy="95" rx="42" ry="12" stroke-dasharray="10 8"/>
+
+                <!-- Water level (approx 70%) -->
+                <clipPath id="waterClipTank">
+                    <rect x="10" y="55" width="80" height="127"/>
+                    <ellipse cx="50" cy="182" rx="40" ry="11"/>
+                </clipPath>
+                <g clip-path="url(#waterClipTank)">
+                    <rect class="water" x="8" y="55" width="84" height="140"/>
+                </g>
+
+                <!-- Input/output pipes -->
+                <g transform="translate(-5, 30)">
+                    <rect class="pump-wire glow-hot" x="0" y="0" width="15" height="12" rx="3" fill="rgba(255,100,50,0.15)" stroke="#FF6432"/>
+                </g>
+                <g transform="translate(-5, 150)">
+                    <rect class="pump-wire glow-cyan" x="0" y="0" width="15" height="12" rx="3" fill="rgba(0,255,255,0.1)"/>
+                </g>
+
+                <!-- Temperature probe indicator -->
+                <line class="tank-dim" x1="92" y1="60" x2="100" y2="60"/>
+                <line class="tank-dim" x1="92" y1="120" x2="100" y2="120"/>
+
+                <!-- Pressure relief valve (top) -->
+                <rect class="tank-dim" x="70" y="2" width="8" height="12" rx="2"/>
+            </g>
+
+            <!-- Tank labels -->
+            <g transform="translate(345, 30)">
+                <text class="lbl" x="0" y="0">TARGET</text>
+                <text class="val amber" x="0" y="22" font-size="26" style="filter: drop-shadow(0 0 12px rgba(255,184,0,0.6));">55°C</text>
+            </g>
+
+            <g transform="translate(345, 105)">
+                <text class="lbl" x="0" y="0">CURRENT</text>
+                <text class="val cyan glow-cyan-strong" x="0" y="22" font-size="26">49°C</text>
+            </g>
+
+            <text class="lbl" x="285" y="210" text-anchor="middle">CWU TANK</text>
+
+            <!-- Status badge -->
+            <g transform="translate(340, 165)">
+                <rect x="0" y="0" width="70" height="24" rx="12" fill="rgba(0,255,136,0.12)" stroke="rgba(0,255,136,0.4)" stroke-width="1"/>
+                <circle class="status-dot" cx="14" cy="12" r="4" fill="#00FF88" style="filter: drop-shadow(0 0 6px rgba(0,255,136,0.8));"/>
+                <text class="val green" x="26" y="16" font-size="9" style="letter-spacing:1px;">HEATING</text>
+            </g>
+
+            <!-- Outside temp -->
+            <g transform="translate(400, 210)">
+                <text class="lbl" x="0" y="0" text-anchor="end">OUTSIDE</text>
+                <text class="val" x="0" y="12" text-anchor="end" font-size="12" fill="#60A5FA" style="filter: drop-shadow(0 0 5px rgba(96,165,250,0.5));">-1.1°C</text>
+            </g>
+        </svg>
+    </div>
+</body>
+</html>

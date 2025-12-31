@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Tank - True Helix Coil</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00FFFF;
+            --cyan-glow: rgba(0, 255, 255, 0.6);
+            --cyan-dim: rgba(0, 255, 255, 0.25);
+            --hot: #FF5533;
+            --hot-glow: rgba(255, 85, 51, 0.6);
+            --cold: #0088FF;
+            --cold-glow: rgba(0, 136, 255, 0.5);
+            --bg: #000a14;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--cyan);
+        }
+
+        h1 {
+            text-align: center;
+            font-family: 'Oxanium', sans-serif;
+            font-weight: 300;
+            font-size: 18px;
+            letter-spacing: 6px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: linear-gradient(180deg, #001428 0%, #000a14 100%);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(0,255,255,0.12);
+        }
+
+        .card h3 {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+            color: rgba(0,255,255,0.5);
+        }
+
+        .card.wide { grid-column: span 2; }
+        @media (max-width: 700px) { .card.wide { grid-column: span 1; } }
+
+        svg { width: 100%; height: 320px; }
+        .card.wide svg { height: 340px; }
+
+        /* Wireframe */
+        .w { fill: none; stroke: var(--cyan); stroke-width: 1.5; }
+        .w-bright { fill: none; stroke: var(--cyan); stroke-width: 2; filter: drop-shadow(0 0 4px var(--cyan-glow)) drop-shadow(0 0 10px var(--cyan-glow)); }
+        .w-dim { fill: none; stroke: var(--cyan-dim); stroke-width: 1; }
+
+        /* Helix coil */
+        .helix {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .helix-front {
+            stroke: url(#helixGrad);
+            filter: drop-shadow(0 0 4px var(--hot-glow)) drop-shadow(0 0 8px rgba(255,100,50,0.3));
+        }
+
+        .helix-back {
+            stroke: url(#helixGrad);
+            opacity: 0.25;
+        }
+
+        /* Flow animation */
+        .helix-flow {
+            stroke-dasharray: 15 10;
+            animation: helixFlow 1.2s linear infinite;
+        }
+
+        @keyframes helixFlow {
+            to { stroke-dashoffset: -25; }
+        }
+
+        /* Pipe connections */
+        .pipe-hot {
+            fill: none;
+            stroke: var(--hot);
+            stroke-width: 4;
+            filter: drop-shadow(0 0 4px var(--hot-glow));
+        }
+
+        .pipe-cold {
+            fill: none;
+            stroke: var(--cold);
+            stroke-width: 4;
+            filter: drop-shadow(0 0 4px var(--cold-glow));
+        }
+
+        .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 8px;
+            fill: rgba(0,255,255,0.5);
+            letter-spacing: 1px;
+        }
+        .label-hot { fill: var(--hot); }
+        .label-cold { fill: var(--cold); }
+        .label-value {
+            font-family: 'Oxanium', sans-serif;
+            font-weight: 600;
+            fill: var(--cyan);
+        }
+
+        .pulse { animation: pulse 2.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+    </style>
+</head>
+<body>
+    <h1>CWU TANK — TRUE HELIX COIL</h1>
+
+    <svg style="position:absolute;width:0;height:0;">
+        <defs>
+            <!-- Gradient for helix: hot at top → cold at bottom -->
+            <linearGradient id="helixGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF5533"/>
+                <stop offset="25%" stop-color="#FF7744"/>
+                <stop offset="50%" stop-color="#DDAA44"/>
+                <stop offset="75%" stop-color="#44AADD"/>
+                <stop offset="100%" stop-color="#0088FF"/>
+            </linearGradient>
+
+            <!-- Water gradient -->
+            <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF5533" stop-opacity="0.35"/>
+                <stop offset="40%" stop-color="#CC8844" stop-opacity="0.25"/>
+                <stop offset="70%" stop-color="#44AADD" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#0066FF" stop-opacity="0.35"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <div class="grid">
+
+        <!-- TANK A: True Helix - Front view -->
+        <div class="card">
+            <h3>A — HELIX COIL (FRONT)</h3>
+            <svg viewBox="0 0 220 300">
+                <!-- Tank body -->
+                <ellipse class="w-dim pulse" cx="110" cy="25" rx="60" ry="15"/>
+                <line class="w-bright" x1="50" y1="25" x2="50" y2="265"/>
+                <line class="w-bright" x1="170" y1="25" x2="170" y2="265"/>
+                <ellipse class="w-bright" cx="110" cy="265" rx="60" ry="15"/>
+
+                <!-- Water -->
+                <clipPath id="clip1">
+                    <path d="M52,40 L52,265 A60,15 0 0,0 168,265 L168,40 A60,15 0 0,1 52,40"/>
+                </clipPath>
+                <rect x="50" y="40" width="120" height="240" fill="url(#waterGrad)" clip-path="url(#clip1)"/>
+
+                <!-- HELIX - Back part (behind water, dimmer) -->
+                <path class="helix helix-back" d="
+                    M65,50
+                    C65,58 155,58 155,66
+                    C155,74 65,74 65,82
+                    C65,90 155,90 155,98
+                    C155,106 65,106 65,114
+                    C65,122 155,122 155,130
+                    C155,138 65,138 65,146
+                    C65,154 155,154 155,162
+                    C155,170 65,170 65,178
+                    C65,186 155,186 155,194
+                    C155,202 65,202 65,210
+                    C65,218 155,218 155,226
+                    C155,234 65,234 65,242
+                "/>
+
+                <!-- HELIX - Front part (visible, animated) -->
+                <path class="helix helix-front helix-flow" d="
+                    M65,50
+                    C65,58 155,58 155,66
+                    C155,74 65,74 65,82
+                    C65,90 155,90 155,98
+                    C155,106 65,106 65,114
+                    C65,122 155,122 155,130
+                    C155,138 65,138 65,146
+                    C65,154 155,154 155,162
+                    C155,170 65,170 65,178
+                    C65,186 155,186 155,194
+                    C155,202 65,202 65,210
+                    C65,218 155,218 155,226
+                    C155,234 65,234 65,242
+                "/>
+
+                <!-- Input pipe -->
+                <path class="pipe-hot" d="M35,45 L65,50"/>
+                <text class="label label-hot" x="15" y="38">FLOW</text>
+                <text class="label label-hot" x="15" y="50">46°C</text>
+
+                <!-- Output pipe -->
+                <path class="pipe-cold" d="M65,242 L35,247"/>
+                <text class="label label-cold" x="15" y="240">RETURN</text>
+                <text class="label label-cold" x="15" y="252">45°C</text>
+
+                <!-- Hot out -->
+                <rect x="172" y="40" width="12" height="10" rx="2" fill="rgba(255,85,51,0.15)" class="w" style="stroke:var(--hot);"/>
+                <text class="label" x="188" y="47">HOT</text>
+
+                <!-- Cold in -->
+                <rect x="172" y="248" width="12" height="10" rx="2" fill="rgba(0,136,255,0.15)" class="w" style="stroke:var(--cold);"/>
+                <text class="label" x="188" y="255">COLD</text>
+
+                <!-- Sensor -->
+                <g transform="translate(172, 272)">
+                    <line class="w-bright" x1="0" y1="0" x2="12" y2="0"/>
+                    <circle class="w" cx="16" cy="0" r="4" fill="rgba(0,255,255,0.1)"/>
+                    <text class="label-value" x="26" y="3" font-size="9">49°C</text>
+                </g>
+            </svg>
+        </div>
+
+        <!-- TANK B: Helix with 3D perspective -->
+        <div class="card">
+            <h3>B — HELIX COIL (3D PERSPECTIVE)</h3>
+            <svg viewBox="0 0 220 300">
+                <!-- Tank body - slight 3D -->
+                <ellipse class="w-dim pulse" cx="105" cy="22" rx="55" ry="14"/>
+
+                <!-- 3D depth -->
+                <line class="w-dim" x1="160" y1="22" x2="172" y2="14"/>
+                <line class="w-dim" x1="172" y1="14" x2="172" y2="256"/>
+                <line class="w-dim" x1="160" y1="264" x2="172" y2="256"/>
+
+                <line class="w-bright" x1="50" y1="22" x2="50" y2="264"/>
+                <line class="w-bright" x1="160" y1="22" x2="160" y2="264"/>
+                <ellipse class="w-bright" cx="105" cy="264" rx="55" ry="14"/>
+
+                <!-- Water -->
+                <clipPath id="clip2">
+                    <path d="M52,36 L52,264 A55,14 0 0,0 158,264 L158,36 A55,14 0 0,1 52,36"/>
+                </clipPath>
+                <rect x="50" y="36" width="110" height="242" fill="url(#waterGrad)" clip-path="url(#clip2)"/>
+
+                <!-- HELIX - True continuous spiral with perspective -->
+                <!-- Back (dimmer) -->
+                <path class="helix helix-back" d="
+                    M60,45
+                    Q105,35 150,55
+                    Q105,75 60,65
+                    Q105,55 150,85
+                    Q105,105 60,95
+                    Q105,85 150,115
+                    Q105,135 60,125
+                    Q105,115 150,145
+                    Q105,165 60,155
+                    Q105,145 150,175
+                    Q105,195 60,185
+                    Q105,175 150,205
+                    Q105,225 60,215
+                    Q105,205 150,235
+                "/>
+
+                <!-- Front (bright, animated) -->
+                <path class="helix helix-front helix-flow" d="
+                    M60,45
+                    Q105,35 150,55
+                    Q105,75 60,65
+                    Q105,55 150,85
+                    Q105,105 60,95
+                    Q105,85 150,115
+                    Q105,135 60,125
+                    Q105,115 150,145
+                    Q105,165 60,155
+                    Q105,145 150,175
+                    Q105,195 60,185
+                    Q105,175 150,205
+                    Q105,225 60,215
+                    Q105,205 150,235
+                "/>
+
+                <!-- Input -->
+                <path class="pipe-hot" d="M35,40 L60,45"/>
+                <text class="label label-hot" x="10" y="35">46°C →</text>
+
+                <!-- Output -->
+                <path class="pipe-cold" d="M150,235 L175,240"/>
+                <text class="label label-cold" x="180" y="243">→ 45°C</text>
+
+                <!-- Connections & sensor -->
+                <rect x="162" y="38" width="10" height="8" rx="2" fill="rgba(255,85,51,0.1)" class="w" style="stroke:var(--hot);"/>
+                <rect x="162" y="250" width="10" height="8" rx="2" fill="rgba(0,136,255,0.1)" class="w" style="stroke:var(--cold);"/>
+
+                <g transform="translate(162, 272)">
+                    <line class="w" x1="0" y1="0" x2="10" y2="0"/>
+                    <circle class="w-bright" cx="14" cy="0" r="3" fill="rgba(0,255,255,0.1)"/>
+                    <text class="label-value" x="22" y="2" font-size="8">49°C</text>
+                </g>
+
+                <!-- Zone labels -->
+                <text class="label" x="40" y="55" style="fill:rgba(255,85,51,0.5)">HOT</text>
+                <text class="label" x="40" y="140" style="fill:rgba(200,150,80,0.4)">WARM</text>
+                <text class="label" x="40" y="225" style="fill:rgba(0,136,255,0.5)">COLD</text>
+            </svg>
+        </div>
+
+        <!-- TANK C: Complete system with helix -->
+        <div class="card wide">
+            <h3>C — COMPLETE SYSTEM (HELIX)</h3>
+            <svg viewBox="0 0 520 320">
+                <g transform="translate(100, 15)">
+                    <!-- Tank -->
+                    <ellipse class="w-dim pulse" cx="95" cy="20" rx="70" ry="17"/>
+
+                    <!-- 3D -->
+                    <line class="w-dim" x1="165" y1="20" x2="178" y2="10"/>
+                    <line class="w-dim" x1="178" y1="10" x2="178" y2="270"/>
+                    <line class="w-dim" x1="165" y1="280" x2="178" y2="270"/>
+
+                    <line class="w-bright" x1="25" y1="20" x2="25" y2="280"/>
+                    <line class="w-bright" x1="165" y1="20" x2="165" y2="280"/>
+                    <ellipse class="w-bright" cx="95" cy="280" rx="70" ry="17"/>
+
+                    <!-- Water -->
+                    <clipPath id="clip3">
+                        <path d="M27,37 L27,280 A70,17 0 0,0 163,280 L163,37 A70,17 0 0,1 27,37"/>
+                    </clipPath>
+                    <rect x="25" y="37" width="140" height="260" fill="url(#waterGrad)" clip-path="url(#clip3)"/>
+
+                    <!-- TRUE HELIX COIL -->
+                    <path class="helix helix-back" d="
+                        M40,50
+                        Q95,35 150,60
+                        Q95,85 40,70
+                        Q95,55 150,90
+                        Q95,115 40,100
+                        Q95,85 150,120
+                        Q95,145 40,130
+                        Q95,115 150,150
+                        Q95,175 40,160
+                        Q95,145 150,180
+                        Q95,205 40,190
+                        Q95,175 150,210
+                        Q95,235 40,220
+                        Q95,205 150,240
+                        Q95,265 40,250
+                    " stroke-width="5"/>
+
+                    <path class="helix helix-front helix-flow" d="
+                        M40,50
+                        Q95,35 150,60
+                        Q95,85 40,70
+                        Q95,55 150,90
+                        Q95,115 40,100
+                        Q95,85 150,120
+                        Q95,145 40,130
+                        Q95,115 150,150
+                        Q95,175 40,160
+                        Q95,145 150,180
+                        Q95,205 40,190
+                        Q95,175 150,210
+                        Q95,235 40,220
+                        Q95,205 150,240
+                        Q95,265 40,250
+                    " stroke-width="5"/>
+
+                    <!-- Pipes -->
+                    <path class="pipe-hot" d="M10,45 L40,50" stroke-width="5"/>
+                    <path class="pipe-cold" d="M40,250 L10,255" stroke-width="5"/>
+
+                    <!-- Hot/Cold water connections -->
+                    <rect x="168" y="42" width="14" height="12" rx="3" fill="rgba(255,85,51,0.12)" class="w" style="stroke:var(--hot);"/>
+                    <rect x="168" y="260" width="14" height="12" rx="3" fill="rgba(0,136,255,0.12)" class="w" style="stroke:var(--cold);"/>
+
+                    <!-- Sensor -->
+                    <g transform="translate(168, 290)">
+                        <line class="w-bright" x1="0" y1="0" x2="16" y2="0"/>
+                        <rect class="w" x="16" y="-5" width="12" height="10" rx="2" fill="rgba(0,255,255,0.1)"/>
+                        <text class="label-value" x="22" y="2" text-anchor="middle" font-size="7">T</text>
+                    </g>
+                </g>
+
+                <!-- Left labels -->
+                <g transform="translate(15, 55)">
+                    <text class="label label-hot" font-size="9">HP FLOW</text>
+                    <text class="label-value label-hot" y="14" font-size="14">46°C</text>
+                    <text class="label" y="26" style="opacity:0.4">→</text>
+                </g>
+
+                <g transform="translate(15, 255)">
+                    <text class="label label-cold" font-size="9">HP RETURN</text>
+                    <text class="label-value label-cold" y="14" font-size="14">45°C</text>
+                    <text class="label" y="26" style="opacity:0.4">←</text>
+                </g>
+
+                <!-- Right labels -->
+                <g transform="translate(300, 60)">
+                    <text class="label">HOT OUT → taps</text>
+                </g>
+                <g transform="translate(300, 280)">
+                    <text class="label">COLD IN ← mains</text>
+                </g>
+                <g transform="translate(300, 305)">
+                    <text class="label">SENSOR:</text>
+                    <text class="label-value" x="55" y="0" font-size="11">49°C</text>
+                </g>
+
+                <!-- Temperature scale -->
+                <g transform="translate(68, 55)">
+                    <line class="w-dim" x1="0" y1="0" x2="0" y2="245"/>
+                    <line class="w-dim" x1="-4" y1="0" x2="4" y2="0"/>
+                    <line class="w-dim" x1="-4" y1="122" x2="4" y2="122"/>
+                    <line class="w-dim" x1="-4" y1="245" x2="4" y2="245"/>
+                    <text class="label" x="-8" y="4" text-anchor="end" style="fill:rgba(255,85,51,0.7)">55°C</text>
+                    <text class="label" x="-8" y="126" text-anchor="end" style="fill:rgba(200,150,80,0.5)">50°C</text>
+                    <text class="label" x="-8" y="249" text-anchor="end" style="fill:rgba(0,136,255,0.7)">45°C</text>
+                </g>
+
+                <!-- Status panels -->
+                <g transform="translate(380, 40)">
+                    <rect x="0" y="0" width="120" height="85" rx="8" fill="rgba(0,30,60,0.5)" stroke="rgba(0,255,255,0.15)"/>
+                    <text class="label" x="60" y="18" text-anchor="middle">TARGET</text>
+                    <text x="60" y="42" text-anchor="middle" font-family="Oxanium" font-size="24" font-weight="600" fill="#FFB800" style="filter: drop-shadow(0 0 8px rgba(255,184,0,0.5));">55°C</text>
+                    <line x1="15" y1="52" x2="105" y2="52" stroke="rgba(0,255,255,0.1)"/>
+                    <text class="label" x="60" y="66" text-anchor="middle">CURRENT</text>
+                    <text x="60" y="82" text-anchor="middle" font-family="Oxanium" font-size="18" font-weight="600" fill="var(--cyan)" style="filter: drop-shadow(0 0 6px var(--cyan-glow));">49°C</text>
+                </g>
+
+                <g transform="translate(380, 140)">
+                    <rect x="0" y="0" width="120" height="50" rx="6" fill="rgba(0,50,40,0.4)" stroke="rgba(0,255,136,0.2)"/>
+                    <text class="label" x="60" y="18" text-anchor="middle" style="fill:rgba(0,255,136,0.6);">COIL ΔT</text>
+                    <text x="60" y="40" text-anchor="middle" font-family="Oxanium" font-size="18" font-weight="600" fill="#00FF88" style="filter: drop-shadow(0 0 5px rgba(0,255,136,0.5));">+1.0°C</text>
+                </g>
+
+                <g transform="translate(380, 205)">
+                    <rect x="0" y="0" width="120" height="50" rx="6" fill="rgba(60,40,0,0.3)" stroke="rgba(255,184,0,0.2)"/>
+                    <text class="label" x="60" y="18" text-anchor="middle" style="fill:rgba(255,184,0,0.6);">HP POWER</text>
+                    <text x="60" y="40" text-anchor="middle" font-family="Oxanium" font-size="18" font-weight="600" fill="#FFB800" style="filter: drop-shadow(0 0 5px rgba(255,184,0,0.5));">805W</text>
+                </g>
+
+                <g transform="translate(380, 270)">
+                    <rect x="0" y="0" width="120" height="35" rx="6" fill="rgba(0,60,40,0.3)" stroke="rgba(0,255,136,0.25)"/>
+                    <circle cx="18" cy="17" r="5" fill="#00FF88" style="filter: drop-shadow(0 0 5px rgba(0,255,136,0.6)); animation: pulse 1.5s ease-in-out infinite;"/>
+                    <text x="32" y="21" font-family="Oxanium" font-size="11" font-weight="500" fill="#00FF88">HEATING CWU</text>
+                </g>
+            </svg>
+        </div>
+
+    </div>
+</body>
+</html>

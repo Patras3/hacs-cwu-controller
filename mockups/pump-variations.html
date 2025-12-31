@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Pump Variations</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000a14;
+            min-height: 100vh;
+            padding: 20px;
+            font-family: sans-serif;
+            color: #00FFFF;
+        }
+        h1 {
+            text-align: center;
+            font-size: 14px;
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .pump-card {
+            background: linear-gradient(180deg, #001020 0%, #001832 100%);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(0,255,255,0.15);
+        }
+        .pump-card h3 {
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-align: center;
+            margin-bottom: 10px;
+            color: rgba(0,255,255,0.6);
+        }
+        svg { width: 100%; height: 160px; }
+
+        /* Shared styles */
+        .glow { filter: drop-shadow(0 0 5px rgba(0,255,255,0.5)) drop-shadow(0 0 12px rgba(0,255,255,0.25)); }
+        .glow-s { filter: drop-shadow(0 0 8px rgba(0,255,255,0.7)) drop-shadow(0 0 18px rgba(0,255,255,0.35)); }
+        .w { fill: none; stroke: #00FFFF; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        .w-d { fill: none; stroke: rgba(0,255,255,0.25); stroke-width: 1; }
+        .w-b { fill: none; stroke: #00FFFF; stroke-width: 2; }
+        .f { fill: rgba(0,255,255,0.02); }
+
+        .fan { animation: spin 1s linear infinite; transform-origin: center; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .pulse { animation: p 2s ease-in-out infinite; }
+        @keyframes p { 0%,100% { opacity: 0.3; } 50% { opacity: 0.7; } }
+    </style>
+</head>
+<body>
+    <h1>HEAT PUMP UNIT VARIATIONS</h1>
+    <div class="grid">
+
+        <!-- VARIANT 1: Simple Front View -->
+        <div class="pump-card">
+            <h3>1. SIMPLE FRONT</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 10)">
+                    <!-- Box -->
+                    <rect class="w f glow" x="0" y="0" width="100" height="120" rx="6"/>
+
+                    <!-- Big fan -->
+                    <circle class="w glow-s" cx="50" cy="55" r="40"/>
+                    <circle class="w" cx="50" cy="55" r="30"/>
+                    <circle class="w-d" cx="50" cy="55" r="18"/>
+                    <circle class="w-d" cx="50" cy="55" r="6"/>
+
+                    <!-- Rotating blades -->
+                    <g class="fan glow-s" style="transform-origin: 50px 55px;">
+                        <line class="w-b" x1="50" y1="20" x2="50" y2="90"/>
+                        <line class="w-b" x1="15" y1="55" x2="85" y2="55"/>
+                        <line class="w" x1="25" y1="30" x2="75" y2="80"/>
+                        <line class="w" x1="75" y1="30" x2="25" y2="80"/>
+                    </g>
+
+                    <!-- Bottom vent -->
+                    <line class="w-d" x1="20" y1="105" x2="80" y2="105"/>
+                    <line class="w-d" x1="20" y1="110" x2="80" y2="110"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 2: Dual Fan -->
+        <div class="pump-card">
+            <h3>2. DUAL FAN</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 10)">
+                    <rect class="w f glow" x="0" y="0" width="100" height="120" rx="6"/>
+
+                    <!-- Top fan -->
+                    <circle class="w glow" cx="50" cy="35" r="25"/>
+                    <circle class="w-d" cx="50" cy="35" r="15"/>
+                    <g class="fan" style="transform-origin: 50px 35px;">
+                        <line class="w glow-s" x1="50" y1="14" x2="50" y2="56"/>
+                        <line class="w glow-s" x1="29" y1="35" x2="71" y2="35"/>
+                    </g>
+
+                    <!-- Bottom fan -->
+                    <circle class="w glow" cx="50" cy="85" r="25"/>
+                    <circle class="w-d" cx="50" cy="85" r="15"/>
+                    <g class="fan" style="transform-origin: 50px 85px; animation-delay: -0.5s;">
+                        <line class="w glow-s" x1="50" y1="64" x2="50" y2="106"/>
+                        <line class="w glow-s" x1="29" y1="85" x2="71" y2="85"/>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 3: Side Profile 3D -->
+        <div class="pump-card">
+            <h3>3. 3D PERSPECTIVE</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(8, 15)">
+                    <!-- 3D box -->
+                    <polygon class="f" points="0,15 85,15 85,115 0,115" stroke="#00FFFF" stroke-width="1.5"/>
+                    <polygon class="w-d f" points="0,15 15,0 100,0 85,15"/>
+                    <polygon class="w-d f" points="85,15 100,0 100,100 85,115"/>
+
+                    <!-- Front edges glow -->
+                    <line class="w glow" x1="0" y1="15" x2="0" y2="115"/>
+                    <line class="w glow" x1="0" y1="115" x2="85" y2="115"/>
+                    <line class="w glow" x1="85" y1="15" x2="85" y2="115"/>
+
+                    <!-- Elliptical fan (3D perspective) -->
+                    <ellipse class="w glow-s" cx="42" cy="60" rx="32" ry="38"/>
+                    <ellipse class="w" cx="42" cy="60" rx="22" ry="26"/>
+                    <ellipse class="w-d" cx="42" cy="60" rx="10" ry="12"/>
+
+                    <!-- Blades -->
+                    <g class="fan glow-s" style="transform-origin: 42px 60px;">
+                        <ellipse class="w" cx="42" cy="28" rx="4" ry="10"/>
+                        <ellipse class="w" cx="42" cy="92" rx="4" ry="10"/>
+                        <ellipse class="w" cx="16" cy="60" rx="8" ry="4"/>
+                        <ellipse class="w" cx="68" cy="60" rx="8" ry="4"/>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 4: Industrial -->
+        <div class="pump-card">
+            <h3>4. INDUSTRIAL</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 10)">
+                    <!-- Heavy frame -->
+                    <rect class="w-b f glow" x="0" y="0" width="100" height="120" rx="3"/>
+                    <rect class="w-d" x="5" y="5" width="90" height="110" rx="2"/>
+
+                    <!-- Fan housing -->
+                    <circle class="w glow-s" cx="50" cy="50" r="35"/>
+                    <circle class="w-d pulse" cx="50" cy="50" r="38" stroke-dasharray="8 4"/>
+
+                    <!-- Heavy blades -->
+                    <g class="fan" style="transform-origin: 50px 50px;">
+                        <path class="w glow-s" d="M50,18 L42,50 L50,50 Z" fill="rgba(0,255,255,0.1)"/>
+                        <path class="w glow-s" d="M50,82 L58,50 L50,50 Z" fill="rgba(0,255,255,0.1)"/>
+                        <path class="w glow-s" d="M18,50 L50,42 L50,50 Z" fill="rgba(0,255,255,0.1)"/>
+                        <path class="w glow-s" d="M82,50 L50,58 L50,50 Z" fill="rgba(0,255,255,0.1)"/>
+                    </g>
+                    <circle class="w glow" cx="50" cy="50" r="8" fill="rgba(0,255,255,0.1)"/>
+
+                    <!-- Control panel -->
+                    <rect class="w-d" x="20" y="95" width="60" height="20" rx="2"/>
+                    <circle class="w-d" cx="35" cy="105" r="4"/>
+                    <circle class="w-d" cx="50" cy="105" r="4"/>
+                    <circle class="w-d" cx="65" cy="105" r="4"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 5: Compact Unit -->
+        <div class="pump-card">
+            <h3>5. COMPACT UNIT</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 20)">
+                    <!-- Rounded body -->
+                    <rect class="w f glow" x="10" y="0" width="80" height="100" rx="15"/>
+
+                    <!-- Central fan -->
+                    <circle class="w glow-s" cx="50" cy="45" r="32"/>
+                    <circle class="w" cx="50" cy="45" r="22"/>
+                    <circle class="w-d" cx="50" cy="45" r="10"/>
+
+                    <!-- Blade petals -->
+                    <g class="fan glow" style="transform-origin: 50px 45px;">
+                        <path class="w" d="M50,18 Q60,30 50,45 Q40,30 50,18" fill="rgba(0,255,255,0.05)"/>
+                        <path class="w" d="M50,72 Q40,60 50,45 Q60,60 50,72" fill="rgba(0,255,255,0.05)"/>
+                        <path class="w" d="M23,45 Q35,35 50,45 Q35,55 23,45" fill="rgba(0,255,255,0.05)"/>
+                        <path class="w" d="M77,45 Q65,55 50,45 Q65,35 77,45" fill="rgba(0,255,255,0.05)"/>
+                    </g>
+
+                    <!-- Base -->
+                    <rect class="w glow" x="20" y="100" width="20" height="8" rx="2"/>
+                    <rect class="w glow" x="60" y="100" width="20" height="8" rx="2"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 6: Split System Outdoor -->
+        <div class="pump-card">
+            <h3>6. SPLIT SYSTEM</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(5, 10)">
+                    <!-- Wide unit -->
+                    <rect class="w f glow" x="0" y="20" width="110" height="90" rx="5"/>
+
+                    <!-- Top grille -->
+                    <rect class="w-d f" x="5" y="0" width="100" height="20" rx="3"/>
+                    <g class="w-d">
+                        <line x1="15" y1="5" x2="95" y2="5"/>
+                        <line x1="15" y1="10" x2="95" y2="10"/>
+                        <line x1="15" y1="15" x2="95" y2="15"/>
+                    </g>
+
+                    <!-- Fan left -->
+                    <circle class="w glow" cx="35" cy="65" r="28"/>
+                    <g class="fan glow-s" style="transform-origin: 35px 65px;">
+                        <line class="w-b" x1="35" y1="40" x2="35" y2="90"/>
+                        <line class="w-b" x1="10" y1="65" x2="60" y2="65"/>
+                    </g>
+
+                    <!-- Compressor section right -->
+                    <rect class="w-d" x="70" y="30" width="35" height="70" rx="3"/>
+                    <g class="w-d">
+                        <line x1="75" y1="40" x2="100" y2="40"/>
+                        <line x1="75" y1="50" x2="100" y2="50"/>
+                        <line x1="75" y1="60" x2="100" y2="60"/>
+                        <line x1="75" y1="70" x2="100" y2="70"/>
+                        <line x1="75" y1="80" x2="100" y2="80"/>
+                        <line x1="75" y1="90" x2="100" y2="90"/>
+                    </g>
+
+                    <!-- Pipes -->
+                    <circle class="w glow" cx="90" cy="115" r="5"/>
+                    <circle class="w-d" cx="78" cy="115" r="4"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 7: Tower Style -->
+        <div class="pump-card">
+            <h3>7. TOWER STYLE</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(25, 5)">
+                    <!-- Tall unit -->
+                    <rect class="w f glow" x="0" y="0" width="70" height="125" rx="8"/>
+
+                    <!-- Top fan -->
+                    <circle class="w glow-s" cx="35" cy="35" r="25"/>
+                    <circle class="w-d" cx="35" cy="35" r="15"/>
+                    <g class="fan" style="transform-origin: 35px 35px;">
+                        <line class="w-b glow-s" x1="35" y1="14" x2="35" y2="56"/>
+                        <line class="w-b glow-s" x1="14" y1="35" x2="56" y2="35"/>
+                        <line class="w" x1="20" y1="20" x2="50" y2="50"/>
+                        <line class="w" x1="50" y1="20" x2="20" y2="50"/>
+                    </g>
+
+                    <!-- Middle section -->
+                    <line class="w-d" x1="10" y1="68" x2="60" y2="68"/>
+
+                    <!-- Vents -->
+                    <g class="w-d">
+                        <line x1="10" y1="78" x2="60" y2="78"/>
+                        <line x1="10" y1="88" x2="60" y2="88"/>
+                        <line x1="10" y1="98" x2="60" y2="98"/>
+                        <line x1="10" y1="108" x2="60" y2="108"/>
+                    </g>
+
+                    <!-- Base -->
+                    <rect class="w glow" x="5" y="125" width="15" height="6" rx="1"/>
+                    <rect class="w glow" x="50" y="125" width="15" height="6" rx="1"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 8: Monoblock -->
+        <div class="pump-card">
+            <h3>8. MONOBLOCK</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 15)">
+                    <!-- Main body with rounded top -->
+                    <path class="w f glow" d="M5,30 Q5,5 50,5 Q95,5 95,30 L95,110 L5,110 Z"/>
+
+                    <!-- Fan area -->
+                    <circle class="w glow-s" cx="50" cy="50" r="30"/>
+                    <circle class="w" cx="50" cy="50" r="20"/>
+
+                    <!-- 3-blade fan -->
+                    <g class="fan glow" style="transform-origin: 50px 50px;">
+                        <path class="w-b" d="M50,23 Q58,35 50,50" fill="none"/>
+                        <path class="w-b" d="M50,77 Q42,65 50,50" fill="none"/>
+                        <path class="w-b" d="M27,58 Q38,52 50,50" fill="none"/>
+                        <path class="w-b" d="M73,42 Q62,48 50,50" fill="none"/>
+                        <circle class="w glow-s" cx="50" cy="50" r="6" fill="rgba(0,255,255,0.1)"/>
+                    </g>
+
+                    <!-- Bottom section -->
+                    <line class="w-d" x1="15" y1="88" x2="85" y2="88"/>
+                    <rect class="w-d" x="25" y="92" width="50" height="12" rx="2"/>
+
+                    <!-- Connection -->
+                    <circle class="w glow" cx="50" cy="98" r="4"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 9: High-End Design -->
+        <div class="pump-card">
+            <h3>9. PREMIUM</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 10)">
+                    <!-- Sleek body -->
+                    <rect class="w f glow" x="0" y="0" width="100" height="120" rx="10"/>
+                    <rect class="w-d" x="4" y="4" width="92" height="112" rx="8"/>
+
+                    <!-- Large decorative fan ring -->
+                    <circle class="w-d pulse" cx="50" cy="55" r="42" stroke-dasharray="4 4"/>
+                    <circle class="w glow-s" cx="50" cy="55" r="36"/>
+                    <circle class="w" cx="50" cy="55" r="26"/>
+                    <circle class="w-d" cx="50" cy="55" r="14"/>
+
+                    <!-- Elegant blades -->
+                    <g class="fan" style="transform-origin: 50px 55px;">
+                        <path class="w glow-s" d="M50,22 Q65,38 50,55 Q35,38 50,22" fill="rgba(0,255,255,0.06)"/>
+                        <path class="w glow-s" d="M50,88 Q35,72 50,55 Q65,72 50,88" fill="rgba(0,255,255,0.06)"/>
+                        <path class="w glow-s" d="M17,55 Q33,40 50,55 Q33,70 17,55" fill="rgba(0,255,255,0.06)"/>
+                        <path class="w glow-s" d="M83,55 Q67,70 50,55 Q67,40 83,55" fill="rgba(0,255,255,0.06)"/>
+                    </g>
+                    <circle class="w glow" cx="50" cy="55" r="5" fill="rgba(0,255,255,0.15)"/>
+
+                    <!-- Status bar -->
+                    <rect class="w-d" x="20" y="102" width="60" height="8" rx="4"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 10: Realistic Daikin Style -->
+        <div class="pump-card">
+            <h3>10. REALISTIC</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(8, 8)">
+                    <!-- Main body -->
+                    <rect class="w f glow" x="0" y="0" width="105" height="115" rx="4"/>
+
+                    <!-- Fan section (left 60%) -->
+                    <rect class="w-d f" x="5" y="5" width="60" height="105" rx="2"/>
+
+                    <!-- Fan with grille -->
+                    <circle class="w glow-s" cx="35" cy="55" r="38"/>
+                    <circle class="w-d pulse" cx="35" cy="55" r="42" stroke-dasharray="6 3"/>
+                    <circle class="w" cx="35" cy="55" r="28"/>
+                    <circle class="w-d" cx="35" cy="55" r="16"/>
+                    <circle class="w-d" cx="35" cy="55" r="5"/>
+
+                    <!-- Grille pattern -->
+                    <g class="w-d" style="opacity:0.4">
+                        <circle cx="35" cy="55" r="34" stroke-dasharray="3 5"/>
+                        <circle cx="35" cy="55" r="31" stroke-dasharray="3 5"/>
+                    </g>
+
+                    <!-- Blades -->
+                    <g class="fan glow" style="transform-origin: 35px 55px;">
+                        <line class="w-b" x1="35" y1="22" x2="35" y2="88"/>
+                        <line class="w-b" x1="2" y1="55" x2="68" y2="55"/>
+                        <line class="w" x1="12" y1="32" x2="58" y2="78"/>
+                        <line class="w" x1="58" y1="32" x2="12" y2="78"/>
+                    </g>
+
+                    <!-- Right panel (vents) -->
+                    <g class="w-d">
+                        <line x1="72" y1="12" x2="98" y2="12"/>
+                        <line x1="72" y1="22" x2="98" y2="22"/>
+                        <line x1="72" y1="32" x2="98" y2="32"/>
+                        <line x1="72" y1="42" x2="98" y2="42"/>
+                        <line x1="72" y1="52" x2="98" y2="52"/>
+                        <line x1="72" y1="62" x2="98" y2="62"/>
+                        <line x1="72" y1="72" x2="98" y2="72"/>
+                        <line x1="72" y1="82" x2="98" y2="82"/>
+                        <line x1="72" y1="92" x2="98" y2="92"/>
+                        <line x1="72" y1="102" x2="98" y2="102"/>
+                    </g>
+
+                    <!-- Feet -->
+                    <rect class="w glow" x="8" y="115" width="22" height="7" rx="1"/>
+                    <rect class="w glow" x="75" y="115" width="22" height="7" rx="1"/>
+
+                    <!-- Brand plate -->
+                    <rect class="w-d" x="75" y="5" width="22" height="5" rx="1"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 11: Minimalist Icon -->
+        <div class="pump-card">
+            <h3>11. MINIMALIST</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(15, 15)">
+                    <!-- Simple square -->
+                    <rect class="w-b f glow-s" x="0" y="0" width="90" height="100" rx="8"/>
+
+                    <!-- One big fan -->
+                    <circle class="w-b glow-s" cx="45" cy="50" r="38"/>
+
+                    <!-- Simple cross blades -->
+                    <g class="fan glow-s" style="transform-origin: 45px 50px;">
+                        <line class="w-b" x1="45" y1="15" x2="45" y2="85" stroke-width="3"/>
+                        <line class="w-b" x1="10" y1="50" x2="80" y2="50" stroke-width="3"/>
+                    </g>
+
+                    <!-- Center dot -->
+                    <circle cx="45" cy="50" r="4" fill="#00FFFF" class="glow-s"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- VARIANT 12: Futuristic -->
+        <div class="pump-card">
+            <h3>12. FUTURISTIC</h3>
+            <svg viewBox="0 0 120 140">
+                <g transform="translate(10, 10)">
+                    <!-- Hexagonal body -->
+                    <polygon class="w f glow" points="50,0 95,25 95,95 50,120 5,95 5,25"/>
+
+                    <!-- Inner hex -->
+                    <polygon class="w-d" points="50,15 82,33 82,87 50,105 18,87 18,33"/>
+
+                    <!-- Turbine fan -->
+                    <circle class="w glow-s" cx="50" cy="60" r="32"/>
+                    <circle class="w" cx="50" cy="60" r="22"/>
+                    <circle class="w-d" cx="50" cy="60" r="10"/>
+
+                    <!-- 6 curved blades -->
+                    <g class="fan glow" style="transform-origin: 50px 60px;">
+                        <path class="w" d="M50,30 Q62,45 50,60"/>
+                        <path class="w" d="M75,45 Q62,55 50,60"/>
+                        <path class="w" d="M75,75 Q62,65 50,60"/>
+                        <path class="w" d="M50,90 Q38,75 50,60"/>
+                        <path class="w" d="M25,75 Q38,65 50,60"/>
+                        <path class="w" d="M25,45 Q38,55 50,60"/>
+                    </g>
+
+                    <!-- Center glow -->
+                    <circle cx="50" cy="60" r="5" fill="#00FFFF" class="glow-s"/>
+                </g>
+            </svg>
+        </div>
+
+    </div>
+</body>
+</html>

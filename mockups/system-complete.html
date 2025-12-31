@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Pump System - Complete</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00FFFF;
+            --cyan-glow: rgba(0, 255, 255, 0.6);
+            --cyan-dim: rgba(0, 255, 255, 0.25);
+            --hot: #FF5533;
+            --hot-glow: rgba(255, 85, 51, 0.6);
+            --warm1: #FF7744;
+            --warm2: #FFAA44;
+            --warm3: #DDCC44;
+            --cool1: #88CC66;
+            --cool2: #55BBAA;
+            --cool3: #44AADD;
+            --cold: #0088FF;
+            --cold-glow: rgba(0, 136, 255, 0.5);
+            --bg: #000a14;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--cyan);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-family: 'Oxanium', sans-serif;
+            font-weight: 300;
+            font-size: 16px;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: rgba(0, 255, 255, 0.05);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: var(--cyan);
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            letter-spacing: 2px;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: var(--cyan);
+        }
+
+        .btn.active {
+            background: rgba(0, 255, 255, 0.15);
+            border-color: var(--cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+
+        #btn-defrost.active {
+            background: rgba(136, 221, 255, 0.2);
+            border-color: #88DDFF;
+            box-shadow: 0 0 15px rgba(136, 221, 255, 0.4);
+            color: #88DDFF;
+        }
+
+        .system-container {
+            background: linear-gradient(180deg, #001428 0%, #000a14 100%);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid rgba(0,255,255,0.12);
+            max-width: 520px;
+            width: 100%;
+        }
+
+        svg { width: 100%; height: auto; }
+
+        /* Wireframe styles */
+        .w { fill: none; stroke: var(--cyan); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+        .w-bright { fill: none; stroke: var(--cyan); stroke-width: 2; filter: drop-shadow(0 0 4px var(--cyan-glow)) drop-shadow(0 0 10px var(--cyan-glow)); }
+        .w-dim { fill: none; stroke: var(--cyan-dim); stroke-width: 1; }
+        .f { fill: rgba(0, 20, 40, 0.7); }
+        .glow { filter: drop-shadow(0 0 6px var(--cyan-glow)); }
+        .glow-s { filter: drop-shadow(0 0 4px var(--cyan-glow)); }
+
+        /* Fan animation - speed based on power */
+        :root {
+            --fan-speed: 1.5s; /* Default: ~1.5kW */
+        }
+        .fan { animation: spin var(--fan-speed) linear infinite; }
+        .fan.off { animation: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Power badge */
+        .power-badge {
+            fill: rgba(0, 20, 40, 0.9);
+            stroke: var(--cyan);
+            stroke-width: 1;
+        }
+        .power-value {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            fill: var(--cyan);
+            filter: drop-shadow(0 0 4px var(--cyan-glow));
+        }
+        .power-unit {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 7px;
+            fill: rgba(0,255,255,0.6);
+        }
+
+        /* Defrost mode */
+        .defrost-indicator {
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        body.defrost .defrost-indicator { opacity: 1; }
+
+        .defrost-icon {
+            fill: #88DDFF;
+            filter: drop-shadow(0 0 4px rgba(136,221,255,0.8));
+            animation: defrostPulse 1s ease-in-out infinite;
+        }
+        @keyframes defrostPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Reverse flow animation in defrost */
+        body.defrost .pipe-flow {
+            animation-direction: reverse;
+        }
+        body.defrost .helix-flow {
+            animation-direction: reverse;
+        }
+        body.defrost .floor-pipe {
+            animation-direction: reverse;
+        }
+        body.defrost .fan {
+            animation-direction: reverse;
+        }
+
+        /* Ice crystals animation */
+        .ice-crystal {
+            fill: none;
+            stroke: #88DDFF;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 3px rgba(136,221,255,0.6));
+        }
+        .ice-float {
+            animation: iceFloat 2s ease-in-out infinite;
+        }
+        .ice-float-2 { animation-delay: 0.5s; }
+        .ice-float-3 { animation-delay: 1s; }
+        @keyframes iceFloat {
+            0%, 100% { transform: translateY(0); opacity: 0.4; }
+            50% { transform: translateY(-3px); opacity: 1; }
+        }
+
+        .blade-fill {
+            fill: rgba(0, 255, 255, 0.15);
+            stroke: var(--cyan);
+            stroke-width: 1;
+        }
+
+        /* Pipes */
+        .pipe-hot {
+            fill: none;
+            stroke: var(--hot);
+            stroke-width: 5;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 6px var(--hot-glow)) drop-shadow(0 0 12px rgba(255,85,51,0.4));
+        }
+
+        .pipe-cold {
+            fill: none;
+            stroke: var(--cold);
+            stroke-width: 5;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 6px var(--cold-glow)) drop-shadow(0 0 12px rgba(0,136,255,0.4));
+        }
+
+        .pipe-flow {
+            stroke-dasharray: 12 8;
+            animation: flowAnim 0.7s linear infinite;
+        }
+
+        @keyframes flowAnim {
+            to { stroke-dashoffset: -20; }
+        }
+
+        /* Helix coil */
+        .helix {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+
+        .helix-front {
+            stroke: url(#helixGrad);
+            filter: drop-shadow(0 0 3px var(--hot-glow));
+        }
+
+        .helix-back {
+            stroke: url(#helixGrad);
+            opacity: 0.2;
+        }
+
+        .helix-flow {
+            stroke-dasharray: 12 8;
+            animation: helixFlow 1s linear infinite;
+        }
+
+        @keyframes helixFlow {
+            to { stroke-dashoffset: -20; }
+        }
+
+        /* Floor heating pipes */
+        .floor-pipe {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .fp-hot { stroke: var(--hot); filter: drop-shadow(0 0 3px var(--hot-glow)); }
+        .fp-w1 { stroke: var(--warm1); filter: drop-shadow(0 0 2px rgba(255,119,68,0.4)); }
+        .fp-w2 { stroke: var(--warm2); filter: drop-shadow(0 0 2px rgba(255,170,68,0.4)); }
+        .fp-w3 { stroke: var(--warm3); filter: drop-shadow(0 0 2px rgba(221,204,68,0.3)); }
+        .fp-c1 { stroke: var(--cool1); filter: drop-shadow(0 0 2px rgba(136,204,102,0.3)); }
+        .fp-c2 { stroke: var(--cool2); filter: drop-shadow(0 0 2px rgba(85,187,170,0.3)); }
+        .fp-c3 { stroke: var(--cool3); filter: drop-shadow(0 0 2px rgba(68,170,221,0.4)); }
+        .fp-cold { stroke: var(--cold); filter: drop-shadow(0 0 3px var(--cold-glow)); }
+
+        .floor-surface {
+            fill: rgba(0, 255, 255, 0.03);
+            stroke: var(--cyan-dim);
+            stroke-width: 1;
+        }
+
+        /* Labels */
+        .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 7px;
+            fill: rgba(0,255,255,0.5);
+            letter-spacing: 1px;
+        }
+        .label-hot { fill: var(--hot); }
+        .label-cold { fill: var(--cold); }
+        .label-value {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            fill: var(--cyan);
+        }
+        .label-title {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 8px;
+            font-weight: 400;
+            letter-spacing: 2px;
+            fill: rgba(0,255,255,0.4);
+        }
+
+        /* Temperature badge */
+        .temp-badge {
+            fill: rgba(0, 20, 40, 0.9);
+            stroke: var(--cyan);
+            stroke-width: 1;
+        }
+        .temp-badge-value {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            fill: var(--cyan);
+            filter: drop-shadow(0 0 4px var(--cyan-glow));
+        }
+        .temp-badge-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 6px;
+            fill: rgba(0,255,255,0.5);
+            letter-spacing: 1px;
+        }
+
+        /* Target temp */
+        .target-badge {
+            fill: rgba(255, 85, 51, 0.1);
+            stroke: var(--hot);
+            stroke-width: 1;
+            stroke-dasharray: 3 2;
+        }
+        .target-value {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            fill: var(--hot);
+            filter: drop-shadow(0 0 3px var(--hot-glow));
+        }
+        .target-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 6px;
+            fill: rgba(255,85,51,0.6);
+            letter-spacing: 1px;
+        }
+
+        /* Flow/Return temp badges */
+        .flow-badge {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            filter: drop-shadow(0 0 6px var(--hot-glow));
+        }
+        .return-badge {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            filter: drop-shadow(0 0 6px var(--cold-glow));
+        }
+
+        .pulse { animation: pulse 2.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+
+        /* Visibility toggle */
+        .tank-view { display: block; }
+        .floor-view { display: none; }
+
+        body.show-floor .tank-view { display: none; }
+        body.show-floor .floor-view { display: block; }
+
+        /* Connection dots */
+        .conn-hot {
+            fill: rgba(255,85,51,0.2);
+            stroke: var(--hot);
+            stroke-width: 1.5;
+        }
+        .conn-cold {
+            fill: rgba(0,136,255,0.2);
+            stroke: var(--cold);
+            stroke-width: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <h1>HEAT PUMP SYSTEM</h1>
+
+    <div class="controls">
+        <button class="btn active" id="btn-tank" onclick="showTank()">CWU TANK</button>
+        <button class="btn" id="btn-floor" onclick="showFloor()">FLOOR HEATING</button>
+        <button class="btn" id="btn-defrost" onclick="toggleDefrost()" style="margin-left:20px; border-color:rgba(136,221,255,0.5); color:#88DDFF;">DEFROST</button>
+    </div>
+
+    <div class="system-container">
+        <svg viewBox="0 0 480 310">
+            <defs>
+                <!-- Helix gradient: hot at top → cold at bottom -->
+                <linearGradient id="helixGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#FF5533"/>
+                    <stop offset="30%" stop-color="#FF7744"/>
+                    <stop offset="50%" stop-color="#DDAA44"/>
+                    <stop offset="70%" stop-color="#44AADD"/>
+                    <stop offset="100%" stop-color="#0088FF"/>
+                </linearGradient>
+
+                <!-- Water gradient -->
+                <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#FF5533" stop-opacity="0.3"/>
+                    <stop offset="40%" stop-color="#CC8844" stop-opacity="0.2"/>
+                    <stop offset="70%" stop-color="#44AADD" stop-opacity="0.2"/>
+                    <stop offset="100%" stop-color="#0066FF" stop-opacity="0.3"/>
+                </linearGradient>
+            </defs>
+
+            <!-- ==================== HEAT PUMP ==================== -->
+            <g transform="translate(15, 55)">
+                <!-- Main body -->
+                <rect class="w f glow" x="0" y="0" width="130" height="85" rx="3"/>
+
+                <!-- Fan section (left) -->
+                <rect class="w-dim f" x="3" y="3" width="75" height="79" rx="2"/>
+
+                <!-- Fan with grille -->
+                <circle class="w glow-s" cx="40" cy="42" r="34"/>
+                <circle class="w-dim pulse" cx="40" cy="42" r="38" stroke-dasharray="5 3"/>
+                <circle class="w-dim" cx="40" cy="42" r="30" stroke-dasharray="3 3" style="opacity:0.25"/>
+
+                <!-- Realistic 4-blade fan -->
+                <g class="fan glow-s" style="transform-origin: 40px 42px;">
+                    <path class="blade-fill" d="
+                        M40,42
+                        L37,32 Q28,14 38,4 Q48,3 52,12 Q54,26 44,38 Z
+                    "/>
+                    <path class="blade-fill" d="
+                        M40,42
+                        L50,39 Q68,30 78,40 Q78,50 68,54 Q52,55 44,45 Z
+                    "/>
+                    <path class="blade-fill" d="
+                        M40,42
+                        L43,52 Q52,70 42,80 Q32,81 28,72 Q26,56 36,46 Z
+                    "/>
+                    <path class="blade-fill" d="
+                        M40,42
+                        L30,45 Q12,54 2,44 Q2,34 12,30 Q28,29 36,39 Z
+                    "/>
+                    <!-- Hub -->
+                    <circle cx="40" cy="42" r="10" fill="rgba(0,12,24,0.95)" class="w glow"/>
+                    <circle cx="40" cy="42" r="6" fill="rgba(0,30,50,0.9)" class="w"/>
+                    <circle cx="40" cy="42" r="2.5" fill="#00FFFF" class="glow-s"/>
+                </g>
+
+                <!-- Power display badge -->
+                <g transform="translate(105, 42)">
+                    <rect class="power-badge" x="-18" y="-14" width="36" height="28" rx="3"
+                          filter="drop-shadow(0 0 6px var(--cyan-glow))"/>
+                    <text class="power-value" x="0" y="0" text-anchor="middle">1,8</text>
+                    <text class="power-unit" x="0" y="9" text-anchor="middle">kW</text>
+                </g>
+
+                <!-- Defrost indicator (big snowflake overlay) -->
+                <g class="defrost-indicator" transform="translate(40, 42)">
+                    <!-- Background glow circle -->
+                    <circle cx="0" cy="0" r="38" fill="rgba(136,221,255,0.08)" class="defrost-icon"/>
+
+                    <!-- Big Snowflake icon -->
+                    <g class="defrost-icon" transform="scale(1.8)">
+                        <line x1="0" y1="-12" x2="0" y2="12" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="-10" y1="-6" x2="10" y2="6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                        <line x1="-10" y1="6" x2="10" y2="-6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                        <!-- Branches -->
+                        <line x1="0" y1="-12" x2="-4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="0" y1="-12" x2="4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="0" y1="12" x2="-4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="0" y1="12" x2="4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="-10" y1="-6" x2="-7" y2="-9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="10" y1="6" x2="7" y2="9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                    </g>
+                </g>
+
+                <!-- DEFROST label below pump -->
+                <g class="defrost-indicator" transform="translate(40, 98)">
+                    <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(136,221,255,0.15)" stroke="#88DDFF" stroke-width="1"/>
+                    <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium';font-size:10px;font-weight:600;fill:#88DDFF;letter-spacing:2px;">DEFROST</text>
+                </g>
+
+                <!-- Feet -->
+                <rect class="w glow" x="10" y="85" width="25" height="6" rx="1"/>
+                <rect class="w glow" x="95" y="85" width="25" height="6" rx="1"/>
+
+                <!-- Connection ports on right side -->
+                <circle class="conn-hot" cx="130" cy="20" r="6"/>
+                <circle class="conn-cold" cx="130" cy="70" r="6"/>
+            </g>
+
+
+            <!-- ==================== CWU TANK (view 1) ==================== -->
+            <g class="tank-view" transform="translate(310, 5)">
+                <!-- Tank body -->
+                <ellipse class="w-dim pulse" cx="60" cy="15" rx="48" ry="12"/>
+                <line class="w-bright" x1="12" y1="15" x2="12" y2="215"/>
+                <line class="w-bright" x1="108" y1="15" x2="108" y2="215"/>
+                <ellipse class="w-bright" cx="60" cy="215" rx="48" ry="12"/>
+
+                <!-- Water fill -->
+                <clipPath id="tankClip">
+                    <path d="M14,28 L14,215 A48,12 0 0,0 106,215 L106,28 A48,12 0 0,1 14,28"/>
+                </clipPath>
+                <rect x="12" y="28" width="96" height="200" fill="url(#waterGrad)" clip-path="url(#tankClip)"/>
+
+                <!-- HELIX - Back -->
+                <path class="helix helix-back" d="
+                    M22,35
+                    C22,43 98,43 98,51
+                    C98,59 22,59 22,67
+                    C22,75 98,75 98,83
+                    C98,91 22,91 22,99
+                    C22,107 98,107 98,115
+                    C98,123 22,123 22,131
+                    C22,139 98,139 98,147
+                    C98,155 22,155 22,163
+                    C22,171 98,171 98,179
+                    C98,187 22,187 22,195
+                "/>
+
+                <!-- HELIX - Front (animated) -->
+                <path class="helix helix-front helix-flow" d="
+                    M22,35
+                    C22,43 98,43 98,51
+                    C98,59 22,59 22,67
+                    C22,75 98,75 98,83
+                    C98,91 22,91 22,99
+                    C22,107 98,107 98,115
+                    C98,123 22,123 22,131
+                    C22,139 98,139 98,147
+                    C98,155 22,155 22,163
+                    C22,171 98,171 98,179
+                    C98,187 22,187 22,195
+                "/>
+
+                <!-- Target temperature badge (top) -->
+                <g transform="translate(60, 5)">
+                    <rect class="target-badge" x="-24" y="-10" width="48" height="22" rx="3"/>
+                    <text class="target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
+                    <text class="target-value" x="0" y="8" text-anchor="middle">55°C</text>
+                </g>
+
+                <!-- Current temperature badge (1/3 from bottom, above helix) -->
+                <g transform="translate(60, 155)">
+                    <rect class="temp-badge" x="-28" y="-12" width="56" height="24" rx="4"
+                          filter="drop-shadow(0 0 8px var(--cyan-glow))"/>
+                    <text class="temp-badge-value" x="0" y="4" text-anchor="middle">48,7°</text>
+                </g>
+
+                <!-- CWU label at bottom -->
+                <text class="label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
+            </g>
+
+            <!-- Pipes to tank (tank view) -->
+            <g class="tank-view">
+                <!-- Hot pipe (FLOW) - from pump to top of coil -->
+                <path class="pipe-hot pipe-flow" d="
+                    M145,75
+                    L200,75
+                    L200,40
+                    L332,40
+                "/>
+                <!-- Flow temp badge (above pipe) -->
+                <rect x="200" y="12" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--hot)" stroke-width="1"/>
+                <text class="flow-badge" x="221" y="26" text-anchor="middle" fill="var(--hot)">46,2°</text>
+
+                <!-- Cold pipe (RETURN) - from bottom of coil back to pump -->
+                <path class="pipe-cold pipe-flow" d="
+                    M332,200
+                    L200,200
+                    L200,125
+                    L145,125
+                "/>
+                <!-- Return temp badge (below pipe) -->
+                <rect x="200" y="208" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--cold)" stroke-width="1"/>
+                <text class="return-badge" x="221" y="222" text-anchor="middle" fill="var(--cold)">44,8°</text>
+
+            </g>
+
+            <!-- Delta T badge (between pump ports) - CWU view -->
+            <g class="tank-view delta-badge" transform="translate(172, 100)">
+                <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--cyan)" stroke-width="1.5"/>
+                <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono';font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                <text x="0" y="9" text-anchor="middle" style="font-family:'Oxanium';font-size:12px;font-weight:600; fill:var(--cyan);">1,4°</text>
+            </g>
+
+
+            <!-- ==================== FLOOR HEATING (view 2) ==================== -->
+            <g class="floor-view" transform="translate(260, 25)">
+                <!-- Floor surface -->
+                <rect class="floor-surface" x="10" y="10" width="180" height="145" rx="4"/>
+
+                <!-- Serpentine pipe with temperature gradient -->
+                <!-- Row 1: Hottest -->
+                <path class="floor-pipe fp-hot pipe-flow" d="M20,24 L180,24"/>
+                <path class="floor-pipe fp-hot pipe-flow" d="M180,24 L180,40"/>
+                <!-- Row 2 -->
+                <path class="floor-pipe fp-w1 pipe-flow" d="M180,40 L30,40"/>
+                <path class="floor-pipe fp-w1 pipe-flow" d="M30,40 L30,56"/>
+                <!-- Row 3 -->
+                <path class="floor-pipe fp-w2 pipe-flow" d="M30,56 L180,56"/>
+                <path class="floor-pipe fp-w2 pipe-flow" d="M180,56 L180,72"/>
+                <!-- Row 4 -->
+                <path class="floor-pipe fp-w3 pipe-flow" d="M180,72 L30,72"/>
+                <path class="floor-pipe fp-w3 pipe-flow" d="M30,72 L30,88"/>
+                <!-- Row 5 -->
+                <path class="floor-pipe fp-c1 pipe-flow" d="M30,88 L180,88"/>
+                <path class="floor-pipe fp-c1 pipe-flow" d="M180,88 L180,104"/>
+                <!-- Row 6 -->
+                <path class="floor-pipe fp-c2 pipe-flow" d="M180,104 L30,104"/>
+                <path class="floor-pipe fp-c2 pipe-flow" d="M30,104 L30,120"/>
+                <!-- Row 7 -->
+                <path class="floor-pipe fp-c3 pipe-flow" d="M30,120 L180,120"/>
+                <path class="floor-pipe fp-c3 pipe-flow" d="M180,120 L180,136"/>
+                <!-- Row 8: Coldest -->
+                <path class="floor-pipe fp-cold pipe-flow" d="M180,136 L30,136"/>
+                <path class="floor-pipe fp-cold pipe-flow" d="M30,136 L30,145 L20,145"/>
+
+                <!-- Connection points -->
+                <circle class="conn-hot" cx="20" cy="24" r="5"/>
+                <circle class="conn-cold" cx="20" cy="145" r="5"/>
+
+                <!-- Label -->
+                <text class="label" x="100" y="168" text-anchor="middle" style="font-size:9px; letter-spacing:2px;">PODŁOGOWE</text>
+            </g>
+
+            <!-- Pipes to floor (floor view) -->
+            <g class="floor-view">
+                <!-- Hot pipe (FLOW) -->
+                <path class="pipe-hot pipe-flow" d="
+                    M145,75
+                    L200,75
+                    L200,49
+                    L280,49
+                "/>
+                <!-- Flow temp badge (above horizontal pipe, like CWU) -->
+                <rect x="200" y="25" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--hot)" stroke-width="1"/>
+                <text class="flow-badge" x="221" y="39" text-anchor="middle" fill="var(--hot)">34,5°</text>
+
+                <!-- Cold pipe (RETURN) -->
+                <path class="pipe-cold pipe-flow" d="
+                    M280,170
+                    L220,170
+                    L220,125
+                    L145,125
+                "/>
+                <!-- Return temp badge (at 90° bend, below horizontal) -->
+                <rect x="215" y="178" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--cold)" stroke-width="1"/>
+                <text class="return-badge" x="236" y="192" text-anchor="middle" fill="var(--cold)">29,3°</text>
+
+            </g>
+
+            <!-- Delta T badge (between pump ports) - Floor view -->
+            <g class="floor-view delta-badge" transform="translate(172, 100)">
+                <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--cyan)" stroke-width="1.5"/>
+                <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono';font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                <text x="0" y="9" text-anchor="middle" style="font-family:'Oxanium';font-size:12px;font-weight:600; fill:var(--cyan);">5,2°</text>
+            </g>
+
+            <!-- Status section at bottom -->
+            <g transform="translate(20, 252)">
+                <!-- DHW Status (tank view) -->
+                <g class="tank-view">
+                    <text x="0" y="0" style="font-family:'Oxanium';font-size:9px;font-weight:600;fill:var(--hot);letter-spacing:2px;">DHW:</text>
+                    <text x="40" y="0" style="font-family:'IBM Plex Mono';font-size:8px;fill:rgba(0,255,255,0.8);">Charged, nominal temperature</text>
+                </g>
+
+                <!-- HC1 Status (floor view) -->
+                <g class="floor-view">
+                    <text x="0" y="0" style="font-family:'Oxanium';font-size:9px;font-weight:600;fill:var(--warm1);letter-spacing:2px;">HC1:</text>
+                    <text x="40" y="0" style="font-family:'IBM Plex Mono';font-size:8px;fill:rgba(0,255,255,0.8);">Warmer function active</text>
+                </g>
+
+                <!-- HP Status (always visible) -->
+                <g transform="translate(0, 16)">
+                    <text x="0" y="0" style="font-family:'Oxanium';font-size:9px;font-weight:600;fill:var(--cyan);letter-spacing:2px;">HP:</text>
+                    <text x="40" y="0" style="font-family:'IBM Plex Mono';font-size:8px;fill:rgba(0,255,255,0.8);">Compressor 1 on</text>
+                </g>
+            </g>
+
+        </svg>
+    </div>
+
+    <script>
+        function showTank() {
+            document.body.classList.remove('show-floor');
+            document.getElementById('btn-tank').classList.add('active');
+            document.getElementById('btn-floor').classList.remove('active');
+        }
+
+        function showFloor() {
+            document.body.classList.add('show-floor');
+            document.getElementById('btn-floor').classList.add('active');
+            document.getElementById('btn-tank').classList.remove('active');
+        }
+
+        function toggleDefrost() {
+            document.body.classList.toggle('defrost');
+            document.getElementById('btn-defrost').classList.toggle('active');
+        }
+
+        function setDefrost(enabled) {
+            if (enabled) {
+                document.body.classList.add('defrost');
+                document.getElementById('btn-defrost').classList.add('active');
+            } else {
+                document.body.classList.remove('defrost');
+                document.getElementById('btn-defrost').classList.remove('active');
+            }
+        }
+
+        // Fan speed based on power (Watts)
+        // 0W = stopped, 100W = very slow, 500W = slow, 1000W = medium, 2000W+ = fast
+        function setPower(watts) {
+            const fan = document.querySelector('.fan');
+            const powerValue = document.querySelector('.power-value');
+            const powerUnit = document.querySelector('.power-unit');
+
+            // Format power: W if < 1000, kW otherwise
+            if (watts >= 1000) {
+                const kW = watts / 1000;
+                powerValue.textContent = kW.toFixed(1).replace('.', ',');
+                powerUnit.textContent = 'kW';
+            } else {
+                powerValue.textContent = Math.round(watts);
+                powerUnit.textContent = 'W';
+            }
+
+            if (watts === 0) {
+                fan.classList.add('off');
+            } else {
+                fan.classList.remove('off');
+                // Speed formula: faster rotation with higher power
+                // 100W = 8s, 500W = 4s, 1000W = 2s, 2000W = 1s, 3000W = 0.6s
+                const speed = Math.max(0.5, 2000 / watts);
+                document.documentElement.style.setProperty('--fan-speed', speed + 's');
+            }
+        }
+
+        // Initialize with current power
+        setPower(1800); // 1.8 kW
+
+        // Demo: click on power badge to cycle through values
+        document.querySelector('.power-badge').parentElement.style.cursor = 'pointer';
+        document.querySelector('.power-badge').parentElement.addEventListener('click', function() {
+            const powers = [0, 10, 80, 200, 500, 800, 1200, 1800, 2500, 3000];
+            const current = parseInt(document.querySelector('.power-value').textContent.replace(',', '.') *
+                (document.querySelector('.power-unit').textContent === 'kW' ? 1000 : 1));
+            const idx = powers.findIndex(p => p >= current);
+            const next = powers[(idx + 1) % powers.length];
+            setPower(next);
+        });
+    </script>
+</body>
+</html>

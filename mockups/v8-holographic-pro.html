@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Controller - Holographic System View</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan-primary: #00f0ff;
+            --cyan-glow: rgba(0, 240, 255, 0.8);
+            --cyan-dim: rgba(0, 180, 220, 0.4);
+            --orange-hot: #ff6b35;
+            --orange-glow: rgba(255, 107, 53, 0.8);
+            --amber-target: #ffb800;
+            --green-active: #00ff88;
+            --green-glow: rgba(0, 255, 136, 0.6);
+            --bg-deep: #050a0f;
+            --bg-mid: #0a1218;
+            --bg-surface: rgba(10, 20, 30, 0.9);
+            --grid-line: rgba(0, 200, 255, 0.06);
+            --text-dim: rgba(255, 255, 255, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-deep);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            overflow: hidden;
+        }
+
+        /* Main container */
+        .holo-card {
+            position: relative;
+            width: 100%;
+            max-width: 420px;
+            aspect-ratio: 16/9;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 90%, rgba(0, 240, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(255, 107, 53, 0.05) 0%, transparent 50%),
+                linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 100%);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            box-shadow:
+                0 0 60px rgba(0, 240, 255, 0.1),
+                0 0 100px rgba(0, 240, 255, 0.05),
+                inset 0 0 80px rgba(0, 240, 255, 0.02);
+        }
+
+        /* Animated grid background */
+        .grid-layer {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: radial-gradient(ellipse 100% 80% at 50% 100%, black 20%, transparent 70%);
+            animation: gridPulse 4s ease-in-out infinite;
+        }
+
+        @keyframes gridPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Scan lines overlay */
+        .scanlines {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(0, 240, 255, 0.015) 2px,
+                rgba(0, 240, 255, 0.015) 4px
+            );
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        /* Noise texture */
+        .noise {
+            position: absolute;
+            inset: 0;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 51;
+        }
+
+        /* Header */
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            z-index: 10;
+        }
+
+        .title-block {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .title-icon {
+            width: 28px;
+            height: 28px;
+            border: 1.5px solid var(--cyan-primary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 240, 255, 0.1);
+            box-shadow:
+                0 0 12px rgba(0, 240, 255, 0.3),
+                inset 0 0 8px rgba(0, 240, 255, 0.1);
+        }
+
+        .title-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: var(--cyan-primary);
+            filter: drop-shadow(0 0 4px var(--cyan-glow));
+        }
+
+        .title-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--cyan-primary);
+            letter-spacing: 3px;
+            text-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.4);
+            border-radius: 20px;
+            padding: 5px 12px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--green-active);
+            border-radius: 50%;
+            box-shadow: 0 0 12px var(--green-glow);
+            animation: statusPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        .status-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--green-active);
+            letter-spacing: 1px;
+            text-shadow: 0 0 8px var(--green-glow);
+        }
+
+        /* Main SVG */
+        .system-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Wireframe styles */
+        .wire {
+            fill: none;
+            stroke: var(--cyan-primary);
+            stroke-width: 1.2;
+            filter: drop-shadow(0 0 3px var(--cyan-glow));
+        }
+
+        .wire-bright {
+            fill: none;
+            stroke: var(--cyan-primary);
+            stroke-width: 1.8;
+            filter: drop-shadow(0 0 6px var(--cyan-glow)) drop-shadow(0 0 12px var(--cyan-glow));
+        }
+
+        .wire-dim {
+            fill: none;
+            stroke: var(--cyan-dim);
+            stroke-width: 0.8;
+        }
+
+        .wire-fill {
+            fill: rgba(0, 200, 255, 0.04);
+            stroke: var(--cyan-primary);
+            stroke-width: 1;
+        }
+
+        .wire-orange {
+            fill: none;
+            stroke: var(--orange-hot);
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 4px var(--orange-glow));
+        }
+
+        /* Pipe flow animations */
+        .pipe-base {
+            fill: none;
+            stroke: rgba(100, 120, 140, 0.2);
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .flow-hot {
+            fill: none;
+            stroke: var(--orange-hot);
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 8 14;
+            filter: drop-shadow(0 0 6px var(--orange-glow)) drop-shadow(0 0 12px var(--orange-glow));
+            animation: flowForward 0.8s linear infinite;
+        }
+
+        .flow-cold {
+            fill: none;
+            stroke: var(--cyan-primary);
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 8 14;
+            filter: drop-shadow(0 0 6px var(--cyan-glow)) drop-shadow(0 0 12px var(--cyan-glow));
+            animation: flowBackward 0.8s linear infinite;
+        }
+
+        @keyframes flowForward {
+            from { stroke-dashoffset: 22; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowBackward {
+            from { stroke-dashoffset: -22; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Rotating compressor */
+        .compressor-blades {
+            animation: rotateBlade 1.2s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes rotateBlade {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Water level animation */
+        .water-fill {
+            fill: url(#waterGradient);
+            opacity: 0.7;
+            animation: waterPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes waterPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 0.85; }
+        }
+
+        /* Text labels */
+        .label-sm {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 7px;
+            font-weight: 500;
+            fill: var(--text-dim);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .label-md {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 8px;
+            font-weight: 600;
+            fill: rgba(255, 255, 255, 0.6);
+            letter-spacing: 2px;
+        }
+
+        .value-lg {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+        }
+
+        .value-cyan {
+            fill: var(--cyan-primary);
+            filter: drop-shadow(0 0 8px var(--cyan-glow));
+        }
+
+        .value-orange {
+            fill: var(--orange-hot);
+            filter: drop-shadow(0 0 8px var(--orange-glow));
+        }
+
+        .value-amber {
+            fill: var(--amber-target);
+            filter: drop-shadow(0 0 8px rgba(255, 184, 0, 0.6));
+        }
+
+        .value-green {
+            fill: var(--green-active);
+            filter: drop-shadow(0 0 8px var(--green-glow));
+        }
+
+        /* Data box */
+        .data-box {
+            fill: rgba(5, 10, 20, 0.85);
+            stroke: rgba(0, 240, 255, 0.3);
+            stroke-width: 0.5;
+            rx: 3;
+        }
+
+        .data-box-hot {
+            stroke: rgba(255, 107, 53, 0.4);
+        }
+
+        /* Active indicator */
+        .active-ring {
+            fill: none;
+            stroke: var(--green-active);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 6px var(--green-glow));
+            animation: ringPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes ringPulse {
+            0%, 100% { stroke-opacity: 1; }
+            50% { stroke-opacity: 0.4; }
+        }
+
+        /* Bottom info bar */
+        .info-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 12px;
+            background: linear-gradient(180deg, transparent 0%, rgba(5, 10, 20, 0.9) 40%);
+            z-index: 10;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 7px;
+            color: var(--text-dim);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .info-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .info-value.cyan { color: var(--cyan-primary); text-shadow: 0 0 12px var(--cyan-glow); }
+        .info-value.orange { color: var(--orange-hot); text-shadow: 0 0 12px var(--orange-glow); }
+        .info-value.green { color: var(--green-active); text-shadow: 0 0 12px var(--green-glow); }
+        .info-value.amber { color: var(--amber-target); text-shadow: 0 0 12px rgba(255, 184, 0, 0.6); }
+
+        /* Corner decorations */
+        .corner-deco {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: rgba(0, 240, 255, 0.3);
+            border-style: solid;
+        }
+
+        .corner-tl { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
+        .corner-tr { top: 4px; right: 4px; border-width: 2px 2px 0 0; }
+        .corner-bl { bottom: 4px; left: 4px; border-width: 0 0 2px 2px; }
+        .corner-br { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
+
+        /* Particle system */
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--cyan-primary);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--cyan-glow);
+            animation: particleFloat 4s ease-in-out infinite;
+            opacity: 0;
+        }
+
+        .particle:nth-child(1) { left: 15%; top: 60%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 25%; top: 70%; animation-delay: 0.8s; }
+        .particle:nth-child(3) { left: 35%; top: 55%; animation-delay: 1.6s; }
+        .particle:nth-child(4) { left: 45%; top: 65%; animation-delay: 2.4s; }
+
+        @keyframes particleFloat {
+            0% { opacity: 0; transform: translateY(0) scale(0.5); }
+            20% { opacity: 0.8; }
+            80% { opacity: 0.8; }
+            100% { opacity: 0; transform: translateY(-30px) scale(1.2); }
+        }
+
+        /* Floor coils inactive */
+        .floor-inactive {
+            opacity: 0.25;
+        }
+    </style>
+</head>
+<body>
+    <div class="holo-card">
+        <!-- Layers -->
+        <div class="grid-layer"></div>
+        <div class="scanlines"></div>
+        <div class="noise"></div>
+
+        <!-- Corner decorations -->
+        <div class="corner-deco corner-tl"></div>
+        <div class="corner-deco corner-tr"></div>
+        <div class="corner-deco corner-bl"></div>
+        <div class="corner-deco corner-br"></div>
+
+        <!-- Floating particles -->
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+
+        <!-- Header -->
+        <div class="header">
+            <div class="title-block">
+                <div class="title-icon">
+                    <svg viewBox="0 0 24 24"><path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18Z"/></svg>
+                </div>
+                <span class="title-text">CWU CONTROLLER</span>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                <span class="status-text">HEATING CWU</span>
+            </div>
+        </div>
+
+        <!-- Main SVG System -->
+        <svg class="system-svg" viewBox="0 0 420 236" preserveAspectRatio="xMidYMid meet">
+            <defs>
+                <!-- Water gradient -->
+                <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:0.5"/>
+                    <stop offset="50%" style="stop-color:#00c8ff;stop-opacity:0.6"/>
+                    <stop offset="100%" style="stop-color:#00f0ff;stop-opacity:0.7"/>
+                </linearGradient>
+
+                <!-- Glow filter -->
+                <filter id="glowStrong" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3" result="blur"/>
+                    <feMerge>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+
+            <!-- ============ HEAT PUMP UNIT ============ -->
+            <g id="pump" transform="translate(32, 70)">
+                <!-- 3D Box - Back edges -->
+                <line class="wire-dim" x1="15" y1="0" x2="15" y2="85"/>
+                <line class="wire-dim" x1="15" y1="0" x2="0" y2="12"/>
+                <line class="wire-dim" x1="15" y1="0" x2="80" y2="0"/>
+
+                <!-- 3D Box - Main faces -->
+                <rect class="wire-fill" x="0" y="12" width="80" height="90" rx="4"/>
+                <polygon class="wire-dim" points="0,12 80,12 95,0 15,0" fill="rgba(0,200,255,0.02)"/>
+                <polygon class="wire-dim" points="80,12 95,0 95,85 80,102" fill="rgba(0,200,255,0.02)"/>
+
+                <!-- Compressor rings -->
+                <circle class="wire-bright" cx="40" cy="50" r="28"/>
+                <circle class="wire" cx="40" cy="50" r="20"/>
+                <circle class="wire-dim" cx="40" cy="50" r="12"/>
+                <circle class="wire-dim" cx="40" cy="50" r="5"/>
+
+                <!-- Rotating blades -->
+                <g class="compressor-blades" transform="translate(40, 50)">
+                    <line class="wire-bright" x1="0" y1="-24" x2="0" y2="24"/>
+                    <line class="wire-bright" x1="-24" y1="0" x2="24" y2="0"/>
+                    <line class="wire" x1="-17" y1="-17" x2="17" y2="17"/>
+                    <line class="wire" x1="17" y1="-17" x2="-17" y2="17"/>
+                </g>
+
+                <!-- Connection ports -->
+                <rect class="wire-orange" x="75" y="30" width="10" height="14" rx="2"/>
+                <rect class="wire" x="75" y="65" width="10" height="14" rx="2"/>
+
+                <!-- Active indicator ring -->
+                <circle class="active-ring" cx="85" cy="8" r="6"/>
+                <circle fill="var(--green-active)" cx="85" cy="8" r="3" style="filter: drop-shadow(0 0 4px var(--green-glow));"/>
+
+                <!-- Label -->
+                <text class="label-md" x="40" y="118" text-anchor="middle">HEAT PUMP</text>
+            </g>
+
+            <!-- Power display near pump -->
+            <g transform="translate(32, 195)">
+                <rect class="data-box" x="0" y="0" width="55" height="22" rx="3"/>
+                <text class="label-sm" x="27" y="9" text-anchor="middle">POWER</text>
+                <text class="value-lg value-amber" x="27" y="19" text-anchor="middle" font-size="11">805W</text>
+            </g>
+
+            <!-- Delta T display -->
+            <g transform="translate(95, 195)">
+                <rect class="data-box" x="0" y="0" width="50" height="22" rx="3" style="stroke: rgba(0,255,136,0.4);"/>
+                <text class="label-sm" x="25" y="9" text-anchor="middle">ΔT</text>
+                <text class="value-lg value-green" x="25" y="19" text-anchor="middle" font-size="11">+0.3°</text>
+            </g>
+
+            <!-- ============ PIPES ============ -->
+            <!-- Hot Flow Pipe -->
+            <g id="pipe-hot">
+                <path class="pipe-base" d="M117 100 Q155 100 175 75 Q195 50 230 50"/>
+                <path class="flow-hot" d="M117 100 Q155 100 175 75 Q195 50 230 50"/>
+            </g>
+
+            <!-- Cold Return Pipe -->
+            <g id="pipe-cold">
+                <path class="pipe-base" d="M230 150 Q195 150 175 175 Q155 200 117 190"/>
+                <path class="flow-cold" d="M230 150 Q195 150 175 175 Q155 200 117 190"/>
+            </g>
+
+            <!-- Flow temperature label -->
+            <g transform="translate(160, 48)">
+                <rect class="data-box data-box-hot" x="-28" y="-12" width="58" height="22" rx="3"/>
+                <text class="label-sm" x="1" y="-4" text-anchor="middle" style="font-size:6px;">FLOW →</text>
+                <text class="value-lg value-orange" x="1" y="7" text-anchor="middle" font-size="12">46.0°C</text>
+            </g>
+
+            <!-- Return temperature label -->
+            <g transform="translate(160, 200)">
+                <rect class="data-box" x="-28" y="-12" width="58" height="22" rx="3"/>
+                <text class="label-sm" x="1" y="-4" text-anchor="middle" style="font-size:6px;">← RETURN</text>
+                <text class="value-lg value-cyan" x="1" y="7" text-anchor="middle" font-size="12">45.7°C</text>
+            </g>
+
+            <!-- ============ CWU TANK ============ -->
+            <g id="tank" transform="translate(230, 35)">
+                <!-- 3D Cylinder -->
+                <!-- Top ellipse -->
+                <ellipse class="wire-dim" cx="55" cy="8" rx="50" ry="8"/>
+
+                <!-- Cylinder body -->
+                <path class="wire-fill" d="M5,8 L5,152 A50,8 0 0,0 105,152 L105,8" fill="rgba(0,200,255,0.03)"/>
+                <line class="wire" x1="5" y1="8" x2="5" y2="152"/>
+                <line class="wire" x1="105" y1="8" x2="105" y2="152"/>
+
+                <!-- Bottom ellipse -->
+                <ellipse class="wire-bright" cx="55" cy="152" rx="50" ry="8"/>
+
+                <!-- Middle section indicator -->
+                <ellipse class="wire-dim" cx="55" cy="80" rx="50" ry="8" stroke-dasharray="6 4"/>
+
+                <!-- Water level (70% full) -->
+                <clipPath id="waterClip">
+                    <path d="M5,50 L5,152 A50,8 0 0,0 105,152 L105,50 A50,8 0 0,1 5,50"/>
+                </clipPath>
+                <rect class="water-fill" x="5" y="50" width="100" height="110" clip-path="url(#waterClip)"/>
+
+                <!-- Temperature scale -->
+                <g transform="translate(-12, 0)">
+                    <line class="wire-dim" x1="0" y1="20" x2="0" y2="145"/>
+                    <line class="wire-dim" x1="-5" y1="20" x2="5" y2="20"/>
+                    <line class="wire-dim" x1="-5" y1="82" x2="5" y2="82"/>
+                    <line class="wire-dim" x1="-5" y1="145" x2="5" y2="145"/>
+                </g>
+
+                <!-- Target temp (top) -->
+                <g transform="translate(115, 15)">
+                    <text class="label-sm" x="0" y="0">TARGET</text>
+                    <text class="value-lg value-amber" x="0" y="16" font-size="20">55°C</text>
+                </g>
+
+                <!-- Current temp (middle) -->
+                <g transform="translate(115, 90)">
+                    <text class="label-sm" x="0" y="0">CURRENT</text>
+                    <text class="value-lg value-cyan" x="0" y="16" font-size="20">49°C</text>
+                </g>
+
+                <!-- Tank label -->
+                <text class="label-md" x="55" y="175" text-anchor="middle">CWU TANK</text>
+
+                <!-- Active indicator -->
+                <circle class="active-ring" cx="100" cy="15" r="5"/>
+                <circle fill="var(--green-active)" cx="100" cy="15" r="2.5" style="filter: drop-shadow(0 0 4px var(--green-glow));"/>
+            </g>
+
+            <!-- ============ FLOOR HEATING (Inactive) ============ -->
+            <g id="floor" class="floor-inactive" transform="translate(345, 140)">
+                <!-- Coil pattern -->
+                <path class="wire-dim" d="M0,0 L50,0 L50,10 L5,10 L5,20 L50,20 L50,30 L0,30" stroke-dasharray="4 3"/>
+
+                <!-- Connection stub -->
+                <line class="wire-dim" x1="-15" y1="15" x2="0" y2="15"/>
+
+                <text class="label-sm" x="25" y="45" text-anchor="middle" style="opacity:0.5;">FLOOR</text>
+            </g>
+
+            <!-- Pipe to floor (inactive) -->
+            <path class="pipe-base" d="M335 100 Q350 100 355 115 Q360 130 355 145" style="stroke: rgba(80,80,80,0.15);"/>
+
+            <!-- Outside temperature -->
+            <g transform="translate(385, 35)">
+                <text class="label-sm" x="0" y="0" text-anchor="end">OUTSIDE</text>
+                <text class="value-lg" x="0" y="14" text-anchor="end" font-size="13" fill="#60a5fa" style="filter: drop-shadow(0 0 6px rgba(96,165,250,0.5));">-1.1°C</text>
+            </g>
+        </svg>
+
+        <!-- Bottom info bar -->
+        <div class="info-bar">
+            <div class="info-item">
+                <div class="info-label">Power</div>
+                <div class="info-value amber">805W</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Flow</div>
+                <div class="info-value orange">46.0°C</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Return</div>
+                <div class="info-value cyan">45.7°C</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">ΔT</div>
+                <div class="info-value green">+0.3°C</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

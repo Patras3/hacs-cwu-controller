@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floor Heating - Improved Gradient</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00FFFF;
+            --cyan-glow: rgba(0, 255, 255, 0.6);
+            --cyan-dim: rgba(0, 255, 255, 0.25);
+            --hot: #FF5533;
+            --hot-glow: rgba(255, 85, 51, 0.6);
+            --warm1: #FF7744;
+            --warm2: #FFAA44;
+            --warm3: #DDCC44;
+            --cool1: #88CC66;
+            --cool2: #55BBAA;
+            --cool3: #44AADD;
+            --cold: #0088FF;
+            --cold-glow: rgba(0, 136, 255, 0.5);
+            --bg: #000a14;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 20px;
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--cyan);
+        }
+
+        h1 {
+            text-align: center;
+            font-family: 'Oxanium', sans-serif;
+            font-weight: 300;
+            font-size: 18px;
+            letter-spacing: 6px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: linear-gradient(180deg, #001428 0%, #000a14 100%);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(0,255,255,0.12);
+        }
+
+        .card h3 {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+            color: rgba(0,255,255,0.5);
+        }
+
+        svg { width: 100%; height: 240px; }
+
+        /* Floor surface */
+        .floor-surface {
+            fill: rgba(0, 255, 255, 0.03);
+            stroke: var(--cyan-dim);
+            stroke-width: 1;
+        }
+
+        /* Pipe segments with individual colors */
+        .pipe {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .p-hot {
+            stroke: var(--hot);
+            filter: drop-shadow(0 0 4px var(--hot-glow)) drop-shadow(0 0 8px rgba(255,85,51,0.3));
+        }
+        .p-w1 {
+            stroke: var(--warm1);
+            filter: drop-shadow(0 0 3px rgba(255,119,68,0.5));
+        }
+        .p-w2 {
+            stroke: var(--warm2);
+            filter: drop-shadow(0 0 3px rgba(255,170,68,0.5));
+        }
+        .p-w3 {
+            stroke: var(--warm3);
+            filter: drop-shadow(0 0 3px rgba(221,204,68,0.4));
+        }
+        .p-c1 {
+            stroke: var(--cool1);
+            filter: drop-shadow(0 0 3px rgba(136,204,102,0.4));
+        }
+        .p-c2 {
+            stroke: var(--cool2);
+            filter: drop-shadow(0 0 3px rgba(85,187,170,0.4));
+        }
+        .p-c3 {
+            stroke: var(--cool3);
+            filter: drop-shadow(0 0 3px rgba(68,170,221,0.5));
+        }
+        .p-cold {
+            stroke: var(--cold);
+            filter: drop-shadow(0 0 4px var(--cold-glow)) drop-shadow(0 0 8px rgba(0,136,255,0.3));
+        }
+
+        /* Flow animation */
+        .flow {
+            stroke-dasharray: 10 6;
+            animation: flowAnim 0.8s linear infinite;
+        }
+
+        @keyframes flowAnim {
+            to { stroke-dashoffset: -16; }
+        }
+
+        /* Labels */
+        .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px;
+            fill: rgba(0,255,255,0.6);
+            letter-spacing: 1px;
+        }
+        .label-hot { fill: var(--hot); }
+        .label-cold { fill: var(--cold); }
+        .label-value {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Connection dots */
+        .conn-hot {
+            fill: rgba(255,85,51,0.25);
+            stroke: var(--hot);
+            stroke-width: 2;
+        }
+        .conn-cold {
+            fill: rgba(0,136,255,0.25);
+            stroke: var(--cold);
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body>
+    <h1>FLOOR HEATING — TEMPERATURE GRADIENT</h1>
+
+    <div class="grid">
+
+        <!-- VERSION 1: Segmented color gradient along path -->
+        <div class="card">
+            <h3>A — SEGMENTED GRADIENT (REALISTIC)</h3>
+            <svg viewBox="0 0 300 220">
+                <!-- Floor surface -->
+                <rect class="floor-surface" x="50" y="30" width="210" height="150" rx="4"/>
+
+                <!-- Serpentine pipe - each segment colored by temperature -->
+                <!-- Row 1: Hottest (just entered) -->
+                <path class="pipe p-hot flow" d="M60,45 L240,45"/>
+
+                <!-- Turn 1 -->
+                <path class="pipe p-hot flow" d="M240,45 L240,60"/>
+
+                <!-- Row 2 -->
+                <path class="pipe p-w1 flow" d="M240,60 L70,60"/>
+
+                <!-- Turn 2 -->
+                <path class="pipe p-w1 flow" d="M70,60 L70,75"/>
+
+                <!-- Row 3 -->
+                <path class="pipe p-w2 flow" d="M70,75 L240,75"/>
+
+                <!-- Turn 3 -->
+                <path class="pipe p-w2 flow" d="M240,75 L240,90"/>
+
+                <!-- Row 4 -->
+                <path class="pipe p-w3 flow" d="M240,90 L70,90"/>
+
+                <!-- Turn 4 -->
+                <path class="pipe p-w3 flow" d="M70,90 L70,105"/>
+
+                <!-- Row 5 -->
+                <path class="pipe p-c1 flow" d="M70,105 L240,105"/>
+
+                <!-- Turn 5 -->
+                <path class="pipe p-c1 flow" d="M240,105 L240,120"/>
+
+                <!-- Row 6 -->
+                <path class="pipe p-c2 flow" d="M240,120 L70,120"/>
+
+                <!-- Turn 6 -->
+                <path class="pipe p-c2 flow" d="M70,120 L70,135"/>
+
+                <!-- Row 7 -->
+                <path class="pipe p-c3 flow" d="M70,135 L240,135"/>
+
+                <!-- Turn 7 -->
+                <path class="pipe p-c3 flow" d="M240,135 L240,150"/>
+
+                <!-- Row 8: Coldest (about to exit) -->
+                <path class="pipe p-cold flow" d="M240,150 L70,150"/>
+
+                <!-- Turn to exit -->
+                <path class="pipe p-cold flow" d="M70,150 L70,165"/>
+                <path class="pipe p-cold flow" d="M70,165 L60,165"/>
+
+                <!-- Input connection (top-left) -->
+                <path class="pipe p-hot" d="M25,45 L60,45" stroke-width="5"/>
+                <circle class="conn-hot" cx="25" cy="45" r="7"/>
+                <text class="label label-hot" x="12" y="32">FLOW</text>
+                <text class="label label-hot label-value" x="12" y="60">35°C</text>
+
+                <!-- Output connection (bottom-left) -->
+                <path class="pipe p-cold" d="M25,165 L60,165" stroke-width="5"/>
+                <circle class="conn-cold" cx="25" cy="165" r="7"/>
+                <text class="label label-cold" x="12" y="152">RETURN</text>
+                <text class="label label-cold label-value" x="12" y="180">30°C</text>
+
+                <!-- Temperature scale on right -->
+                <text class="label" x="255" y="48" style="fill:var(--hot);">35°</text>
+                <text class="label" x="255" y="78" style="fill:var(--warm2);">34°</text>
+                <text class="label" x="255" y="108" style="fill:var(--cool1);">32°</text>
+                <text class="label" x="255" y="138" style="fill:var(--cool3);">31°</text>
+                <text class="label" x="255" y="155" style="fill:var(--cold);">30°</text>
+
+                <text class="label" x="155" y="200" text-anchor="middle">HEAT DISSIPATION ALONG PATH</text>
+            </svg>
+        </div>
+
+        <!-- VERSION 2: Smooth gradient using gradients on each segment -->
+        <div class="card">
+            <h3>B — SMOOTH GRADIENT (SIMPLIFIED)</h3>
+            <svg viewBox="0 0 300 220">
+                <defs>
+                    <!-- Gradient for left-to-right rows -->
+                    <linearGradient id="grad-lr-1" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#FF5533"/>
+                        <stop offset="100%" stop-color="#FF7744"/>
+                    </linearGradient>
+                    <linearGradient id="grad-lr-2" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#DDCC44"/>
+                        <stop offset="100%" stop-color="#88CC66"/>
+                    </linearGradient>
+                    <linearGradient id="grad-lr-3" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#55BBAA"/>
+                        <stop offset="100%" stop-color="#44AADD"/>
+                    </linearGradient>
+
+                    <!-- Gradient for right-to-left rows -->
+                    <linearGradient id="grad-rl-1" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#FF7744"/>
+                        <stop offset="100%" stop-color="#FFAA44"/>
+                    </linearGradient>
+                    <linearGradient id="grad-rl-2" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#88CC66"/>
+                        <stop offset="100%" stop-color="#55BBAA"/>
+                    </linearGradient>
+                    <linearGradient id="grad-rl-3" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#44AADD"/>
+                        <stop offset="100%" stop-color="#0088FF"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- Floor surface -->
+                <rect class="floor-surface" x="50" y="30" width="210" height="150" rx="4"/>
+
+                <!-- Serpentine with smooth gradients -->
+                <path class="pipe flow" d="M60,45 L240,45" stroke="url(#grad-lr-1)" filter="drop-shadow(0 0 3px rgba(255,85,51,0.4))"/>
+                <path class="pipe flow" d="M240,45 L240,65 L70,65" stroke="url(#grad-rl-1)" filter="drop-shadow(0 0 3px rgba(255,150,68,0.4))"/>
+                <path class="pipe flow" d="M70,65 L70,85 L240,85" stroke="url(#grad-lr-2)" filter="drop-shadow(0 0 3px rgba(180,200,80,0.4))"/>
+                <path class="pipe flow" d="M240,85 L240,105 L70,105" stroke="url(#grad-rl-2)" filter="drop-shadow(0 0 3px rgba(100,180,150,0.4))"/>
+                <path class="pipe flow" d="M70,105 L70,125 L240,125" stroke="url(#grad-lr-3)" filter="drop-shadow(0 0 3px rgba(80,180,200,0.4))"/>
+                <path class="pipe flow" d="M240,125 L240,145 L70,145" stroke="url(#grad-rl-3)" filter="drop-shadow(0 0 3px rgba(50,150,220,0.4))"/>
+                <path class="pipe p-cold flow" d="M70,145 L70,165 L60,165"/>
+
+                <!-- Input connection -->
+                <path class="pipe p-hot" d="M25,45 L60,45" stroke-width="5"/>
+                <circle class="conn-hot" cx="25" cy="45" r="7"/>
+                <text class="label label-hot" x="12" y="32">FLOW</text>
+                <text class="label label-hot label-value" x="12" y="60">35°C</text>
+
+                <!-- Output connection -->
+                <path class="pipe p-cold" d="M25,165 L60,165" stroke-width="5"/>
+                <circle class="conn-cold" cx="25" cy="165" r="7"/>
+                <text class="label label-cold" x="12" y="152">RETURN</text>
+                <text class="label label-cold label-value" x="12" y="180">30°C</text>
+
+                <text class="label" x="155" y="200" text-anchor="middle">CONTINUOUS COOLING</text>
+            </svg>
+        </div>
+
+        <!-- VERSION 3: Compact with heat arrows -->
+        <div class="card">
+            <h3>C — WITH HEAT EMISSION ARROWS</h3>
+            <svg viewBox="0 0 300 220">
+                <defs>
+                    <marker id="arrow-up" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                        <path d="M0,6 L3,0 L6,6" fill="none" stroke="rgba(255,200,100,0.4)" stroke-width="1"/>
+                    </marker>
+                </defs>
+
+                <!-- Floor surface -->
+                <rect class="floor-surface" x="50" y="35" width="210" height="140" rx="4"/>
+
+                <!-- Heat emission arrows (rising heat) -->
+                <g opacity="0.4">
+                    <line x1="80" y1="50" x2="80" y2="25" stroke="rgba(255,180,100,0.5)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                    <line x1="120" y1="50" x2="120" y2="20" stroke="rgba(255,160,80,0.5)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                    <line x1="160" y1="50" x2="160" y2="25" stroke="rgba(255,140,60,0.4)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                    <line x1="200" y1="70" x2="200" y2="20" stroke="rgba(200,180,80,0.4)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                    <line x1="140" y1="90" x2="140" y2="20" stroke="rgba(150,200,120,0.3)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                    <line x1="100" y1="110" x2="100" y2="20" stroke="rgba(100,180,180,0.3)" stroke-width="1" marker-end="url(#arrow-up)"/>
+                </g>
+
+                <!-- Serpentine pipe -->
+                <!-- Row 1: Hot -->
+                <path class="pipe p-hot flow" d="M60,50 L240,50"/>
+                <!-- Row 2 -->
+                <path class="pipe p-w1 flow" d="M240,50 L240,70 L70,70"/>
+                <!-- Row 3 -->
+                <path class="pipe p-w3 flow" d="M70,70 L70,90 L240,90"/>
+                <!-- Row 4 -->
+                <path class="pipe p-c1 flow" d="M240,90 L240,110 L70,110"/>
+                <!-- Row 5 -->
+                <path class="pipe p-c2 flow" d="M70,110 L70,130 L240,130"/>
+                <!-- Row 6: Cold -->
+                <path class="pipe p-c3 flow" d="M240,130 L240,150 L70,150"/>
+                <path class="pipe p-cold flow" d="M70,150 L70,160 L60,160"/>
+
+                <!-- Input -->
+                <path class="pipe p-hot" d="M25,50 L60,50" stroke-width="5"/>
+                <circle class="conn-hot" cx="25" cy="50" r="7"/>
+                <text class="label label-hot label-value" x="12" y="38">35°C</text>
+
+                <!-- Output -->
+                <path class="pipe p-cold" d="M25,160 L60,160" stroke-width="5"/>
+                <circle class="conn-cold" cx="25" cy="160" r="7"/>
+                <text class="label label-cold label-value" x="12" y="175">30°C</text>
+
+                <!-- Heat icon -->
+                <text class="label" x="245" y="25" style="fill:rgba(255,180,100,0.6);">↑ HEAT</text>
+
+                <text class="label" x="155" y="195" text-anchor="middle">HEAT RADIATING TO ROOM</text>
+            </svg>
+        </div>
+
+        <!-- VERSION 4: Minimal elegant -->
+        <div class="card">
+            <h3>D — MINIMAL ELEGANT</h3>
+            <svg viewBox="0 0 300 220">
+                <!-- Subtle floor grid -->
+                <defs>
+                    <pattern id="floorGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M20,0 L0,0 L0,20" fill="none" stroke="rgba(0,255,255,0.05)" stroke-width="0.5"/>
+                    </pattern>
+                </defs>
+
+                <rect x="45" y="30" width="220" height="150" fill="url(#floorGrid)" rx="6"/>
+                <rect class="floor-surface" x="45" y="30" width="220" height="150" rx="6"/>
+
+                <!-- Simple serpentine with gradient -->
+                <path class="pipe flow" stroke-width="5" d="
+                    M55,45
+                    L250,45
+                    Q260,45 260,55
+                    L260,55
+                    Q260,65 250,65
+                    L60,65
+                    Q50,65 50,75
+                    L50,75
+                    Q50,85 60,85
+                    L250,85
+                    Q260,85 260,95
+                    L260,95
+                    Q260,105 250,105
+                    L60,105
+                    Q50,105 50,115
+                    L50,115
+                    Q50,125 60,125
+                    L250,125
+                    Q260,125 260,135
+                    L260,135
+                    Q260,145 250,145
+                    L60,145
+                    Q50,145 50,155
+                    L50,165
+                " style="stroke: url(#vertGrad); filter: drop-shadow(0 0 6px rgba(150,180,200,0.4));"/>
+
+                <defs>
+                    <linearGradient id="vertGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#FF5533"/>
+                        <stop offset="25%" stop-color="#FFAA44"/>
+                        <stop offset="50%" stop-color="#88CC66"/>
+                        <stop offset="75%" stop-color="#44AADD"/>
+                        <stop offset="100%" stop-color="#0088FF"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- Input -->
+                <circle class="conn-hot" cx="55" cy="45" r="8"/>
+                <text class="label label-hot" x="30" y="35">IN</text>
+                <text class="label label-hot label-value" x="25" y="50">35°C</text>
+
+                <!-- Output -->
+                <circle class="conn-cold" cx="50" cy="165" r="8"/>
+                <text class="label label-cold" x="25" y="155">OUT</text>
+                <text class="label label-cold label-value" x="20" y="180">30°C</text>
+
+                <text class="label" x="155" y="200" text-anchor="middle">FLOOR HEATING ZONE</text>
+            </svg>
+        </div>
+
+        <!-- VERSION 5: Icon style (compact) -->
+        <div class="card">
+            <h3>E — COMPACT ICON</h3>
+            <svg viewBox="0 0 300 220">
+                <!-- Floor outline -->
+                <rect class="floor-surface" x="80" y="50" width="140" height="110" rx="8"/>
+
+                <!-- Centered serpentine -->
+                <path class="pipe flow" stroke-width="5" d="
+                    M95,65 L205,65
+                    L205,85 L95,85
+                    L95,105 L205,105
+                    L205,125 L95,125
+                    L95,145 L115,145
+                " style="stroke: url(#iconGrad); filter: drop-shadow(0 0 5px rgba(150,150,200,0.5));"/>
+
+                <defs>
+                    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#FF5533"/>
+                        <stop offset="50%" stop-color="#AACC55"/>
+                        <stop offset="100%" stop-color="#0088FF"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- Connection dots -->
+                <circle class="conn-hot" cx="95" cy="65" r="6"/>
+                <circle class="conn-cold" cx="115" cy="145" r="6"/>
+
+                <!-- Temperature labels -->
+                <text class="label label-hot label-value" x="75" y="60">35°</text>
+                <text class="label label-cold label-value" x="125" y="155">30°</text>
+
+                <!-- Flow direction indicators -->
+                <text style="font-size:10px; fill:var(--hot);" x="140" y="70">→</text>
+                <text style="font-size:10px; fill:var(--warm2);" x="140" y="90">←</text>
+                <text style="font-size:10px; fill:var(--cool1);" x="140" y="110">→</text>
+                <text style="font-size:10px; fill:var(--cool3);" x="140" y="130">←</text>
+
+                <text class="label" x="150" y="195" text-anchor="middle">HEATING LOOP</text>
+            </svg>
+        </div>
+
+        <!-- VERSION 6: Premium with room representation -->
+        <div class="card">
+            <h3>F — ROOM CONTEXT</h3>
+            <svg viewBox="0 0 300 220">
+                <!-- Room floor perspective -->
+                <polygon points="30,80 150,40 270,80 150,120" fill="rgba(0,255,255,0.02)" stroke="var(--cyan-dim)" stroke-width="1"/>
+
+                <!-- Floor heating visible through transparent floor -->
+                <g transform="translate(30,50) scale(0.85,0.35) skewX(-10)">
+                    <path class="pipe flow" stroke-width="6" d="
+                        M40,60 L240,60
+                        L240,90 L40,90
+                        L40,120 L240,120
+                        L240,150 L40,150
+                        L40,180 L60,180
+                    " style="stroke: url(#roomGrad); filter: drop-shadow(0 0 4px rgba(200,150,100,0.3));"/>
+                </g>
+
+                <defs>
+                    <linearGradient id="roomGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#FF5533"/>
+                        <stop offset="100%" stop-color="#0088FF"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- Manifold on left wall -->
+                <rect x="20" y="85" width="12" height="30" fill="rgba(0,255,255,0.1)" stroke="var(--cyan)" stroke-width="1" rx="2"/>
+                <circle cx="26" cy="92" r="3" fill="var(--hot)"/>
+                <circle cx="26" cy="108" r="3" fill="var(--cold)"/>
+
+                <text class="label label-hot" x="5" y="95">35°</text>
+                <text class="label label-cold" x="5" y="112">30°</text>
+
+                <!-- Room label -->
+                <text class="label" x="150" y="145" text-anchor="middle" style="font-size:10px;">SALON</text>
+
+                <!-- Heat waves rising -->
+                <g opacity="0.3">
+                    <path d="M100,70 Q105,60 100,50" stroke="rgba(255,180,100,0.5)" fill="none" stroke-width="1"/>
+                    <path d="M150,65 Q155,52 150,40" stroke="rgba(255,160,80,0.5)" fill="none" stroke-width="1"/>
+                    <path d="M200,70 Q205,58 200,48" stroke="rgba(200,180,100,0.4)" fill="none" stroke-width="1"/>
+                </g>
+
+                <text class="label" x="150" y="200" text-anchor="middle">UNDERFLOOR IN CONTEXT</text>
+            </svg>
+        </div>
+
+    </div>
+
+</body>
+</html>

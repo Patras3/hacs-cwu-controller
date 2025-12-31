@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Tank Designs - Holographic Showcase</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cyan: #00FFFF;
+            --cyan-bright: #40FFFF;
+            --cyan-dim: rgba(0, 255, 255, 0.25);
+            --cyan-glow: rgba(0, 255, 255, 0.6);
+            --hot: #FF5533;
+            --hot-glow: rgba(255, 85, 51, 0.6);
+            --warm: #FF9944;
+            --cool: #00AAFF;
+            --cold: #0066FF;
+            --cold-glow: rgba(0, 102, 255, 0.5);
+            --solar: #FFCC00;
+            --solar-glow: rgba(255, 204, 0, 0.5);
+            --bg-deep: #000a14;
+            --bg-panel: #001428;
+            --bg-surface: rgba(0, 30, 60, 0.4);
+            --text-dim: rgba(0, 255, 255, 0.4);
+            --text-label: rgba(0, 255, 255, 0.6);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--bg-deep);
+            min-height: 100vh;
+            padding: 30px 20px;
+            color: var(--cyan);
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-family: 'Oxanium', sans-serif;
+            font-size: clamp(18px, 4vw, 28px);
+            font-weight: 300;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            color: var(--cyan);
+            text-shadow: 0 0 30px var(--cyan-glow), 0 0 60px rgba(0, 255, 255, 0.3);
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 11px;
+            color: var(--text-dim);
+            letter-spacing: 4px;
+        }
+
+        /* Grid layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Tank card */
+        .tank-card {
+            background: linear-gradient(135deg, var(--bg-panel) 0%, rgba(0, 15, 30, 0.95) 100%);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tank-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cyan-dim), transparent);
+        }
+
+        .tank-card.featured {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 700px) {
+            .tank-card.featured {
+                grid-column: span 1;
+            }
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-letter {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--cyan-dim);
+            border-radius: 6px;
+            color: var(--cyan);
+        }
+
+        .card-title {
+            font-family: 'Oxanium', sans-serif;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-label);
+        }
+
+        .tank-svg {
+            width: 100%;
+            height: 280px;
+        }
+
+        .tank-card.featured .tank-svg {
+            height: 320px;
+        }
+
+        /* SVG Styles */
+        .wire {
+            fill: none;
+            stroke: var(--cyan);
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .wire-bright {
+            fill: none;
+            stroke: var(--cyan-bright);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 4px var(--cyan-glow)) drop-shadow(0 0 10px var(--cyan-glow));
+        }
+
+        .wire-dim {
+            fill: none;
+            stroke: var(--cyan-dim);
+            stroke-width: 1;
+        }
+
+        .wire-hot {
+            fill: none;
+            stroke: var(--hot);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 4px var(--hot-glow)) drop-shadow(0 0 10px var(--hot-glow));
+        }
+
+        .wire-cold {
+            fill: none;
+            stroke: var(--cool);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 4px var(--cold-glow)) drop-shadow(0 0 10px var(--cold-glow));
+        }
+
+        .wire-solar {
+            fill: none;
+            stroke: var(--solar);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 4px var(--solar-glow)) drop-shadow(0 0 10px var(--solar-glow));
+        }
+
+        .glow-cyan {
+            filter: drop-shadow(0 0 4px var(--cyan-glow)) drop-shadow(0 0 12px rgba(0, 255, 255, 0.3));
+        }
+
+        .glow-hot {
+            filter: drop-shadow(0 0 4px var(--hot-glow)) drop-shadow(0 0 10px rgba(255, 85, 51, 0.3));
+        }
+
+        .fill-surface {
+            fill: rgba(0, 40, 80, 0.15);
+        }
+
+        /* Coil flow animation */
+        .coil-flow {
+            stroke-dasharray: 10 8;
+            animation: coilFlow 0.6s linear infinite;
+        }
+
+        .coil-flow-reverse {
+            stroke-dasharray: 10 8;
+            animation: coilFlowReverse 0.6s linear infinite;
+        }
+
+        @keyframes coilFlow {
+            to { stroke-dashoffset: -18; }
+        }
+
+        @keyframes coilFlowReverse {
+            to { stroke-dashoffset: 18; }
+        }
+
+        /* Pulse animation */
+        .pulse {
+            animation: pulse 2.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Labels */
+        .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 7px;
+            font-weight: 500;
+            fill: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        .label-value {
+            font-family: 'Oxanium', sans-serif;
+            font-weight: 600;
+            fill: var(--cyan);
+        }
+
+        .label-hot {
+            fill: var(--hot);
+        }
+
+        .label-cold {
+            fill: var(--cool);
+        }
+
+        .label-solar {
+            fill: var(--solar);
+        }
+
+        /* Connector lines */
+        .connector {
+            stroke: rgba(0, 255, 255, 0.2);
+            stroke-width: 0.5;
+            stroke-dasharray: 2 2;
+        }
+
+        /* Footer info */
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(0, 255, 255, 0.1);
+        }
+
+        .footer p {
+            font-size: 10px;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>CWU Tank Designs</h1>
+        <p class="subtitle">Holographic Visualization System</p>
+    </header>
+
+    <!-- Shared SVG defs -->
+    <svg style="position:absolute;width:0;height:0;">
+        <defs>
+            <!-- Water temperature gradient (hot top → cold bottom) -->
+            <linearGradient id="waterTempGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF5533" stop-opacity="0.5"/>
+                <stop offset="25%" stop-color="#FF7744" stop-opacity="0.4"/>
+                <stop offset="50%" stop-color="#FFAA55" stop-opacity="0.35"/>
+                <stop offset="75%" stop-color="#00AAFF" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#0055FF" stop-opacity="0.45"/>
+            </linearGradient>
+
+            <!-- Coil gradient hot → cold -->
+            <linearGradient id="coilGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF5533"/>
+                <stop offset="100%" stop-color="#0088FF"/>
+            </linearGradient>
+
+            <!-- Cylinder shine -->
+            <linearGradient id="cylinderShine" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="rgba(0,255,255,0.1)"/>
+                <stop offset="50%" stop-color="rgba(0,255,255,0.02)"/>
+                <stop offset="100%" stop-color="rgba(0,255,255,0.08)"/>
+            </linearGradient>
+
+            <!-- Glow filter -->
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="2" result="blur"/>
+                <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+        </defs>
+    </svg>
+
+    <div class="grid">
+
+        <!-- TANK A: Simple Elegant Cylinder -->
+        <div class="tank-card">
+            <div class="card-header">
+                <span class="card-letter">A</span>
+                <span class="card-title">Elegant Cylinder</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 200 260">
+                <!-- Tank body -->
+                <ellipse class="wire-dim pulse" cx="100" cy="25" rx="55" ry="15"/>
+                <path class="wire glow-cyan" d="M45,25 L45,220" />
+                <path class="wire glow-cyan" d="M155,25 L155,220" />
+                <ellipse class="wire-bright" cx="100" cy="220" rx="55" ry="15"/>
+
+                <!-- Water fill with temperature gradient -->
+                <clipPath id="waterClipA">
+                    <path d="M47,40 L47,220 A55,15 0 0,0 153,220 L153,40 A55,15 0 0,1 47,40"/>
+                </clipPath>
+                <rect x="45" y="40" width="110" height="195" fill="url(#waterTempGrad)" clip-path="url(#waterClipA)"/>
+                <rect x="45" y="40" width="110" height="195" fill="url(#cylinderShine)" clip-path="url(#waterClipA)"/>
+
+                <!-- Heat exchanger coil -->
+                <g class="glow-hot">
+                    <path class="wire-hot coil-flow" d="
+                        M38,55 L60,55
+                        Q140,55 140,75
+                        Q140,95 60,95
+                        Q30,95 60,115
+                        Q140,115 140,135
+                        Q140,155 60,155
+                        Q30,155 60,175
+                        Q140,175 140,195
+                        L140,205 L162,205
+                    " stroke-width="3"/>
+                </g>
+
+                <!-- PRV at top -->
+                <rect class="wire" x="130" y="12" width="12" height="18" rx="2" fill="rgba(0,255,255,0.05)"/>
+                <text class="label" x="136" y="38" text-anchor="middle">PRV</text>
+
+                <!-- Hot outlet (top) -->
+                <g transform="translate(158,45)">
+                    <rect class="wire-hot" x="0" y="0" width="16" height="10" rx="2" fill="rgba(255,85,51,0.1)"/>
+                    <text class="label label-hot" x="25" y="7">HOT OUT</text>
+                </g>
+
+                <!-- Cold inlet (bottom) -->
+                <g transform="translate(158,200)">
+                    <rect class="wire-cold" x="0" y="0" width="16" height="10" rx="2" fill="rgba(0,170,255,0.1)"/>
+                    <text class="label label-cold" x="25" y="7">COLD IN</text>
+                </g>
+
+                <!-- Temperature sensor (bottom) -->
+                <g transform="translate(158,218)">
+                    <line class="wire" x1="0" y1="0" x2="12" y2="0"/>
+                    <circle class="wire glow-cyan" cx="18" cy="0" r="5" fill="rgba(0,255,255,0.1)"/>
+                    <text class="label" x="28" y="3">SENSOR</text>
+                </g>
+
+                <!-- Coil labels -->
+                <text class="label label-hot" x="28" y="52">46°C IN</text>
+                <text class="label label-cold" x="170" y="208">45°C OUT</text>
+            </svg>
+        </div>
+
+        <!-- TANK B: Technical Cross-Section -->
+        <div class="tank-card">
+            <div class="card-header">
+                <span class="card-letter">B</span>
+                <span class="card-title">Technical Section</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 200 260">
+                <!-- Center line -->
+                <line class="wire-dim" x1="100" y1="10" x2="100" y2="250" stroke-dasharray="3 3"/>
+
+                <!-- Outer shell (section view) -->
+                <path class="wire-dim" d="M40,20 A60,15 0 0,1 160,20 L160,230 A60,15 0 0,1 40,230 Z"/>
+
+                <!-- Inner tank -->
+                <path class="wire glow-cyan" d="M50,30 A50,12 0 0,1 150,30 L150,220 A50,12 0 0,1 50,220 Z" fill="url(#waterTempGrad)" fill-opacity="0.4"/>
+
+                <!-- Insulation hatching -->
+                <g class="wire-dim" style="opacity:0.3">
+                    <line x1="42" y1="40" x2="48" y2="210" stroke-dasharray="4 8"/>
+                    <line x1="152" y1="40" x2="158" y2="210" stroke-dasharray="4 8"/>
+                </g>
+                <text class="label" x="38" y="130" transform="rotate(-90,38,130)" text-anchor="middle" style="opacity:0.4">INSULATION</text>
+
+                <!-- Coil as ellipses (cross section view) -->
+                <g class="glow-hot">
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="55" rx="40" ry="10"/>
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="80" rx="40" ry="10" style="animation-delay:-0.15s"/>
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="105" rx="40" ry="10" style="animation-delay:-0.3s"/>
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="130" rx="40" ry="10" style="animation-delay:-0.45s"/>
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="155" rx="40" ry="10" style="animation-delay:-0.6s"/>
+                    <ellipse class="wire-hot coil-flow" cx="100" cy="180" rx="40" ry="10" style="animation-delay:-0.75s"/>
+                </g>
+
+                <!-- Anode rod -->
+                <line class="wire-dim" x1="100" y1="30" x2="100" y2="210" stroke-dasharray="5 5"/>
+                <circle class="wire-dim" cx="100" cy="210" r="4"/>
+                <text class="label" x="108" y="195" style="opacity:0.5">ANODE</text>
+
+                <!-- Dimension lines -->
+                <g class="wire-dim" style="opacity:0.5">
+                    <line x1="170" y1="30" x2="170" y2="220"/>
+                    <line x1="166" y1="30" x2="174" y2="30"/>
+                    <line x1="166" y1="220" x2="174" y2="220"/>
+                    <text class="label" x="178" y="130" style="font-size:6px">200L</text>
+                </g>
+
+                <!-- Temperature sensor probe -->
+                <path class="wire glow-cyan" d="M152,205 L165,205 L165,180" fill="none"/>
+                <circle class="wire" cx="165" cy="175" r="4" fill="rgba(0,255,255,0.15)"/>
+                <text class="label" x="172" y="178">T</text>
+
+                <!-- Connections -->
+                <rect class="wire-hot" x="152" y="40" width="14" height="8" rx="2" fill="rgba(255,85,51,0.1)"/>
+                <rect class="wire-cold" x="152" y="195" width="14" height="8" rx="2" fill="rgba(0,170,255,0.1)"/>
+
+                <!-- Labels -->
+                <text class="label label-hot" x="170" y="45">FLOW</text>
+                <text class="label label-cold" x="170" y="210">RETURN</text>
+            </svg>
+        </div>
+
+        <!-- TANK C: 3D Isometric -->
+        <div class="tank-card">
+            <div class="card-header">
+                <span class="card-letter">C</span>
+                <span class="card-title">3D Isometric View</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 200 260">
+                <!-- 3D Cylinder -->
+                <!-- Back edge -->
+                <ellipse class="wire-dim" cx="100" cy="35" rx="50" ry="20"/>
+
+                <!-- Right side (3D depth) -->
+                <path class="wire-dim" d="M150,35 L160,28 L160,208 L150,215" fill="rgba(0,255,255,0.02)"/>
+                <ellipse class="wire-dim" cx="105" cy="28" rx="55" ry="22" transform="skewY(-5)"/>
+
+                <!-- Main cylinder body -->
+                <path class="wire glow-cyan" d="M50,35 L50,215"/>
+                <path class="wire glow-cyan" d="M150,35 L150,215"/>
+
+                <!-- Water with gradient -->
+                <clipPath id="waterClipC">
+                    <path d="M52,50 L52,215 A50,20 0 0,0 148,215 L148,50 A50,20 0 0,1 52,50"/>
+                </clipPath>
+                <rect x="50" y="50" width="100" height="185" fill="url(#waterTempGrad)" clip-path="url(#waterClipC)"/>
+
+                <!-- Bottom ellipse -->
+                <ellipse class="wire-bright" cx="100" cy="215" rx="50" ry="20"/>
+
+                <!-- 3D Coil (perspective) -->
+                <g class="glow-hot">
+                    <path class="wire-hot coil-flow" d="
+                        M40,60 L60,55
+                        Q140,55 145,72 Q145,88 60,92
+                        Q30,95 65,110 Q145,112 145,128
+                        Q145,145 60,150 Q30,155 65,168
+                        Q145,170 145,185 L155,188
+                    " stroke-width="2.5"/>
+                </g>
+
+                <!-- Temperature zones (3D perspective) -->
+                <ellipse class="wire-dim pulse" cx="100" cy="80" rx="48" ry="18" stroke-dasharray="8 6"/>
+                <ellipse class="wire-dim pulse" cx="100" cy="140" rx="48" ry="18" stroke-dasharray="8 6"/>
+
+                <!-- Zone labels -->
+                <text class="label" x="160" y="60" style="fill:rgba(255,85,51,0.6)">HOT</text>
+                <text class="label" x="160" y="110" style="fill:rgba(255,150,80,0.5)">WARM</text>
+                <text class="label" x="160" y="160" style="fill:rgba(0,170,255,0.5)">COOL</text>
+                <text class="label" x="160" y="210" style="fill:rgba(0,85,255,0.6)">COLD</text>
+
+                <!-- Coil labels -->
+                <text class="label label-hot" x="25" y="58">IN 46°C</text>
+                <text class="label label-cold" x="160" y="192">OUT 45°C</text>
+
+                <!-- Sensor -->
+                <g transform="translate(152,220)">
+                    <line class="wire" x1="0" y1="0" x2="10" y2="-5"/>
+                    <circle class="wire glow-cyan" cx="14" cy="-7" r="4" fill="rgba(0,255,255,0.1)"/>
+                </g>
+            </svg>
+        </div>
+
+        <!-- TANK D: Twin Coil -->
+        <div class="tank-card">
+            <div class="card-header">
+                <span class="card-letter">D</span>
+                <span class="card-title">Twin Coil System</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 200 260">
+                <!-- Tank body -->
+                <ellipse class="wire-dim pulse" cx="100" cy="22" rx="52" ry="14"/>
+                <path class="wire glow-cyan" d="M48,22 L48,225"/>
+                <path class="wire glow-cyan" d="M152,22 L152,225"/>
+                <ellipse class="wire-bright" cx="100" cy="225" rx="52" ry="14"/>
+
+                <!-- Water -->
+                <clipPath id="waterClipD">
+                    <path d="M50,35 L50,225 A52,14 0 0,0 150,225 L150,35 A52,14 0 0,1 50,35"/>
+                </clipPath>
+                <rect x="48" y="35" width="104" height="204" fill="url(#waterTempGrad)" clip-path="url(#waterClipD)"/>
+
+                <!-- Upper coil - HEAT PUMP (orange) -->
+                <g class="glow-hot">
+                    <path class="wire-hot coil-flow" d="
+                        M38,45 L58,45
+                        Q142,45 142,60 Q142,75 58,75
+                        Q28,75 58,90 Q142,90 142,105
+                        L162,105
+                    " stroke-width="3"/>
+                </g>
+                <text class="label label-hot" x="22" y="42">HP IN</text>
+                <text class="label label-cold" x="166" y="108">HP OUT</text>
+
+                <!-- Divider line -->
+                <ellipse class="wire-dim" cx="100" cy="120" rx="50" ry="12" stroke-dasharray="6 4" style="opacity:0.4"/>
+
+                <!-- Lower coil - SOLAR (yellow) -->
+                <g style="filter: drop-shadow(0 0 4px var(--solar-glow)) drop-shadow(0 0 10px rgba(255,204,0,0.3));">
+                    <path class="wire-solar coil-flow" d="
+                        M38,140 L58,140
+                        Q142,140 142,158 Q142,176 58,176
+                        Q28,176 58,194 Q142,194 142,212
+                        L162,212
+                    " stroke-width="3"/>
+                </g>
+                <text class="label label-solar" x="22" y="137">SOLAR IN</text>
+                <text class="label" x="166" y="215" style="fill:rgba(0,150,200,0.7)">SOLAR OUT</text>
+
+                <!-- Legend -->
+                <g transform="translate(55,245)">
+                    <line x1="0" y1="0" x2="15" y2="0" stroke="var(--hot)" stroke-width="2"/>
+                    <text class="label" x="20" y="3">HEAT PUMP</text>
+                    <line x1="70" y1="0" x2="85" y2="0" stroke="var(--solar)" stroke-width="2"/>
+                    <text class="label" x="90" y="3" style="fill:var(--solar)">SOLAR</text>
+                </g>
+
+                <!-- PRV -->
+                <rect class="wire" x="125" y="10" width="10" height="14" rx="2" fill="rgba(0,255,255,0.05)"/>
+
+                <!-- Sensor at bottom -->
+                <g transform="translate(155,228)">
+                    <line class="wire" x1="0" y1="0" x2="10" y2="0"/>
+                    <circle class="wire glow-cyan" cx="15" cy="0" r="4" fill="rgba(0,255,255,0.1)"/>
+                    <text class="label" x="5" y="12">TEMP</text>
+                </g>
+            </svg>
+        </div>
+
+        <!-- TANK E: Cutaway View -->
+        <div class="tank-card">
+            <div class="card-header">
+                <span class="card-letter">E</span>
+                <span class="card-title">Cutaway Detail</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 200 260">
+                <!-- Cutaway outline -->
+                <path class="wire glow-cyan" d="
+                    M100,20
+                    A55,15 0 0,1 155,35
+                    L155,220
+                    A55,15 0 0,1 45,220
+                    L45,35
+                    A55,15 0 0,1 100,20
+                " fill="none"/>
+
+                <!-- Cut section (left half removed) -->
+                <path class="wire-bright" d="
+                    M100,20 L100,235
+                " stroke-dasharray="none"/>
+
+                <!-- Internal view - water layers -->
+                <g clip-path="url(#cutawayClip)">
+                    <!-- Hot layer -->
+                    <rect x="100" y="35" width="55" height="45" fill="rgba(255,85,51,0.25)"/>
+                    <!-- Warm layer -->
+                    <rect x="100" y="80" width="55" height="50" fill="rgba(255,150,80,0.2)"/>
+                    <!-- Cool layer -->
+                    <rect x="100" y="130" width="55" height="50" fill="rgba(0,170,255,0.2)"/>
+                    <!-- Cold layer -->
+                    <rect x="100" y="180" width="55" height="55" fill="rgba(0,85,255,0.25)"/>
+                </g>
+                <clipPath id="cutawayClip">
+                    <path d="M100,35 L155,35 L155,220 A55,15 0 0,1 100,235 Z"/>
+                </clipPath>
+
+                <!-- Coil visible in cutaway -->
+                <g class="glow-hot">
+                    <path class="wire-hot coil-flow" d="
+                        M95,50 Q140,50 140,65 L150,65
+                    " stroke-width="3"/>
+                    <path class="wire-hot coil-flow" d="
+                        M95,80 Q140,80 140,95 L150,95
+                    " stroke-width="3" style="animation-delay:-0.2s"/>
+                    <path class="wire-hot coil-flow" d="
+                        M95,110 Q140,110 140,125 L150,125
+                    " stroke-width="3" style="animation-delay:-0.4s"/>
+                    <path class="wire-hot coil-flow" d="
+                        M95,140 Q140,140 140,155 L150,155
+                    " stroke-width="3" style="animation-delay:-0.6s"/>
+                    <path class="wire-hot coil-flow" d="
+                        M95,170 Q140,170 140,185 L150,185
+                    " stroke-width="3" style="animation-delay:-0.8s"/>
+                </g>
+
+                <!-- Internal structure lines -->
+                <line class="wire-dim" x1="100" y1="80" x2="155" y2="80" stroke-dasharray="4 4"/>
+                <line class="wire-dim" x1="100" y1="130" x2="155" y2="130" stroke-dasharray="4 4"/>
+                <line class="wire-dim" x1="100" y1="180" x2="155" y2="180" stroke-dasharray="4 4"/>
+
+                <!-- Temperature labels on right -->
+                <text class="label" x="162" y="58" style="fill:rgba(255,85,51,0.8)">55°C</text>
+                <text class="label" x="162" y="105" style="fill:rgba(255,150,80,0.7)">52°C</text>
+                <text class="label" x="162" y="155" style="fill:rgba(0,170,255,0.7)">48°C</text>
+                <text class="label" x="162" y="208" style="fill:rgba(0,85,255,0.8)">45°C</text>
+
+                <!-- Sensor probe detail -->
+                <g transform="translate(155,210)">
+                    <path class="wire glow-cyan" d="M0,0 L15,0 L15,-30" fill="none"/>
+                    <rect class="wire" x="12" y="-35" width="8" height="10" rx="1" fill="rgba(0,255,255,0.15)"/>
+                    <text class="label" x="25" y="-28">SENSOR</text>
+                    <text class="label" x="25" y="-20" style="fill:var(--cyan)">PROBE</text>
+                </g>
+
+                <!-- Component callouts -->
+                <g class="wire-dim">
+                    <line class="connector" x1="140" y1="65" x2="175" y2="45"/>
+                    <text class="label" x="178" y="48">COIL TUBE</text>
+                </g>
+
+                <!-- Hot water draw point -->
+                <circle class="wire-hot" cx="100" cy="42" r="4" fill="rgba(255,85,51,0.2)"/>
+                <line class="connector" x1="100" y1="42" x2="70" y2="30"/>
+                <text class="label label-hot" x="35" y="28">HOT OUT</text>
+
+                <!-- Cold inlet point -->
+                <circle class="wire-cold" cx="100" cy="210" r="4" fill="rgba(0,170,255,0.2)"/>
+                <line class="connector" x1="100" y1="210" x2="70" y2="225"/>
+                <text class="label label-cold" x="35" y="228">COLD IN</text>
+            </svg>
+        </div>
+
+        <!-- TANK F: Complete System (Featured) -->
+        <div class="tank-card featured">
+            <div class="card-header">
+                <span class="card-letter">F</span>
+                <span class="card-title">Complete System View</span>
+            </div>
+            <svg class="tank-svg" viewBox="0 0 450 300">
+                <!-- Main tank -->
+                <g transform="translate(120, 20)">
+                    <!-- 3D effect back -->
+                    <ellipse class="wire-dim" cx="90" cy="15" rx="70" ry="18"/>
+                    <line class="wire-dim" x1="160" y1="15" x2="172" y2="6"/>
+                    <line class="wire-dim" x1="172" y1="6" x2="172" y2="246"/>
+                    <line class="wire-dim" x1="160" y1="255" x2="172" y2="246"/>
+
+                    <!-- Main cylinder -->
+                    <line class="wire-bright" x1="20" y1="15" x2="20" y2="255"/>
+                    <line class="wire-bright" x1="160" y1="15" x2="160" y2="255"/>
+                    <ellipse class="wire-bright" cx="90" cy="255" rx="70" ry="18"/>
+
+                    <!-- Water with thermal layers -->
+                    <clipPath id="waterClipF">
+                        <path d="M22,35 L22,255 A70,18 0 0,0 158,255 L158,35 A70,18 0 0,1 22,35"/>
+                    </clipPath>
+                    <rect x="20" y="35" width="140" height="238" fill="url(#waterTempGrad)" clip-path="url(#waterClipF)"/>
+                    <rect x="20" y="35" width="140" height="238" fill="url(#cylinderShine)" clip-path="url(#waterClipF)"/>
+
+                    <!-- Stratification lines -->
+                    <ellipse class="wire-dim pulse" cx="90" cy="75" rx="68" ry="16" stroke-dasharray="10 6"/>
+                    <ellipse class="wire-dim pulse" cx="90" cy="135" rx="68" ry="16" stroke-dasharray="10 6"/>
+                    <ellipse class="wire-dim pulse" cx="90" cy="195" rx="68" ry="16" stroke-dasharray="10 6"/>
+
+                    <!-- Heat exchanger coil -->
+                    <g class="glow-hot">
+                        <path class="wire-hot coil-flow" d="
+                            M10,55 L35,55
+                            Q145,55 145,78
+                            Q145,101 35,101
+                            Q5,101 35,124
+                            Q145,124 145,147
+                            Q145,170 35,170
+                            Q5,170 35,193
+                            Q145,193 145,216
+                            L145,235 L170,235
+                        " stroke-width="4"/>
+                    </g>
+
+                    <!-- Flow direction arrows in coil -->
+                    <polygon points="10,50 22,55 10,60" fill="var(--hot)" class="glow-hot"/>
+                    <polygon points="170,230 158,235 170,240" fill="var(--cool)" style="filter: drop-shadow(0 0 4px var(--cold-glow))"/>
+
+                    <!-- PRV at top -->
+                    <g transform="translate(125, 0)">
+                        <rect class="wire" x="0" y="0" width="14" height="20" rx="3" fill="rgba(0,255,255,0.05)"/>
+                        <line class="wire-dim" x1="7" y1="20" x2="7" y2="28"/>
+                        <text class="label" x="7" y="38" text-anchor="middle">PRV</text>
+                    </g>
+
+                    <!-- Hot water outlet (top) -->
+                    <g transform="translate(162, 40)">
+                        <rect class="wire-hot" x="0" y="0" width="20" height="14" rx="3" fill="rgba(255,85,51,0.15)"/>
+                        <text class="label label-hot" x="28" y="5">HOT OUT</text>
+                        <text class="label" x="28" y="13" style="opacity:0.5">TO TAPS</text>
+                    </g>
+
+                    <!-- Cold water inlet (bottom) -->
+                    <g transform="translate(162, 230)">
+                        <rect class="wire-cold" x="0" y="0" width="20" height="14" rx="3" fill="rgba(0,170,255,0.12)"/>
+                        <text class="label label-cold" x="28" y="5">COLD IN</text>
+                        <text class="label" x="28" y="13" style="opacity:0.5">FROM MAINS</text>
+                    </g>
+
+                    <!-- Temperature sensor at bottom -->
+                    <g transform="translate(162, 258)">
+                        <line class="wire glow-cyan" x1="0" y1="0" x2="18" y2="0"/>
+                        <rect class="wire glow-cyan" x="18" y="-7" width="16" height="14" rx="3" fill="rgba(0,255,255,0.12)"/>
+                        <text class="label-value" x="26" y="3" text-anchor="middle" font-size="8">T</text>
+                        <text class="label" x="40" y="-2">SENSOR</text>
+                        <text class="label-value" x="40" y="7" font-size="9">49°C</text>
+                    </g>
+                </g>
+
+                <!-- Temperature scale on left -->
+                <g transform="translate(30, 35)">
+                    <line class="wire-dim" x1="40" y1="0" x2="40" y2="240"/>
+                    <line class="wire-dim" x1="35" y1="0" x2="45" y2="0"/>
+                    <line class="wire-dim" x1="35" y1="60" x2="45" y2="60"/>
+                    <line class="wire-dim" x1="35" y1="120" x2="45" y2="120"/>
+                    <line class="wire-dim" x1="35" y1="180" x2="45" y2="180"/>
+                    <line class="wire-dim" x1="35" y1="240" x2="45" y2="240"/>
+
+                    <text class="label" x="28" y="4" text-anchor="end" style="fill:rgba(255,85,51,0.8)">55°C</text>
+                    <text class="label" x="28" y="64" text-anchor="end" style="fill:rgba(255,120,60,0.7)">52°C</text>
+                    <text class="label" x="28" y="124" text-anchor="end" style="fill:rgba(200,150,100,0.6)">49°C</text>
+                    <text class="label" x="28" y="184" text-anchor="end" style="fill:rgba(0,170,255,0.7)">46°C</text>
+                    <text class="label" x="28" y="244" text-anchor="end" style="fill:rgba(0,85,255,0.8)">45°C</text>
+
+                    <!-- Zone labels -->
+                    <text class="label" x="0" y="30" style="fill:rgba(255,85,51,0.6)">HOT ZONE</text>
+                    <text class="label" x="0" y="210" style="fill:rgba(0,100,255,0.6)">COLD ZONE</text>
+                </g>
+
+                <!-- Coil connection labels -->
+                <g transform="translate(100, 70)">
+                    <text class="label label-hot" x="0" y="0" text-anchor="end">HP FLOW</text>
+                    <text class="label-value label-hot" x="0" y="10" text-anchor="end" font-size="10">46°C →</text>
+                </g>
+
+                <g transform="translate(325, 255)">
+                    <text class="label label-cold" x="0" y="0">HP RETURN</text>
+                    <text class="label-value label-cold" x="0" y="10" font-size="10">← 45°C</text>
+                </g>
+
+                <!-- Status display -->
+                <g transform="translate(355, 40)">
+                    <rect x="0" y="0" width="80" height="70" rx="8" fill="rgba(0,30,60,0.5)" stroke="rgba(0,255,255,0.2)"/>
+
+                    <text class="label" x="40" y="16" text-anchor="middle">TARGET</text>
+                    <text x="40" y="35" text-anchor="middle" font-family="Oxanium" font-size="18" font-weight="600" fill="var(--solar)" style="filter: drop-shadow(0 0 8px var(--solar-glow))">55°C</text>
+
+                    <line x1="10" y1="42" x2="70" y2="42" stroke="rgba(0,255,255,0.15)"/>
+
+                    <text class="label" x="40" y="54" text-anchor="middle">CURRENT</text>
+                    <text x="40" y="68" text-anchor="middle" font-family="Oxanium" font-size="16" font-weight="600" fill="var(--cyan)" style="filter: drop-shadow(0 0 6px var(--cyan-glow))">49°C</text>
+                </g>
+
+                <!-- Delta display -->
+                <g transform="translate(355, 125)">
+                    <rect x="0" y="0" width="80" height="35" rx="6" fill="rgba(0,40,30,0.4)" stroke="rgba(0,255,136,0.25)"/>
+                    <text class="label" x="40" y="14" text-anchor="middle" style="fill:rgba(0,255,136,0.6)">HEATING ΔT</text>
+                    <text x="40" y="28" text-anchor="middle" font-family="Oxanium" font-size="13" font-weight="600" fill="#00FF88" style="filter: drop-shadow(0 0 5px rgba(0,255,136,0.5))">+0.3°C</text>
+                </g>
+
+                <!-- Water level indicator -->
+                <g transform="translate(355, 175)">
+                    <text class="label" x="0" y="0">WATER LEVEL</text>
+                    <rect x="0" y="8" width="80" height="8" rx="2" fill="rgba(0,255,255,0.1)" stroke="rgba(0,255,255,0.2)"/>
+                    <rect x="1" y="9" width="62" height="6" rx="1" fill="url(#waterTempGrad)"/>
+                    <text class="label" x="84" y="15" style="fill:var(--cyan)">78%</text>
+                </g>
+            </svg>
+        </div>
+
+    </div>
+
+    <footer class="footer">
+        <p>CWU Controller &bull; Holographic Tank Visualization System</p>
+    </footer>
+</body>
+</html>

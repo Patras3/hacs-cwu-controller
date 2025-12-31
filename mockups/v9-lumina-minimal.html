@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU Controller - Lumina Style Minimal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #001428;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: sans-serif;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 420px;
+            aspect-ratio: 16/9;
+            background: linear-gradient(180deg, #001020 0%, #001832 100%);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                0 0 40px rgba(0, 255, 255, 0.15),
+                inset 0 0 60px rgba(0, 255, 255, 0.03);
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Lumina glow effect */
+        .glow {
+            filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.6))
+                    drop-shadow(0 0 16px rgba(0, 255, 255, 0.3));
+        }
+
+        .glow-strong {
+            filter: drop-shadow(0 0 12px rgba(0, 255, 255, 0.8))
+                    drop-shadow(0 0 24px rgba(0, 255, 255, 0.4));
+        }
+
+        .glow-hot {
+            filter: drop-shadow(0 0 10px rgba(255, 100, 50, 0.7))
+                    drop-shadow(0 0 20px rgba(255, 100, 50, 0.35));
+        }
+
+        /* Wireframe styles */
+        .wire {
+            fill: none;
+            stroke: #00FFFF;
+            stroke-width: 1.5;
+        }
+
+        .wire-dim {
+            fill: none;
+            stroke: rgba(0, 255, 255, 0.3);
+            stroke-width: 1;
+        }
+
+        .wire-hot {
+            fill: none;
+            stroke: #FF6432;
+            stroke-width: 2;
+        }
+
+        /* Flow animation */
+        .flow-path {
+            stroke-linecap: round;
+            stroke-width: 3;
+            fill: none;
+            stroke-dasharray: 18 12;
+        }
+
+        .flow-hot {
+            stroke: #FF6432;
+            animation: flowMove 0.6s linear infinite;
+        }
+
+        .flow-cold {
+            stroke: #00FFFF;
+            animation: flowMoveReverse 0.6s linear infinite;
+        }
+
+        @keyframes flowMove {
+            from { stroke-dashoffset: 30; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowMoveReverse {
+            from { stroke-dashoffset: -30; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Compressor rotation */
+        .compressor {
+            animation: spin 1.5s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Pulse animation */
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Text styles */
+        .label {
+            font-size: 8px;
+            fill: rgba(0, 255, 255, 0.5);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .value {
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 5px black;
+        }
+
+        .value-cyan {
+            fill: #00FFFF;
+        }
+
+        .value-hot {
+            fill: #FF6432;
+        }
+
+        .value-amber {
+            fill: #FFB800;
+        }
+
+        /* Status indicator */
+        .status-dot {
+            fill: #00FF88;
+            animation: statusPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; r: 4; }
+            50% { opacity: 0.5; r: 3; }
+        }
+
+        /* Water fill */
+        .water {
+            fill: url(#waterGrad);
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <svg viewBox="0 0 420 236">
+            <defs>
+                <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#FF6432" stop-opacity="0.4"/>
+                    <stop offset="60%" stop-color="#00FFFF" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#0088FF" stop-opacity="0.6"/>
+                </linearGradient>
+            </defs>
+
+            <!-- HEAT PUMP - Simple 3D box wireframe -->
+            <g class="glow" transform="translate(30, 55)">
+                <!-- Back edges -->
+                <path class="wire-dim" d="M10,0 L90,0 L90,100 M10,0 L10,100"/>
+                <path class="wire-dim" d="M10,0 L0,15 M90,0 L80,15"/>
+
+                <!-- Front face -->
+                <rect class="wire" x="0" y="15" width="80" height="100" rx="3"/>
+
+                <!-- Top face -->
+                <path class="wire-dim" d="M0,15 L10,0 L90,0 L80,15"/>
+
+                <!-- Side face -->
+                <path class="wire-dim" d="M80,15 L90,0 L90,100 L80,115"/>
+
+                <!-- Compressor circle -->
+                <circle class="wire glow-strong" cx="40" cy="60" r="28"/>
+                <circle class="wire" cx="40" cy="60" r="18"/>
+
+                <!-- Rotating fan blades -->
+                <g class="compressor" style="transform-origin: 40px 60px;">
+                    <line class="wire glow-strong" x1="40" y1="35" x2="40" y2="85"/>
+                    <line class="wire glow-strong" x1="15" y1="60" x2="65" y2="60"/>
+                    <line class="wire" x1="22" y1="42" x2="58" y2="78"/>
+                    <line class="wire" x1="58" y1="42" x2="22" y2="78"/>
+                </g>
+
+                <!-- Output ports -->
+                <rect class="wire-hot glow-hot" x="75" y="40" width="8" height="12" rx="2"/>
+                <rect class="wire glow" x="75" y="75" width="8" height="12" rx="2"/>
+            </g>
+
+            <!-- PUMP LABEL -->
+            <text class="label" x="70" y="180" text-anchor="middle">HEAT PUMP</text>
+            <text class="value value-amber" x="70" y="195" text-anchor="middle" font-size="12">805W</text>
+
+            <!-- PIPES -->
+            <!-- Hot flow pipe -->
+            <path class="wire-dim" d="M113 95 Q150 95 170 70 Q190 45 225 45" stroke-width="5"/>
+            <path class="flow-path flow-hot glow-hot" d="M113 95 Q150 95 170 70 Q190 45 225 45"/>
+
+            <!-- Cold return pipe -->
+            <path class="wire-dim" d="M225 155 Q190 155 170 180 Q150 205 113 195" stroke-width="5"/>
+            <path class="flow-path flow-cold glow" d="M225 155 Q190 155 170 180 Q150 205 113 195"/>
+
+            <!-- Flow temp label -->
+            <g transform="translate(165, 30)">
+                <text class="label" x="0" y="0" text-anchor="middle">FLOW</text>
+                <text class="value value-hot glow-hot" x="0" y="14" text-anchor="middle">46.0°C</text>
+            </g>
+
+            <!-- Return temp label -->
+            <g transform="translate(165, 210)">
+                <text class="label" x="0" y="0" text-anchor="middle">RETURN</text>
+                <text class="value value-cyan glow" x="0" y="14" text-anchor="middle">45.7°C</text>
+            </g>
+
+            <!-- CWU TANK - Cylinder wireframe -->
+            <g class="glow" transform="translate(225, 30)">
+                <!-- Cylinder wireframe -->
+                <ellipse class="wire-dim" cx="55" cy="10" rx="45" ry="10"/>
+                <line class="wire" x1="10" y1="10" x2="10" y2="160"/>
+                <line class="wire" x1="100" y1="10" x2="100" y2="160"/>
+                <ellipse class="wire glow-strong" cx="55" cy="160" rx="45" ry="10"/>
+
+                <!-- Middle section line -->
+                <ellipse class="wire-dim pulse" cx="55" cy="85" rx="45" ry="10" stroke-dasharray="8 6"/>
+
+                <!-- Water level clip -->
+                <clipPath id="waterClip">
+                    <ellipse cx="55" cy="160" rx="43" ry="9"/>
+                    <rect x="12" y="55" width="86" height="105"/>
+                </clipPath>
+
+                <!-- Water fill (approx 65%) -->
+                <g clip-path="url(#waterClip)">
+                    <rect class="water" x="10" y="55" width="90" height="115"/>
+                </g>
+
+                <!-- Input/output ports -->
+                <rect class="wire-hot glow-hot" x="2" y="40" width="10" height="10" rx="2"/>
+                <rect class="wire glow" x="2" y="130" width="10" height="10" rx="2"/>
+            </g>
+
+            <!-- Tank labels -->
+            <g transform="translate(340, 50)">
+                <text class="label" x="0" y="0">TARGET</text>
+                <text class="value value-amber" x="0" y="18" font-size="22" style="filter: drop-shadow(0 0 8px rgba(255,184,0,0.5));">55°C</text>
+            </g>
+
+            <g transform="translate(340, 120)">
+                <text class="label" x="0" y="0">CURRENT</text>
+                <text class="value value-cyan glow-strong" x="0" y="18" font-size="22">49°C</text>
+            </g>
+
+            <text class="label" x="280" y="205" text-anchor="middle">CWU TANK</text>
+
+            <!-- Status indicator -->
+            <g transform="translate(360, 180)">
+                <circle class="status-dot glow" cx="0" cy="0" r="4" style="filter: drop-shadow(0 0 8px rgba(0,255,136,0.8));"/>
+                <text class="label" x="10" y="3" style="fill: #00FF88;">HEATING</text>
+            </g>
+
+            <!-- Delta T -->
+            <g transform="translate(115, 145)">
+                <text class="label" x="0" y="0" text-anchor="middle">ΔT</text>
+                <text class="value" x="0" y="14" text-anchor="middle" font-size="11" fill="#00FF88" style="filter: drop-shadow(0 0 6px rgba(0,255,136,0.6));">+0.3°C</text>
+            </g>
+        </svg>
+    </div>
+</body>
+</html>
