@@ -5,6 +5,7 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -49,7 +50,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class CWUControllerNumberEntity(CoordinatorEntity, NumberEntity):
+class CWUControllerNumberEntity(CoordinatorEntity, RestoreEntity, NumberEntity):
     """Base class for CWU Controller number entities."""
 
     _attr_mode = NumberMode.BOX
@@ -84,6 +85,24 @@ class CWUControllerNumberEntity(CoordinatorEntity, NumberEntity):
             "model": "Smart Heat Pump Controller",
             "sw_version": "4.3.0",
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Restore previous state when entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+
+        # Try to restore previous state
+        if (last_state := await self.async_get_last_state()) is not None:
+            if last_state.state not in (None, "unknown", "unavailable"):
+                try:
+                    restored_value = float(last_state.state)
+                    # Validate restored value is within bounds
+                    if self._attr_native_min_value <= restored_value <= self._attr_native_max_value:
+                        # Restore to coordinator's config overrides
+                        await self.coordinator.async_set_config_value(
+                            self._config_key, restored_value
+                        )
+                except (ValueError, TypeError):
+                    pass  # Use default if restoration fails
 
     @property
     def native_value(self) -> float:
