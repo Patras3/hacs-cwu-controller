@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.3.0">
+    <link rel="stylesheet" href="styles.css?v=8.4.0">
 </head>
 <body>
     <div class="container">
@@ -120,8 +120,8 @@
                         <text class="viz-target-value" id="viz-target-temp" x="0" y="11" text-anchor="middle">--°C</text>
                     </g>
                     <g transform="translate(60, 155)">
-                        <rect class="viz-temp-badge" x="-36" y="-16" width="72" height="32" rx="5"/>
-                        <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="6" text-anchor="middle">--°</text>
+                        <rect class="viz-temp-badge" x="-42" y="-18" width="84" height="38" rx="5"/>
+                        <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="7" text-anchor="middle">--°</text>
                     </g>
                     <text class="viz-label" x="60" y="248" text-anchor="middle">CWU</text>
                 </g>
@@ -186,7 +186,7 @@
 
                 <!-- Status section -->
                 <g transform="translate(15, 250)">
-                    <rect x="-8" y="-16" width="220" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
+                    <rect x="-8" y="-16" width="320" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
                     <g class="viz-tank-view">
                         <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
                         <text id="viz-dhw-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
@@ -1242,6 +1242,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.3.0"></script>
+    <script src="panel.js?v=8.4.0"></script>
 </body>
 </html>
