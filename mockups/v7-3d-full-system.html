@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU System - V7 Full 3D System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #050810;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            gap: 20px;
+        }
+
+        h2 {
+            color: #00d4ff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: -10px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 16/9;
+            position: relative;
+            background:
+                radial-gradient(ellipse at 30% 100%, rgba(0, 200, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+                linear-gradient(180deg, #080c12 0%, #0d1218 100%);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 200, 255, 0.2);
+            box-shadow:
+                0 0 40px rgba(0, 200, 255, 0.1),
+                inset 0 0 60px rgba(0, 200, 255, 0.02);
+        }
+
+        /* Scanlines effect */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent 0px,
+                transparent 2px,
+                rgba(0, 200, 255, 0.01) 2px,
+                rgba(0, 200, 255, 0.01) 4px
+            );
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .main-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Wireframe styles */
+        .wire {
+            fill: none;
+            stroke: #00d4ff;
+            stroke-width: 1;
+            filter: drop-shadow(0 0 2px rgba(0, 212, 255, 0.8));
+        }
+
+        .wire-bright {
+            fill: none;
+            stroke: #00d4ff;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 4px rgba(0, 212, 255, 1));
+        }
+
+        .wire-dim {
+            fill: none;
+            stroke: rgba(0, 180, 220, 0.3);
+            stroke-width: 0.5;
+        }
+
+        .wire-fill {
+            fill: rgba(0, 180, 220, 0.08);
+            stroke: #00d4ff;
+            stroke-width: 1;
+        }
+
+        .wire-orange {
+            fill: none;
+            stroke: #ff7b4a;
+            stroke-width: 1;
+            filter: drop-shadow(0 0 3px rgba(255, 123, 74, 0.8));
+        }
+
+        .wire-yellow {
+            fill: none;
+            stroke: #fbbf24;
+            stroke-width: 1;
+            filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.8));
+        }
+
+        /* Animated flow */
+        .flow-pipe {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+        }
+
+        .flow-hot {
+            stroke: #ff6b4a;
+            stroke-dasharray: 10 15;
+            filter: drop-shadow(0 0 4px rgba(255, 107, 74, 0.9));
+            animation: flowForward 1s linear infinite;
+        }
+
+        .flow-cold {
+            stroke: #00d4ff;
+            stroke-dasharray: 10 15;
+            filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.9));
+            animation: flowBackward 1s linear infinite;
+        }
+
+        .flow-floor {
+            stroke: #fbbf24;
+            stroke-dasharray: 10 15;
+            filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.9));
+            animation: flowForward 1s linear infinite;
+        }
+
+        .flow-inactive {
+            stroke: rgba(100, 100, 100, 0.3);
+            stroke-dasharray: 5 10;
+            filter: none;
+            animation: none;
+        }
+
+        @keyframes flowForward {
+            from { stroke-dashoffset: 25; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowBackward {
+            from { stroke-dashoffset: -25; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Text styles */
+        .text-label {
+            fill: rgba(255, 255, 255, 0.5);
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .text-value {
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 700;
+            filter: drop-shadow(0 0 4px currentColor);
+        }
+
+        .text-cyan { fill: #00d4ff; }
+        .text-orange { fill: #ff6b4a; }
+        .text-green { fill: #4ade80; }
+        .text-yellow { fill: #fbbf24; }
+        .text-purple { fill: #a78bfa; }
+
+        /* Water in tank */
+        .water-gradient {
+            fill: url(#waterGrad);
+            opacity: 0.5;
+        }
+
+        /* Rotating fan */
+        .fan-rotate {
+            animation: rotateFan 1.5s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes rotateFan {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Pulse glow */
+        .pulse-glow {
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* Active indicator */
+        .active-indicator {
+            fill: #4ade80;
+            filter: drop-shadow(0 0 6px #4ade80);
+        }
+
+        .active-blink {
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Floor grid */
+        .floor-grid {
+            fill: none;
+            stroke: rgba(0, 200, 255, 0.15);
+            stroke-width: 0.5;
+        }
+
+        /* Mode selector */
+        .mode-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .mode-btn {
+            background: rgba(0, 200, 255, 0.1);
+            border: 1px solid rgba(0, 200, 255, 0.3);
+            color: #00d4ff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .mode-btn:hover {
+            background: rgba(0, 200, 255, 0.2);
+        }
+
+        .mode-btn.active {
+            background: rgba(0, 200, 255, 0.3);
+            border-color: #00d4ff;
+            box-shadow: 0 0 10px rgba(0, 200, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="mode-controls">
+        <button class="mode-btn active" onclick="showMode('cwu')">CWU Mode</button>
+        <button class="mode-btn" onclick="showMode('floor')">Floor Mode</button>
+    </div>
+
+    <div class="card" id="cwu-mode">
+        <svg class="main-svg" viewBox="0 0 400 225">
+            <defs>
+                <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ff6b4a;stop-opacity:0.6"/>
+                    <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0.7"/>
+                </linearGradient>
+                <linearGradient id="pumpGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:rgba(139, 92, 246, 0.2)"/>
+                    <stop offset="100%" style="stop-color:rgba(139, 92, 246, 0.05)"/>
+                </linearGradient>
+            </defs>
+
+            <!-- Floor grid (perspective) -->
+            <g transform="translate(0, 180)">
+                <line class="floor-grid" x1="0" y1="0" x2="400" y2="0"/>
+                <line class="floor-grid" x1="50" y1="0" x2="100" y2="45"/>
+                <line class="floor-grid" x1="150" y1="0" x2="170" y2="45"/>
+                <line class="floor-grid" x1="250" y1="0" x2="240" y2="45"/>
+                <line class="floor-grid" x1="350" y1="0" x2="310" y2="45"/>
+            </g>
+
+            <!-- Title -->
+            <g transform="translate(200, 18)">
+                <rect x="-60" y="-12" width="120" height="20" rx="4"
+                      fill="rgba(0, 180, 220, 0.1)" stroke="rgba(0, 200, 255, 0.5)" stroke-width="1"/>
+                <text class="text-cyan text-value" x="0" y="4" text-anchor="middle" font-size="11"
+                      letter-spacing="2">CWU CONTROLLER</text>
+            </g>
+
+            <!-- Status badge -->
+            <g transform="translate(355, 18)">
+                <circle class="active-indicator active-blink" cx="-8" cy="0" r="3"/>
+                <text class="text-green" x="0" y="3" font-size="9" font-weight="600">CWU</text>
+            </g>
+
+            <!-- ================ HEAT PUMP (3D Box) ================ -->
+            <g id="heat-pump" transform="translate(30, 65)">
+                <!-- 3D box wireframe -->
+                <!-- Front face -->
+                <rect class="wire-fill" x="0" y="15" width="75" height="85" rx="3"
+                      fill="url(#pumpGrad)"/>
+                <!-- Top face -->
+                <polygon class="wire-dim" points="0,15 75,15 90,0 15,0"/>
+                <!-- Right side -->
+                <polygon class="wire-dim" points="75,15 90,0 90,85 75,100"/>
+
+                <!-- Compressor unit -->
+                <circle class="wire-bright" cx="37" cy="52" r="25"/>
+                <circle class="wire-dim" cx="37" cy="52" r="18"/>
+                <circle class="wire-dim" cx="37" cy="52" r="10"/>
+
+                <!-- Fan blades -->
+                <g class="fan-rotate" transform="translate(37, 52)">
+                    <line class="wire-bright" x1="0" y1="-20" x2="0" y2="20"/>
+                    <line class="wire-bright" x1="-20" y1="0" x2="20" y2="0"/>
+                    <line class="wire" x1="-14" y1="-14" x2="14" y2="14"/>
+                    <line class="wire" x1="14" y1="-14" x2="-14" y2="14"/>
+                </g>
+
+                <!-- Connection ports -->
+                <rect class="wire-orange" x="70" y="35" width="8" height="12" rx="2"/>
+                <rect class="wire" x="70" y="65" width="8" height="12" rx="2"/>
+
+                <!-- Labels -->
+                <text class="text-label" x="37" y="115" text-anchor="middle">HEAT PUMP</text>
+                <text class="text-purple text-value" x="37" y="127" text-anchor="middle" font-size="12">805W</text>
+
+                <!-- Status -->
+                <circle class="active-indicator" cx="70" cy="20" r="4"/>
+            </g>
+
+            <!-- ================ CWU TANK (3D Cylinder) ================ -->
+            <g id="cwu-tank" transform="translate(195, 45)">
+                <!-- Cylinder wireframe -->
+                <!-- Top ellipse -->
+                <ellipse class="wire-dim" cx="50" cy="8" rx="45" ry="8"/>
+
+                <!-- Body -->
+                <rect class="wire-fill" x="5" y="8" width="90" height="130"/>
+                <line class="wire" x1="5" y1="8" x2="5" y2="138"/>
+                <line class="wire" x1="95" y1="8" x2="95" y2="138"/>
+
+                <!-- Bottom ellipse -->
+                <ellipse class="wire-bright" cx="50" cy="138" rx="45" ry="8"/>
+
+                <!-- Middle section line -->
+                <ellipse class="wire-dim" cx="50" cy="73" rx="45" ry="8" stroke-dasharray="5 5"/>
+
+                <!-- Water level (75%) -->
+                <clipPath id="tankMask">
+                    <rect x="5" y="43" width="90" height="103"/>
+                </clipPath>
+                <rect class="water-gradient pulse-glow" x="5" y="43" width="90" height="103"
+                      clip-path="url(#tankMask)"/>
+
+                <!-- Temperature scale -->
+                <g transform="translate(-8, 0)">
+                    <line class="wire-dim" x1="0" y1="20" x2="0" y2="130"/>
+                    <line class="wire-dim" x1="-4" y1="20" x2="4" y2="20"/>
+                    <text class="text-label" x="-8" y="24" text-anchor="end" font-size="7">55°</text>
+                    <line class="wire-dim" x1="-4" y1="75" x2="4" y2="75"/>
+                    <text class="text-label" x="-8" y="79" text-anchor="end" font-size="7">45°</text>
+                    <line class="wire-dim" x1="-4" y1="130" x2="4" y2="130"/>
+                    <text class="text-label" x="-8" y="134" text-anchor="end" font-size="7">35°</text>
+                </g>
+
+                <!-- Target temp (top) -->
+                <g transform="translate(105, 15)">
+                    <text class="text-label" x="0" y="0" font-size="7">TARGET</text>
+                    <text class="text-yellow text-value" x="0" y="15" font-size="18">55°C</text>
+                </g>
+
+                <!-- Current temp (center) -->
+                <g transform="translate(105, 90)">
+                    <text class="text-label" x="0" y="0" font-size="7">CURRENT</text>
+                    <text class="text-cyan text-value" x="0" y="15" font-size="18">49°C</text>
+                </g>
+
+                <!-- Tank label -->
+                <text class="text-label" x="50" y="158" text-anchor="middle">CWU TANK</text>
+            </g>
+
+            <!-- ================ FLOOR HEATING (Inactive) ================ -->
+            <g id="floor-heating" transform="translate(330, 130)" opacity="0.35">
+                <!-- Coils isometric -->
+                <path class="wire-dim" d="M0,0 L45,0 L45,8 L5,8 L5,16 L45,16 L45,24 L0,24"
+                      stroke-dasharray="3 3"/>
+                <text class="text-label" x="22" y="38" text-anchor="middle" opacity="0.6">FLOOR</text>
+            </g>
+
+            <!-- ================ PIPES ================ -->
+            <!-- Hot pipe (Flow) - Pump to Tank -->
+            <path class="flow-pipe flow-hot" d="M108 97 Q140 97 160 75 Q180 53 195 53"/>
+
+            <!-- Cold pipe (Return) - Tank to Pump -->
+            <path class="flow-pipe flow-cold" d="M195 140 Q175 140 155 160 Q135 180 108 172"/>
+
+            <!-- Pipe to floor (inactive) -->
+            <path class="flow-pipe flow-inactive" d="M290 100 Q310 100 320 120 Q330 140 330 155"/>
+
+            <!-- ================ TEMPERATURE LABELS ================ -->
+            <!-- Flow temp -->
+            <g transform="translate(135, 55)">
+                <rect fill="rgba(0,0,0,0.8)" x="-22" y="-10" width="52" height="18" rx="3"
+                      stroke="rgba(255, 107, 74, 0.5)" stroke-width="0.5"/>
+                <text class="text-orange text-value" x="4" y="4" text-anchor="middle" font-size="11">46.0°C</text>
+                <text class="text-label" x="4" y="-13" text-anchor="middle" font-size="6">FLOW →</text>
+            </g>
+
+            <!-- Return temp -->
+            <g transform="translate(145, 175)">
+                <rect fill="rgba(0,0,0,0.8)" x="-22" y="-10" width="52" height="18" rx="3"
+                      stroke="rgba(0, 212, 255, 0.5)" stroke-width="0.5"/>
+                <text class="text-cyan text-value" x="4" y="4" text-anchor="middle" font-size="11">45.7°C</text>
+                <text class="text-label" x="4" y="-13" text-anchor="middle" font-size="6">← RETURN</text>
+            </g>
+
+            <!-- Delta T -->
+            <g transform="translate(55, 195)">
+                <rect fill="rgba(0,0,0,0.7)" x="-20" y="-8" width="45" height="16" rx="3"
+                      stroke="rgba(74, 222, 128, 0.4)" stroke-width="0.5"/>
+                <text class="text-green text-value" x="2" y="4" text-anchor="middle" font-size="10">ΔT +0.3°</text>
+            </g>
+
+            <!-- Outside temp -->
+            <g transform="translate(380, 50)">
+                <text class="text-label" x="0" y="0" text-anchor="end" font-size="7">OUTSIDE</text>
+                <text class="text-value" x="0" y="12" text-anchor="end" font-size="11" fill="#60a5fa">-1.1°C</text>
+            </g>
+
+            <!-- HP Status -->
+            <g transform="translate(20, 50)">
+                <text class="text-green" x="0" y="0" font-size="8" font-weight="600">● COMPRESSOR ON</text>
+            </g>
+        </svg>
+    </div>
+
+    <!-- Floor heating mode card -->
+    <div class="card" id="floor-mode" style="display: none;">
+        <svg class="main-svg" viewBox="0 0 400 225">
+            <defs>
+                <linearGradient id="waterGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ff6b4a;stop-opacity:0.3"/>
+                    <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0.4"/>
+                </linearGradient>
+            </defs>
+
+            <!-- Floor grid -->
+            <g transform="translate(0, 180)">
+                <line class="floor-grid" x1="0" y1="0" x2="400" y2="0"/>
+                <line class="floor-grid" x1="50" y1="0" x2="100" y2="45"/>
+                <line class="floor-grid" x1="150" y1="0" x2="170" y2="45"/>
+                <line class="floor-grid" x1="250" y1="0" x2="240" y2="45"/>
+                <line class="floor-grid" x1="350" y1="0" x2="310" y2="45"/>
+            </g>
+
+            <!-- Title -->
+            <g transform="translate(200, 18)">
+                <rect x="-60" y="-12" width="120" height="20" rx="4"
+                      fill="rgba(0, 180, 220, 0.1)" stroke="rgba(0, 200, 255, 0.5)" stroke-width="1"/>
+                <text class="text-cyan text-value" x="0" y="4" text-anchor="middle" font-size="11"
+                      letter-spacing="2">CWU CONTROLLER</text>
+            </g>
+
+            <!-- Status badge -->
+            <g transform="translate(345, 18)">
+                <circle cx="-8" cy="0" r="3" fill="#fbbf24" style="filter: drop-shadow(0 0 6px #fbbf24); animation: blink 1s ease-in-out infinite;"/>
+                <text class="text-yellow" x="0" y="3" font-size="9" font-weight="600">FLOOR</text>
+            </g>
+
+            <!-- ================ HEAT PUMP ================ -->
+            <g id="heat-pump-floor" transform="translate(30, 65)">
+                <rect class="wire-fill" x="0" y="15" width="75" height="85" rx="3"
+                      fill="url(#pumpGrad)"/>
+                <polygon class="wire-dim" points="0,15 75,15 90,0 15,0"/>
+                <polygon class="wire-dim" points="75,15 90,0 90,85 75,100"/>
+
+                <circle class="wire-bright" cx="37" cy="52" r="25"/>
+                <circle class="wire-dim" cx="37" cy="52" r="18"/>
+                <circle class="wire-dim" cx="37" cy="52" r="10"/>
+
+                <g class="fan-rotate" transform="translate(37, 52)">
+                    <line class="wire-bright" x1="0" y1="-20" x2="0" y2="20"/>
+                    <line class="wire-bright" x1="-20" y1="0" x2="20" y2="0"/>
+                    <line class="wire" x1="-14" y1="-14" x2="14" y2="14"/>
+                    <line class="wire" x1="14" y1="-14" x2="-14" y2="14"/>
+                </g>
+
+                <rect class="wire-yellow" x="70" y="35" width="8" height="12" rx="2"/>
+                <rect class="wire" x="70" y="65" width="8" height="12" rx="2"/>
+
+                <text class="text-label" x="37" y="115" text-anchor="middle">HEAT PUMP</text>
+                <text class="text-purple text-value" x="37" y="127" text-anchor="middle" font-size="12">1.2kW</text>
+
+                <circle class="active-indicator" cx="70" cy="20" r="4"/>
+            </g>
+
+            <!-- ================ CWU TANK (Dimmed) ================ -->
+            <g id="cwu-tank-floor" transform="translate(195, 45)" opacity="0.4">
+                <ellipse class="wire-dim" cx="50" cy="8" rx="45" ry="8"/>
+                <rect class="wire-fill" x="5" y="8" width="90" height="130"/>
+                <line class="wire-dim" x1="5" y1="8" x2="5" y2="138"/>
+                <line class="wire-dim" x1="95" y1="8" x2="95" y2="138"/>
+                <ellipse class="wire-dim" cx="50" cy="138" rx="45" ry="8"/>
+
+                <rect fill="url(#waterGrad2)" x="5" y="43" width="90" height="103" opacity="0.3"/>
+
+                <g transform="translate(105, 60)">
+                    <text class="text-label" x="0" y="0" font-size="7">CWU</text>
+                    <text class="text-cyan" x="0" y="15" font-size="14" font-weight="700" opacity="0.6">47°C</text>
+                </g>
+
+                <text class="text-label" x="50" y="158" text-anchor="middle" opacity="0.5">CWU TANK</text>
+            </g>
+
+            <!-- ================ FLOOR HEATING (Active) ================ -->
+            <g id="floor-heating-active" transform="translate(310, 110)">
+                <!-- Larger floor coils with glow -->
+                <path class="wire-yellow" d="M0,0 L60,0" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M60,0 L60,12" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M60,12 L5,12" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M5,12 L5,24" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M5,24 L60,24" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M60,24 L60,36" style="stroke-width: 2;"/>
+                <path class="wire-yellow" d="M60,36 L0,36" style="stroke-width: 2;"/>
+
+                <!-- Heat waves -->
+                <path class="wire-dim" d="M15,45 Q20,40 25,45 Q30,50 35,45" stroke="#fbbf24" opacity="0.5"/>
+                <path class="wire-dim" d="M35,50 Q40,45 45,50 Q50,55 55,50" stroke="#fbbf24" opacity="0.4"/>
+
+                <text class="text-label" x="30" y="65" text-anchor="middle">FLOOR HEATING</text>
+                <text class="text-yellow text-value" x="30" y="77" text-anchor="middle" font-size="11">23.5°C</text>
+
+                <circle cx="65" cy="5" r="4" fill="#fbbf24" style="filter: drop-shadow(0 0 6px #fbbf24);"/>
+            </g>
+
+            <!-- ================ PIPES ================ -->
+            <!-- Pipe to CWU (inactive) -->
+            <path class="flow-pipe flow-inactive" d="M108 97 Q140 97 160 75 Q180 53 195 53"/>
+            <path class="flow-pipe flow-inactive" d="M195 140 Q175 140 155 160 Q135 180 108 172"/>
+
+            <!-- Pipe to Floor (active) -->
+            <path class="flow-pipe flow-floor" d="M108 110 Q150 110 200 110 Q260 110 290 110 L310 110"/>
+            <path class="flow-pipe flow-cold" d="M310 146 L290 146 Q260 146 200 146 Q150 146 108 150"/>
+
+            <!-- Flow temp to floor -->
+            <g transform="translate(200, 95)">
+                <rect fill="rgba(0,0,0,0.8)" x="-22" y="-10" width="52" height="18" rx="3"
+                      stroke="rgba(251, 191, 36, 0.5)" stroke-width="0.5"/>
+                <text class="text-yellow text-value" x="4" y="4" text-anchor="middle" font-size="11">32.5°C</text>
+                <text class="text-label" x="4" y="-13" text-anchor="middle" font-size="6">FLOW →</text>
+            </g>
+
+            <!-- Return temp from floor -->
+            <g transform="translate(200, 165)">
+                <rect fill="rgba(0,0,0,0.8)" x="-22" y="-10" width="52" height="18" rx="3"
+                      stroke="rgba(0, 212, 255, 0.5)" stroke-width="0.5"/>
+                <text class="text-cyan text-value" x="4" y="4" text-anchor="middle" font-size="11">28.2°C</text>
+                <text class="text-label" x="4" y="-13" text-anchor="middle" font-size="6">← RETURN</text>
+            </g>
+
+            <!-- Delta T -->
+            <g transform="translate(55, 195)">
+                <rect fill="rgba(0,0,0,0.7)" x="-20" y="-8" width="45" height="16" rx="3"
+                      stroke="rgba(74, 222, 128, 0.4)" stroke-width="0.5"/>
+                <text class="text-green text-value" x="2" y="4" text-anchor="middle" font-size="10">ΔT +4.3°</text>
+            </g>
+
+            <!-- Outside temp -->
+            <g transform="translate(380, 50)">
+                <text class="text-label" x="0" y="0" text-anchor="end" font-size="7">OUTSIDE</text>
+                <text class="text-value" x="0" y="12" text-anchor="end" font-size="11" fill="#60a5fa">-1.1°C</text>
+            </g>
+
+            <!-- HP Status -->
+            <g transform="translate(20, 50)">
+                <text class="text-green" x="0" y="0" font-size="8" font-weight="600">● COMPRESSOR ON</text>
+            </g>
+        </svg>
+    </div>
+
+    <script>
+        function showMode(mode) {
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (mode === 'cwu') {
+                document.getElementById('cwu-mode').style.display = 'block';
+                document.getElementById('floor-mode').style.display = 'none';
+            } else {
+                document.getElementById('cwu-mode').style.display = 'none';
+                document.getElementById('floor-mode').style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
