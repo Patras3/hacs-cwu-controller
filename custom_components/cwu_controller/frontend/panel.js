@@ -2621,8 +2621,7 @@ function updateSystemVisualization() {
         el.textContent = bsb.hp_status || '---';
     });
 
-    // Update state badge
-    const state = currentData.state || 'idle';
+    // Update state badge (reuse 'state' from above)
     const stateBadge = document.getElementById('viz-state-badge');
     if (stateBadge) {
         stateBadge.textContent = state.replace(/_/g, ' ').toUpperCase();
