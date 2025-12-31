@@ -3671,3 +3671,289 @@ body {
         align-items: flex-start;
     }
 }
+
+/* ========================================
+   SYSTEM VISUALIZATION (Holographic)
+   ======================================== */
+
+.system-viz-card {
+    --viz-cyan: #00FFFF;
+    --viz-cyan-glow: rgba(0, 255, 255, 0.6);
+    --viz-cyan-dim: rgba(0, 255, 255, 0.25);
+    --viz-hot: #FF5533;
+    --viz-hot-glow: rgba(255, 85, 51, 0.6);
+    --viz-warm1: #FF7744;
+    --viz-warm2: #FFAA44;
+    --viz-warm3: #DDCC44;
+    --viz-cool1: #88CC66;
+    --viz-cool2: #55BBAA;
+    --viz-cool3: #44AADD;
+    --viz-cold: #0088FF;
+    --viz-cold-glow: rgba(0, 136, 255, 0.5);
+    --viz-bg: #000a14;
+    --viz-fan-speed: 1.5s;
+
+    background: linear-gradient(180deg, #001428 0%, var(--viz-bg) 100%);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    border: 1px solid rgba(0,255,255,0.12);
+    margin-bottom: 16px;
+}
+
+.system-viz-card svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Wireframe base styles */
+.viz-w { fill: none; stroke: var(--viz-cyan); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.viz-w-bright { fill: none; stroke: var(--viz-cyan); stroke-width: 2; filter: drop-shadow(0 0 4px var(--viz-cyan-glow)) drop-shadow(0 0 10px var(--viz-cyan-glow)); }
+.viz-w-dim { fill: none; stroke: var(--viz-cyan-dim); stroke-width: 1; }
+.viz-f { fill: rgba(0, 20, 40, 0.7); }
+.viz-glow { filter: drop-shadow(0 0 6px var(--viz-cyan-glow)); }
+.viz-glow-s { filter: drop-shadow(0 0 4px var(--viz-cyan-glow)); }
+
+/* Fan animation */
+.viz-fan { animation: vizSpin var(--viz-fan-speed) linear infinite; }
+.viz-fan.off { animation: none; }
+@keyframes vizSpin { to { transform: rotate(360deg); } }
+
+.viz-blade-fill {
+    fill: rgba(0, 255, 255, 0.15);
+    stroke: var(--viz-cyan);
+    stroke-width: 1;
+}
+
+/* Power badge */
+.viz-power-badge {
+    fill: rgba(0, 20, 40, 0.9);
+    stroke: var(--viz-cyan);
+    stroke-width: 1;
+    filter: drop-shadow(0 0 6px var(--viz-cyan-glow));
+}
+.viz-power-value {
+    font-family: 'Oxanium', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--viz-cyan);
+    filter: drop-shadow(0 0 4px var(--viz-cyan-glow));
+}
+.viz-power-unit {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 7px;
+    fill: rgba(0,255,255,0.6);
+}
+
+/* Defrost mode */
+.viz-defrost-indicator { opacity: 0; transition: opacity 0.3s; }
+.system-viz-card.defrost .viz-defrost-indicator { opacity: 1; }
+
+.viz-defrost-icon {
+    fill: #88DDFF;
+    filter: drop-shadow(0 0 4px rgba(136,221,255,0.8));
+    animation: vizDefrostPulse 1s ease-in-out infinite;
+}
+@keyframes vizDefrostPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Reverse animations in defrost */
+.system-viz-card.defrost .viz-pipe-flow { animation-direction: reverse; }
+.system-viz-card.defrost .viz-helix-flow { animation-direction: reverse; }
+.system-viz-card.defrost .viz-floor-pipe { animation-direction: reverse; }
+.system-viz-card.defrost .viz-fan { animation-direction: reverse; }
+
+/* Pipes */
+.viz-pipe-hot {
+    fill: none;
+    stroke: var(--viz-hot);
+    stroke-width: 5;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 6px var(--viz-hot-glow)) drop-shadow(0 0 12px rgba(255,85,51,0.4));
+}
+
+.viz-pipe-cold {
+    fill: none;
+    stroke: var(--viz-cold);
+    stroke-width: 5;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 6px var(--viz-cold-glow)) drop-shadow(0 0 12px rgba(0,136,255,0.4));
+}
+
+.viz-pipe-flow {
+    stroke-dasharray: 12 8;
+    animation: vizFlowAnim 0.7s linear infinite;
+}
+
+@keyframes vizFlowAnim {
+    to { stroke-dashoffset: -20; }
+}
+
+/* Helix coil */
+.viz-helix {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.viz-helix-front {
+    stroke: url(#vizHelixGrad);
+    filter: drop-shadow(0 0 3px var(--viz-hot-glow));
+}
+
+.viz-helix-back {
+    stroke: url(#vizHelixGrad);
+    opacity: 0.2;
+}
+
+.viz-helix-flow {
+    stroke-dasharray: 12 8;
+    animation: vizHelixFlow 1s linear infinite;
+}
+
+@keyframes vizHelixFlow {
+    to { stroke-dashoffset: -20; }
+}
+
+/* Floor heating pipes */
+.viz-floor-pipe {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 12 8;
+    animation: vizFlowAnim 0.7s linear infinite;
+}
+
+.viz-fp-hot { stroke: var(--viz-hot); filter: drop-shadow(0 0 3px var(--viz-hot-glow)); }
+.viz-fp-w1 { stroke: var(--viz-warm1); filter: drop-shadow(0 0 2px rgba(255,119,68,0.4)); }
+.viz-fp-w2 { stroke: var(--viz-warm2); filter: drop-shadow(0 0 2px rgba(255,170,68,0.4)); }
+.viz-fp-w3 { stroke: var(--viz-warm3); filter: drop-shadow(0 0 2px rgba(221,204,68,0.3)); }
+.viz-fp-c1 { stroke: var(--viz-cool1); filter: drop-shadow(0 0 2px rgba(136,204,102,0.3)); }
+.viz-fp-c2 { stroke: var(--viz-cool2); filter: drop-shadow(0 0 2px rgba(85,187,170,0.3)); }
+.viz-fp-c3 { stroke: var(--viz-cool3); filter: drop-shadow(0 0 2px rgba(68,170,221,0.4)); }
+.viz-fp-cold { stroke: var(--viz-cold); filter: drop-shadow(0 0 3px var(--viz-cold-glow)); }
+
+.viz-floor-surface {
+    fill: rgba(0, 255, 255, 0.03);
+    stroke: var(--viz-cyan-dim);
+    stroke-width: 1;
+}
+
+/* Labels */
+.viz-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 7px;
+    fill: rgba(0,255,255,0.5);
+    letter-spacing: 1px;
+}
+
+/* Temperature badges */
+.viz-temp-badge {
+    fill: rgba(0, 20, 40, 0.9);
+    stroke: var(--viz-cyan);
+    stroke-width: 1;
+    filter: drop-shadow(0 0 8px var(--viz-cyan-glow));
+}
+.viz-temp-badge-value {
+    font-family: 'Oxanium', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--viz-cyan);
+    filter: drop-shadow(0 0 4px var(--viz-cyan-glow));
+}
+
+/* Target temp */
+.viz-target-badge {
+    fill: rgba(255, 85, 51, 0.1);
+    stroke: var(--viz-hot);
+    stroke-width: 1;
+    stroke-dasharray: 3 2;
+}
+.viz-target-value {
+    font-family: 'Oxanium', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--viz-hot);
+    filter: drop-shadow(0 0 3px var(--viz-hot-glow));
+}
+.viz-target-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 6px;
+    fill: rgba(255,85,51,0.6);
+    letter-spacing: 1px;
+}
+
+/* Flow/Return temp badges */
+.viz-flow-badge {
+    font-family: 'Oxanium', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    filter: drop-shadow(0 0 6px var(--viz-hot-glow));
+}
+.viz-return-badge {
+    font-family: 'Oxanium', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    filter: drop-shadow(0 0 6px var(--viz-cold-glow));
+}
+
+.viz-pulse { animation: vizPulse 2.5s ease-in-out infinite; }
+@keyframes vizPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.6; } }
+
+/* View toggling */
+.viz-tank-view { display: block; }
+.viz-floor-view { display: none; }
+
+.system-viz-card.show-floor .viz-tank-view { display: none; }
+.system-viz-card.show-floor .viz-floor-view { display: block; }
+
+/* Connection dots */
+.viz-conn-hot {
+    fill: rgba(255,85,51,0.2);
+    stroke: var(--viz-hot);
+    stroke-width: 1.5;
+}
+.viz-conn-cold {
+    fill: rgba(0,136,255,0.2);
+    stroke: var(--viz-cold);
+    stroke-width: 1.5;
+}
+
+/* Stopped state (idle) */
+.system-viz-card.stopped .viz-fan { animation: none; }
+.system-viz-card.stopped .viz-pipe-flow { animation: none; }
+.system-viz-card.stopped .viz-helix-flow { animation: none; }
+.system-viz-card.stopped .viz-floor-pipe { animation: none; }
+
+/* Mobile/Desktop visibility */
+.system-viz-mobile { display: block; }
+.system-viz-desktop { display: none; }
+
+/* Desktop visualization content wrapper */
+.system-viz-content {
+    background: linear-gradient(180deg, #001428 0%, #000a14 100%);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    border: 1px solid rgba(0,255,255,0.12);
+}
+
+.system-viz-content svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+@media (min-width: 769px) {
+    .system-viz-mobile { display: none; }
+    .system-viz-desktop { display: block; }
+}
+
+/* Mobile optimization */
+@media (max-width: 500px) {
+    .system-viz-card {
+        padding: 12px 8px;
+    }
+}

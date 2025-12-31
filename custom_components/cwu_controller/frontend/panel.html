@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CWU Controller</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.1.0">
+    <link rel="stylesheet" href="styles.css?v=8.2.5">
 </head>
 <body>
     <div class="container">
@@ -38,6 +39,168 @@
                 </button>
             </div>
         </header>
+
+        <!-- System Visualization Card (Holographic) - MOBILE VERSION -->
+        <div class="system-viz-card system-viz-mobile" id="system-viz-card">
+            <svg viewBox="0 -10 480 300" id="system-viz-svg">
+                <defs>
+                    <linearGradient id="vizHelixGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#FF5533"/>
+                        <stop offset="30%" stop-color="#FF7744"/>
+                        <stop offset="50%" stop-color="#DDAA44"/>
+                        <stop offset="70%" stop-color="#44AADD"/>
+                        <stop offset="100%" stop-color="#0088FF"/>
+                    </linearGradient>
+                    <linearGradient id="vizWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#FF5533" stop-opacity="0.3"/>
+                        <stop offset="40%" stop-color="#CC8844" stop-opacity="0.2"/>
+                        <stop offset="70%" stop-color="#44AADD" stop-opacity="0.2"/>
+                        <stop offset="100%" stop-color="#0066FF" stop-opacity="0.3"/>
+                    </linearGradient>
+                </defs>
+
+                <!-- HEAT PUMP -->
+                <g transform="translate(15, 45)">
+                    <rect class="viz-w viz-f viz-glow" x="0" y="0" width="130" height="85" rx="3"/>
+                    <rect class="viz-w-dim viz-f" x="3" y="3" width="75" height="79" rx="2"/>
+                    <circle class="viz-w viz-glow-s" cx="40" cy="42" r="34"/>
+                    <circle class="viz-w-dim viz-pulse" cx="40" cy="42" r="38" stroke-dasharray="5 3"/>
+                    <circle class="viz-w-dim" cx="40" cy="42" r="30" stroke-dasharray="3 3" style="opacity:0.25"/>
+                    <g class="viz-fan viz-glow-s" id="viz-fan" style="transform-origin: 40px 42px;">
+                        <path class="viz-blade-fill" d="M40,42 L37,32 Q28,14 38,4 Q48,3 52,12 Q54,26 44,38 Z"/>
+                        <path class="viz-blade-fill" d="M40,42 L50,39 Q68,30 78,40 Q78,50 68,54 Q52,55 44,45 Z"/>
+                        <path class="viz-blade-fill" d="M40,42 L43,52 Q52,70 42,80 Q32,81 28,72 Q26,56 36,46 Z"/>
+                        <path class="viz-blade-fill" d="M40,42 L30,45 Q12,54 2,44 Q2,34 12,30 Q28,29 36,39 Z"/>
+                        <circle cx="40" cy="42" r="10" fill="rgba(0,12,24,0.95)" class="viz-w viz-glow"/>
+                        <circle cx="40" cy="42" r="6" fill="rgba(0,30,50,0.9)" class="viz-w"/>
+                        <circle cx="40" cy="42" r="2.5" fill="#00FFFF" class="viz-glow-s"/>
+                    </g>
+                    <g transform="translate(105, 42)" id="viz-power-group">
+                        <rect class="viz-power-badge" x="-18" y="-14" width="36" height="28" rx="3"/>
+                        <text class="viz-power-value" id="viz-power-value" x="0" y="0" text-anchor="middle">--</text>
+                        <text class="viz-power-unit" id="viz-power-unit" x="0" y="9" text-anchor="middle">W</text>
+                    </g>
+                    <g class="viz-defrost-indicator" id="viz-defrost-indicator" transform="translate(40, 42)">
+                        <circle cx="0" cy="0" r="38" fill="rgba(136,221,255,0.08)" class="viz-defrost-icon"/>
+                        <g class="viz-defrost-icon" transform="scale(1.8)">
+                            <line x1="0" y1="-12" x2="0" y2="12" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                            <line x1="-10" y1="-6" x2="10" y2="6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                            <line x1="-10" y1="6" x2="10" y2="-6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                            <line x1="0" y1="-12" x2="-4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="0" y1="-12" x2="4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="0" y1="12" x2="-4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="0" y1="12" x2="4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="-10" y1="-6" x2="-7" y2="-9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="10" y1="6" x2="7" y2="9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                        </g>
+                    </g>
+                    <g class="viz-defrost-indicator" id="viz-defrost-label" transform="translate(40, 98)">
+                        <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(136,221,255,0.15)" stroke="#88DDFF" stroke-width="1"/>
+                        <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:10px;font-weight:600;fill:#88DDFF;letter-spacing:2px;">DEFROST</text>
+                    </g>
+                    <rect class="viz-w viz-glow" x="10" y="85" width="25" height="6" rx="1"/>
+                    <rect class="viz-w viz-glow" x="95" y="85" width="25" height="6" rx="1"/>
+                    <circle class="viz-conn-hot" cx="130" cy="20" r="6"/>
+                    <circle class="viz-conn-cold" cx="130" cy="70" r="6"/>
+                </g>
+
+                <!-- CWU TANK -->
+                <g class="viz-tank-view" id="viz-tank-group" transform="translate(310, -5)">
+                    <ellipse class="viz-w-dim viz-pulse" cx="60" cy="15" rx="48" ry="12"/>
+                    <line class="viz-w-bright" x1="12" y1="15" x2="12" y2="215"/>
+                    <line class="viz-w-bright" x1="108" y1="15" x2="108" y2="215"/>
+                    <ellipse class="viz-w-bright" cx="60" cy="215" rx="48" ry="12"/>
+                    <clipPath id="vizTankClip"><path d="M14,28 L14,215 A48,12 0 0,0 106,215 L106,28 A48,12 0 0,1 14,28"/></clipPath>
+                    <rect x="12" y="28" width="96" height="200" fill="url(#vizWaterGrad)" clip-path="url(#vizTankClip)"/>
+                    <path class="viz-helix viz-helix-back" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                    <path class="viz-helix viz-helix-front viz-helix-flow" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                    <g transform="translate(60, 5)">
+                        <rect class="viz-target-badge" x="-24" y="-10" width="48" height="22" rx="3"/>
+                        <text class="viz-target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
+                        <text class="viz-target-value" id="viz-target-temp" x="0" y="8" text-anchor="middle">--°C</text>
+                    </g>
+                    <g transform="translate(60, 155)">
+                        <rect class="viz-temp-badge" x="-28" y="-12" width="56" height="24" rx="4"/>
+                        <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="4" text-anchor="middle">--°</text>
+                    </g>
+                    <text class="viz-label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
+                </g>
+
+                <!-- Pipes to tank -->
+                <g class="viz-tank-view" id="viz-tank-pipes">
+                    <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,30 L332,30"/>
+                    <rect x="200" y="2" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                    <text class="viz-flow-badge" id="viz-flow-temp-cwu" x="221" y="16" text-anchor="middle" fill="var(--viz-hot)">--°</text>
+                    <path class="viz-pipe-cold viz-pipe-flow" d="M332,190 L200,190 L200,115 L145,115"/>
+                    <rect x="200" y="198" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
+                    <text class="viz-return-badge" id="viz-return-temp-cwu" x="221" y="212" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                </g>
+
+                <!-- Delta T (CWU) -->
+                <g class="viz-tank-view viz-delta-badge" transform="translate(172, 90)">
+                    <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                    <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                    <text id="viz-delta-cwu" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                </g>
+
+                <!-- FLOOR HEATING -->
+                <g class="viz-floor-view" id="viz-floor-group" transform="translate(260, 15)">
+                    <rect class="viz-floor-surface" x="10" y="10" width="180" height="145" rx="4"/>
+                    <path class="viz-floor-pipe viz-fp-hot viz-pipe-flow" d="M20,24 L180,24"/>
+                    <path class="viz-floor-pipe viz-fp-hot viz-pipe-flow" d="M180,24 L180,40"/>
+                    <path class="viz-floor-pipe viz-fp-w1 viz-pipe-flow" d="M180,40 L30,40"/>
+                    <path class="viz-floor-pipe viz-fp-w1 viz-pipe-flow" d="M30,40 L30,56"/>
+                    <path class="viz-floor-pipe viz-fp-w2 viz-pipe-flow" d="M30,56 L180,56"/>
+                    <path class="viz-floor-pipe viz-fp-w2 viz-pipe-flow" d="M180,56 L180,72"/>
+                    <path class="viz-floor-pipe viz-fp-w3 viz-pipe-flow" d="M180,72 L30,72"/>
+                    <path class="viz-floor-pipe viz-fp-w3 viz-pipe-flow" d="M30,72 L30,88"/>
+                    <path class="viz-floor-pipe viz-fp-c1 viz-pipe-flow" d="M30,88 L180,88"/>
+                    <path class="viz-floor-pipe viz-fp-c1 viz-pipe-flow" d="M180,88 L180,104"/>
+                    <path class="viz-floor-pipe viz-fp-c2 viz-pipe-flow" d="M180,104 L30,104"/>
+                    <path class="viz-floor-pipe viz-fp-c2 viz-pipe-flow" d="M30,104 L30,120"/>
+                    <path class="viz-floor-pipe viz-fp-c3 viz-pipe-flow" d="M30,120 L180,120"/>
+                    <path class="viz-floor-pipe viz-fp-c3 viz-pipe-flow" d="M180,120 L180,136"/>
+                    <path class="viz-floor-pipe viz-fp-cold viz-pipe-flow" d="M180,136 L30,136"/>
+                    <path class="viz-floor-pipe viz-fp-cold viz-pipe-flow" d="M30,136 L30,145 L20,145"/>
+                    <circle class="viz-conn-hot" cx="20" cy="24" r="5"/>
+                    <circle class="viz-conn-cold" cx="20" cy="145" r="5"/>
+                    <text class="viz-label" x="100" y="168" text-anchor="middle" style="font-size:9px; letter-spacing:2px;">PODŁOGOWE</text>
+                </g>
+
+                <!-- Pipes to floor -->
+                <g class="viz-floor-view" id="viz-floor-pipes">
+                    <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,39 L280,39"/>
+                    <rect x="200" y="15" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                    <text class="viz-flow-badge" id="viz-flow-temp-floor" x="221" y="29" text-anchor="middle" fill="var(--viz-hot)">--°</text>
+                    <path class="viz-pipe-cold viz-pipe-flow" d="M280,160 L220,160 L220,115 L145,115"/>
+                    <rect x="215" y="168" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
+                    <text class="viz-return-badge" id="viz-return-temp-floor" x="236" y="182" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                </g>
+
+                <!-- Delta T (Floor) -->
+                <g class="viz-floor-view viz-delta-badge" transform="translate(172, 90)">
+                    <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                    <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                    <text id="viz-delta-floor" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                </g>
+
+                <!-- Status section -->
+                <g transform="translate(20, 242)">
+                    <g class="viz-tank-view">
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
+                        <text id="viz-dhw-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                    </g>
+                    <g class="viz-floor-view">
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
+                        <text id="viz-hc1-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                    </g>
+                    <g transform="translate(0, 16)">
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
+                        <text id="viz-hp-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                    </g>
+                </g>
+            </svg>
+        </div>
 
         <!-- Alert for Fake Heating -->
         <div class="alert alert-danger animated" id="fake-heating-alert" style="display: none;">
@@ -160,6 +323,154 @@
                             <span class="mdi mdi-heating-coil"></span>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- System Visualization Card (Holographic) - DESKTOP VERSION -->
+            <div class="card glass-effect system-viz-card system-viz-desktop" id="system-viz-card-desktop">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-heat-pump"></span>
+                        System Overview
+                    </span>
+                    <span class="badge" id="viz-state-badge">--</span>
+                </div>
+                <div class="system-viz-content">
+                    <svg viewBox="0 -10 480 300" class="system-viz-svg-desktop">
+                        <!-- Uses same gradient/clip IDs as mobile - both defined, browser uses first -->
+                        <!-- HEAT PUMP -->
+                        <g transform="translate(15, 45)">
+                            <rect class="viz-w viz-f viz-glow" x="0" y="0" width="130" height="85" rx="3"/>
+                            <rect class="viz-w-dim viz-f" x="3" y="3" width="75" height="79" rx="2"/>
+                            <circle class="viz-w viz-glow-s" cx="40" cy="42" r="34"/>
+                            <circle class="viz-w-dim viz-pulse" cx="40" cy="42" r="38" stroke-dasharray="5 3"/>
+                            <circle class="viz-w-dim" cx="40" cy="42" r="30" stroke-dasharray="3 3" style="opacity:0.25"/>
+                            <g class="viz-fan viz-glow-s viz-fan-desktop" style="transform-origin: 40px 42px;">
+                                <path class="viz-blade-fill" d="M40,42 L37,32 Q28,14 38,4 Q48,3 52,12 Q54,26 44,38 Z"/>
+                                <path class="viz-blade-fill" d="M40,42 L50,39 Q68,30 78,40 Q78,50 68,54 Q52,55 44,45 Z"/>
+                                <path class="viz-blade-fill" d="M40,42 L43,52 Q52,70 42,80 Q32,81 28,72 Q26,56 36,46 Z"/>
+                                <path class="viz-blade-fill" d="M40,42 L30,45 Q12,54 2,44 Q2,34 12,30 Q28,29 36,39 Z"/>
+                                <circle cx="40" cy="42" r="10" fill="rgba(0,12,24,0.95)" class="viz-w viz-glow"/>
+                                <circle cx="40" cy="42" r="6" fill="rgba(0,30,50,0.9)" class="viz-w"/>
+                                <circle cx="40" cy="42" r="2.5" fill="#00FFFF" class="viz-glow-s"/>
+                            </g>
+                            <g transform="translate(105, 42)" class="viz-power-group-desktop">
+                                <rect class="viz-power-badge" x="-18" y="-14" width="36" height="28" rx="3"/>
+                                <text class="viz-power-value viz-power-value-desktop" x="0" y="0" text-anchor="middle">--</text>
+                                <text class="viz-power-unit viz-power-unit-desktop" x="0" y="9" text-anchor="middle">W</text>
+                            </g>
+                            <g class="viz-defrost-indicator viz-defrost-indicator-desktop" transform="translate(40, 42)">
+                                <circle cx="0" cy="0" r="38" fill="rgba(136,221,255,0.08)" class="viz-defrost-icon"/>
+                                <g class="viz-defrost-icon" transform="scale(1.8)">
+                                    <line x1="0" y1="-12" x2="0" y2="12" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                                    <line x1="-10" y1="-6" x2="10" y2="6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                                    <line x1="-10" y1="6" x2="10" y2="-6" stroke="#88DDFF" stroke-width="2.5" stroke-linecap="round"/>
+                                    <line x1="0" y1="-12" x2="-4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="0" y1="-12" x2="4" y2="-8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="0" y1="12" x2="-4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="0" y1="12" x2="4" y2="8" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="-10" y1="-6" x2="-7" y2="-9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="10" y1="6" x2="7" y2="9" stroke="#88DDFF" stroke-width="2" stroke-linecap="round"/>
+                                </g>
+                            </g>
+                            <g class="viz-defrost-indicator viz-defrost-label-desktop" transform="translate(40, 98)">
+                                <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(136,221,255,0.15)" stroke="#88DDFF" stroke-width="1"/>
+                                <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:10px;font-weight:600;fill:#88DDFF;letter-spacing:2px;">DEFROST</text>
+                            </g>
+                            <rect class="viz-w viz-glow" x="10" y="85" width="25" height="6" rx="1"/>
+                            <rect class="viz-w viz-glow" x="95" y="85" width="25" height="6" rx="1"/>
+                            <circle class="viz-conn-hot" cx="130" cy="20" r="6"/>
+                            <circle class="viz-conn-cold" cx="130" cy="70" r="6"/>
+                        </g>
+                        <!-- CWU TANK -->
+                        <g class="viz-tank-view viz-tank-view-desktop" transform="translate(310, -5)">
+                            <ellipse class="viz-w-dim viz-pulse" cx="60" cy="15" rx="48" ry="12"/>
+                            <line class="viz-w-bright" x1="12" y1="15" x2="12" y2="215"/>
+                            <line class="viz-w-bright" x1="108" y1="15" x2="108" y2="215"/>
+                            <ellipse class="viz-w-bright" cx="60" cy="215" rx="48" ry="12"/>
+                            <rect x="12" y="28" width="96" height="200" fill="url(#vizWaterGrad)" clip-path="url(#vizTankClip)"/>
+                            <path class="viz-helix viz-helix-back" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                            <path class="viz-helix viz-helix-front viz-helix-flow" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                            <g transform="translate(60, 5)">
+                                <rect class="viz-target-badge" x="-24" y="-10" width="48" height="22" rx="3"/>
+                                <text class="viz-target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
+                                <text class="viz-target-value viz-target-temp-desktop" x="0" y="8" text-anchor="middle">--°C</text>
+                            </g>
+                            <g transform="translate(60, 155)">
+                                <rect class="viz-temp-badge" x="-28" y="-12" width="56" height="24" rx="4"/>
+                                <text class="viz-temp-badge-value viz-cwu-temp-desktop" x="0" y="4" text-anchor="middle">--°</text>
+                            </g>
+                            <text class="viz-label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
+                        </g>
+                        <!-- Pipes to tank -->
+                        <g class="viz-tank-view viz-tank-view-desktop">
+                            <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,30 L332,30"/>
+                            <rect x="200" y="2" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                            <text class="viz-flow-badge viz-flow-temp-cwu-desktop" x="221" y="16" text-anchor="middle" fill="var(--viz-hot)">--°</text>
+                            <path class="viz-pipe-cold viz-pipe-flow" d="M332,190 L200,190 L200,115 L145,115"/>
+                            <rect x="200" y="198" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
+                            <text class="viz-return-badge viz-return-temp-cwu-desktop" x="221" y="212" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                        </g>
+                        <!-- Delta T (CWU) -->
+                        <g class="viz-tank-view viz-tank-view-desktop viz-delta-badge" transform="translate(172, 90)">
+                            <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                            <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                            <text class="viz-delta-cwu-desktop" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                        </g>
+                        <!-- FLOOR HEATING -->
+                        <g class="viz-floor-view viz-floor-view-desktop" transform="translate(260, 15)">
+                            <rect class="viz-floor-surface" x="10" y="10" width="180" height="145" rx="4"/>
+                            <path class="viz-floor-pipe viz-fp-hot viz-pipe-flow" d="M20,24 L180,24"/>
+                            <path class="viz-floor-pipe viz-fp-hot viz-pipe-flow" d="M180,24 L180,40"/>
+                            <path class="viz-floor-pipe viz-fp-w1 viz-pipe-flow" d="M180,40 L30,40"/>
+                            <path class="viz-floor-pipe viz-fp-w1 viz-pipe-flow" d="M30,40 L30,56"/>
+                            <path class="viz-floor-pipe viz-fp-w2 viz-pipe-flow" d="M30,56 L180,56"/>
+                            <path class="viz-floor-pipe viz-fp-w2 viz-pipe-flow" d="M180,56 L180,72"/>
+                            <path class="viz-floor-pipe viz-fp-w3 viz-pipe-flow" d="M180,72 L30,72"/>
+                            <path class="viz-floor-pipe viz-fp-w3 viz-pipe-flow" d="M30,72 L30,88"/>
+                            <path class="viz-floor-pipe viz-fp-c1 viz-pipe-flow" d="M30,88 L180,88"/>
+                            <path class="viz-floor-pipe viz-fp-c1 viz-pipe-flow" d="M180,88 L180,104"/>
+                            <path class="viz-floor-pipe viz-fp-c2 viz-pipe-flow" d="M180,104 L30,104"/>
+                            <path class="viz-floor-pipe viz-fp-c2 viz-pipe-flow" d="M30,104 L30,120"/>
+                            <path class="viz-floor-pipe viz-fp-c3 viz-pipe-flow" d="M30,120 L180,120"/>
+                            <path class="viz-floor-pipe viz-fp-c3 viz-pipe-flow" d="M180,120 L180,136"/>
+                            <path class="viz-floor-pipe viz-fp-cold viz-pipe-flow" d="M180,136 L30,136"/>
+                            <path class="viz-floor-pipe viz-fp-cold viz-pipe-flow" d="M30,136 L30,145 L20,145"/>
+                            <circle class="viz-conn-hot" cx="20" cy="24" r="5"/>
+                            <circle class="viz-conn-cold" cx="20" cy="145" r="5"/>
+                            <text class="viz-label" x="100" y="168" text-anchor="middle" style="font-size:9px; letter-spacing:2px;">PODŁOGOWE</text>
+                        </g>
+                        <!-- Pipes to floor -->
+                        <g class="viz-floor-view viz-floor-view-desktop">
+                            <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,39 L280,39"/>
+                            <rect x="200" y="15" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                            <text class="viz-flow-badge viz-flow-temp-floor-desktop" x="221" y="29" text-anchor="middle" fill="var(--viz-hot)">--°</text>
+                            <path class="viz-pipe-cold viz-pipe-flow" d="M280,160 L220,160 L220,115 L145,115"/>
+                            <rect x="215" y="168" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
+                            <text class="viz-return-badge viz-return-temp-floor-desktop" x="236" y="182" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                        </g>
+                        <!-- Delta T (Floor) -->
+                        <g class="viz-floor-view viz-floor-view-desktop viz-delta-badge" transform="translate(172, 90)">
+                            <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                            <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
+                            <text class="viz-delta-floor-desktop" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                        </g>
+                        <!-- Status section -->
+                        <g transform="translate(20, 242)">
+                            <g class="viz-tank-view viz-tank-view-desktop">
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
+                                <text class="viz-dhw-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                            </g>
+                            <g class="viz-floor-view viz-floor-view-desktop">
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
+                                <text class="viz-hc1-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                            </g>
+                            <g transform="translate(0, 16)">
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
+                                <text class="viz-hp-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                            </g>
+                        </g>
+                    </svg>
                 </div>
             </div>
 
@@ -929,6 +1240,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.1.0"></script>
+    <script src="panel.js?v=8.2.5"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v8.1
+ * CWU Controller Panel JavaScript v8.2
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -9,6 +9,7 @@
  * v7.3: BSB-LAN refactor - uses coordinator sensor entities instead of API requests
  * v8.0: Anti-oscillation UI (HP ready, hold times, max temp, night window), enhanced state display
  * v8.1: BSB-LAN only refactor - removed cloud entities, CWU/floor modes from BSB-LAN exclusively
+ * v8.2: Added holographic system visualization card (heat pump, CWU tank, floor heating)
  */
 
 // Configuration
@@ -710,6 +711,7 @@ async function updateUI() {
 
     updateQuickStats();
     updateBsbLanDisplay();
+    updateSystemVisualization();
     updateControllerStatus();
     updateStateDisplay();
     updateHeatingIndicators();
@@ -2542,6 +2544,137 @@ function updateQuickStats() {
             quickTempChange.style.display = 'none';
         }
     }
+}
+
+/**
+ * System Visualization Update Functions
+ * Updates the holographic heat pump system visualization (both mobile and desktop versions)
+ */
+function updateSystemVisualization() {
+    const vizCards = document.querySelectorAll('#system-viz-card, #system-viz-card-desktop');
+    if (vizCards.length === 0) return;
+
+    const state = currentData.state || 'idle';
+    const bsb = currentData.bsbLan || {};
+    const power = currentData.power || 0;
+    const attrs = currentData.attributes || {};
+
+    // Determine states
+    const isFloorHeating = state.includes('floor') || state === 'heating_floor';
+    const isIdle = state === 'idle';
+    const isDefrost = (bsb.hp_status || '').toLowerCase().includes('defrost');
+
+    // Apply classes to all viz cards
+    vizCards.forEach(vizCard => {
+        // Toggle tank/floor view based on current heating state
+        vizCard.classList.toggle('show-floor', isFloorHeating);
+        // Toggle defrost mode
+        vizCard.classList.toggle('defrost', isDefrost);
+        // Toggle stopped state (no animations when idle and low power)
+        vizCard.classList.toggle('stopped', isIdle && power < 50);
+    });
+
+    // Update power display and fan speed
+    updateVizPower(power);
+
+    // Update temperatures
+    const flowTemp = bsb.flow_temp || 0;
+    const returnTemp = bsb.return_temp || 0;
+    const deltaT = bsb.delta_t !== null && !isNaN(bsb.delta_t) ? bsb.delta_t : (flowTemp - returnTemp);
+    const cwuTemp = currentData.cwuTemp || bsb.cwu_temp || 0;
+    const targetTemp = currentData.cwuTargetTemp || attrs.cwu_target_temp;
+
+    // Format temperature with comma (Polish format)
+    const formatTemp = (temp) => temp ? temp.toFixed(1).replace('.', ',') + '°' : '--°';
+
+    // Update all elements by class (works for both mobile and desktop)
+    document.querySelectorAll('.viz-cwu-val, #viz-cwu-temp, .viz-cwu-temp-desktop').forEach(el => {
+        el.textContent = formatTemp(cwuTemp);
+    });
+
+    document.querySelectorAll('.viz-target-val, #viz-target-temp, .viz-target-temp-desktop').forEach(el => {
+        el.textContent = targetTemp ? Math.round(targetTemp) + '°C' : '--°C';
+    });
+
+    document.querySelectorAll('.viz-flow-val, #viz-flow-temp-cwu, #viz-flow-temp-floor, .viz-flow-temp-cwu-desktop, .viz-flow-temp-floor-desktop').forEach(el => {
+        el.textContent = formatTemp(flowTemp);
+    });
+
+    document.querySelectorAll('.viz-return-val, #viz-return-temp-cwu, #viz-return-temp-floor, .viz-return-temp-cwu-desktop, .viz-return-temp-floor-desktop').forEach(el => {
+        el.textContent = formatTemp(returnTemp);
+    });
+
+    document.querySelectorAll('.viz-delta-val, #viz-delta-cwu, #viz-delta-floor, .viz-delta-cwu-desktop, .viz-delta-floor-desktop').forEach(el => {
+        el.textContent = formatTemp(Math.abs(deltaT));
+    });
+
+    // Update status texts
+    document.querySelectorAll('.viz-dhw-val, #viz-dhw-status, .viz-dhw-status-desktop').forEach(el => {
+        el.textContent = bsb.dhw_status || '---';
+    });
+
+    document.querySelectorAll('.viz-hc1-val, #viz-hc1-status, .viz-hc1-status-desktop').forEach(el => {
+        el.textContent = bsb.hc1_status || '---';
+    });
+
+    document.querySelectorAll('.viz-hp-val, #viz-hp-status, .viz-hp-status-desktop').forEach(el => {
+        el.textContent = bsb.hp_status || '---';
+    });
+
+    // Update state badge
+    const state = currentData.state || 'idle';
+    const stateBadge = document.getElementById('viz-state-badge');
+    if (stateBadge) {
+        stateBadge.textContent = state.replace(/_/g, ' ').toUpperCase();
+        stateBadge.className = 'badge' + (state.includes('cwu') ? ' badge-danger' : state.includes('floor') ? ' badge-success' : '');
+    }
+}
+
+/**
+ * Update visualization power display and fan speed
+ */
+function updateVizPower(watts) {
+    const vizCards = document.querySelectorAll('#system-viz-card, #system-viz-card-desktop');
+
+    // Format power text
+    let powerText, unitText;
+    if (watts >= 1000) {
+        powerText = (watts / 1000).toFixed(1).replace('.', ',');
+        unitText = 'kW';
+    } else if (watts > 0) {
+        powerText = Math.round(watts).toString();
+        unitText = 'W';
+    } else {
+        powerText = '--';
+        unitText = 'W';
+    }
+
+    // Update all power displays
+    document.querySelectorAll('.viz-power-val, #viz-power-value').forEach(el => {
+        el.textContent = powerText;
+    });
+    document.querySelectorAll('.viz-power-un, #viz-power-unit').forEach(el => {
+        el.textContent = unitText;
+    });
+
+    // Calculate fan speed based on power
+    let fanSpeed;
+    if (watts === 0 || watts < 10) {
+        fanSpeed = '0s';
+    } else {
+        // Speed formula: faster rotation with higher power
+        // 100W = 8s, 500W = 4s, 1000W = 2s, 2000W = 1s, 3000W = 0.6s
+        fanSpeed = Math.max(0.5, 2000 / watts) + 's';
+    }
+
+    // Apply to all cards and fans
+    vizCards.forEach(card => {
+        card.style.setProperty('--viz-fan-speed', fanSpeed);
+    });
+
+    document.querySelectorAll('#viz-fan, #viz-fan-d').forEach(fan => {
+        fan.classList.toggle('off', watts < 10);
+    });
 }
 
 // Initialize
