@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU System - V4 Circular Radial</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, #0f0f1a 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 380px;
+            background: rgba(15, 15, 26, 0.9);
+            border-radius: 24px;
+            padding: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .title {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+        }
+
+        /* Radial diagram */
+        .radial-diagram {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
+        /* Central hub - Heat Pump */
+        .central-hub {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle,
+                rgba(139, 92, 246, 0.4) 0%,
+                rgba(139, 92, 246, 0.1) 100%);
+            border-radius: 50%;
+            border: 3px solid rgba(139, 92, 246, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            box-shadow:
+                0 0 50px rgba(139, 92, 246, 0.4),
+                inset 0 0 30px rgba(139, 92, 246, 0.2);
+        }
+
+        .hub-icon {
+            width: 40px;
+            height: 40px;
+            animation: rotateHub 6s linear infinite;
+        }
+
+        .hub-icon svg {
+            width: 100%;
+            height: 100%;
+            fill: #a78bfa;
+            filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.8));
+        }
+
+        @keyframes rotateHub {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .hub-label {
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
+            text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        }
+
+        .hub-power {
+            color: #a78bfa;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* Orbital rings */
+        .orbital-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+
+        .ring-1 { width: 180px; height: 180px; }
+        .ring-2 { width: 260px; height: 260px; }
+
+        /* Satellite nodes */
+        .satellite {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .satellite-node {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .satellite-node:hover {
+            transform: scale(1.1);
+        }
+
+        .satellite-node svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .satellite-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 10px;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        .satellite-value {
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        /* CWU Tank - Top */
+        .sat-cwu {
+            transform: translate(-50%, -50%) translateY(-120px);
+        }
+
+        .sat-cwu .satellite-node {
+            background: radial-gradient(circle,
+                rgba(0, 217, 255, 0.3) 0%,
+                rgba(0, 217, 255, 0.05) 100%);
+            border: 2px solid rgba(0, 217, 255, 0.6);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.4);
+        }
+
+        .sat-cwu svg { fill: #00d9ff; }
+        .sat-cwu .satellite-value { color: #00d9ff; text-shadow: 0 0 15px rgba(0, 217, 255, 0.5); }
+
+        /* Floor Heating - Bottom Left */
+        .sat-floor {
+            transform: translate(-50%, -50%) translate(-100px, 60px);
+        }
+
+        .sat-floor .satellite-node {
+            background: radial-gradient(circle,
+                rgba(251, 191, 36, 0.3) 0%,
+                rgba(251, 191, 36, 0.05) 100%);
+            border: 2px solid rgba(251, 191, 36, 0.6);
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
+        }
+
+        .sat-floor svg { fill: #fbbf24; }
+        .sat-floor .satellite-value { color: #fbbf24; text-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
+
+        /* Outside Temp - Bottom Right */
+        .sat-outside {
+            transform: translate(-50%, -50%) translate(100px, 60px);
+        }
+
+        .sat-outside .satellite-node {
+            background: radial-gradient(circle,
+                rgba(96, 165, 250, 0.3) 0%,
+                rgba(96, 165, 250, 0.05) 100%);
+            border: 2px solid rgba(96, 165, 250, 0.5);
+            box-shadow: 0 0 25px rgba(96, 165, 250, 0.3);
+        }
+
+        .sat-outside svg { fill: #60a5fa; }
+        .sat-outside .satellite-value { color: #60a5fa; text-shadow: 0 0 15px rgba(96, 165, 250, 0.5); }
+
+        /* Connection lines with flow */
+        .connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .connection-line {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.1);
+            stroke-width: 2;
+        }
+
+        .flow-line {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 8 16;
+        }
+
+        .flow-cwu {
+            stroke: #00d9ff;
+            filter: drop-shadow(0 0 4px rgba(0, 217, 255, 0.8));
+            animation: flowToCwu 1.5s linear infinite;
+        }
+
+        .flow-floor {
+            stroke: #fbbf24;
+            filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.8));
+            animation: flowToFloor 1.5s linear infinite;
+            animation-delay: 0.5s;
+        }
+
+        .flow-outside {
+            stroke: #60a5fa;
+            filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.8));
+            animation: flowToOutside 2s linear infinite;
+            stroke-dasharray: 4 12;
+        }
+
+        @keyframes flowToCwu {
+            from { stroke-dashoffset: 24; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowToFloor {
+            from { stroke-dashoffset: -24; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowToOutside {
+            from { stroke-dashoffset: 16; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Energy particles */
+        .energy-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            filter: blur(1px);
+        }
+
+        .particle-cwu {
+            background: #00d9ff;
+            box-shadow: 0 0 10px #00d9ff, 0 0 20px #00d9ff;
+            animation: orbitCwu 2s ease-in-out infinite;
+        }
+
+        .particle-floor {
+            background: #fbbf24;
+            box-shadow: 0 0 10px #fbbf24, 0 0 20px #fbbf24;
+            animation: orbitFloor 2s ease-in-out infinite;
+            animation-delay: 0.66s;
+        }
+
+        @keyframes orbitCwu {
+            0% {
+                top: calc(50%);
+                left: calc(50%);
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                top: calc(50% - 120px);
+                left: 50%;
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+        }
+
+        @keyframes orbitFloor {
+            0% {
+                top: calc(50%);
+                left: calc(50%);
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                top: calc(50% + 60px);
+                left: calc(50% - 100px);
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+        }
+
+        /* Status bar */
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 16px;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .status-item {
+            text-align: center;
+            flex: 1;
+        }
+
+        .status-label {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .status-value {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .status-value.hot { color: #fc8181; }
+        .status-value.warm { color: #fbbf24; }
+        .status-value.cool { color: #4ade80; }
+
+        /* Active indicator pulse */
+        .active-pulse {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 14px;
+            height: 14px;
+            background: #22c55e;
+            border-radius: 50%;
+            border: 2px solid #0f0f1a;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        .active-pulse::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            background: #22c55e;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: pulse 1.5s ease-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+        }
+
+        /* Heating mode indicator */
+        .mode-indicator {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 217, 255, 0.15);
+            color: #00d9ff;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mode-dot {
+            width: 8px;
+            height: 8px;
+            background: #00d9ff;
+            border-radius: 50%;
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">Heat Pump System</h1>
+            <p class="subtitle">Real-time energy flow visualization</p>
+        </div>
+
+        <div class="radial-diagram">
+            <!-- Orbital rings -->
+            <div class="orbital-ring ring-1"></div>
+            <div class="orbital-ring ring-2"></div>
+
+            <!-- Connection lines SVG -->
+            <svg class="connections" viewBox="0 0 332 332">
+                <!-- CWU connection -->
+                <line class="connection-line" x1="166" y1="166" x2="166" y2="46" />
+                <line class="flow-line flow-cwu" x1="166" y1="166" x2="166" y2="46" />
+
+                <!-- Floor connection -->
+                <line class="connection-line" x1="166" y1="166" x2="66" y2="226" />
+                <line class="flow-line flow-floor" x1="166" y1="166" x2="66" y2="226" />
+
+                <!-- Outside connection -->
+                <line class="connection-line" x1="166" y1="166" x2="266" y2="226" />
+                <line class="flow-line flow-outside" x1="166" y1="166" x2="266" y2="226" />
+            </svg>
+
+            <!-- Energy particles -->
+            <div class="energy-particle particle-cwu"></div>
+            <div class="energy-particle particle-floor"></div>
+
+            <!-- Central Hub - Heat Pump -->
+            <div class="central-hub">
+                <div class="hub-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6Z"/>
+                    </svg>
+                </div>
+                <span class="hub-label">PUMP</span>
+                <span class="hub-power">805W</span>
+            </div>
+
+            <!-- CWU Satellite -->
+            <div class="satellite sat-cwu">
+                <div class="satellite-node">
+                    <div class="active-pulse"></div>
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12,3C8.5,3 5.5,4.6 5.5,6.5C5.5,8.4 8.5,10 12,10C15.5,10 18.5,8.4 18.5,6.5C18.5,4.6 15.5,3 12,3M5.5,8.5V17.5C5.5,19.4 8.5,21 12,21C15.5,21 18.5,19.4 18.5,17.5V8.5C18.5,10.4 15.5,12 12,12C8.5,12 5.5,10.4 5.5,8.5Z"/>
+                    </svg>
+                </div>
+                <span class="satellite-label">CWU Tank</span>
+                <span class="satellite-value">49.0°C</span>
+            </div>
+
+            <!-- Floor Satellite -->
+            <div class="satellite sat-floor">
+                <div class="satellite-node">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M20,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6A2,2 0 0,0 20,4M4,10H8V14H4V10M10,14V10H14V14H10M20,14H16V10H20V14Z"/>
+                    </svg>
+                </div>
+                <span class="satellite-label">Floor</span>
+                <span class="satellite-value">23.5°C</span>
+            </div>
+
+            <!-- Outside Satellite -->
+            <div class="satellite sat-outside">
+                <div class="satellite-node">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M6,19A5,5 0 0,1 1,14A5,5 0 0,1 6,9C7,6.65 9.3,5 12,5C15.43,5 18.24,7.66 18.5,11.03L19,11A4,4 0 0,1 23,15A4,4 0 0,1 19,19H6M19,13H17V12A5,5 0 0,0 12,7C9.5,7 7.45,8.82 7.06,11.19L6.73,13H6A3,3 0 0,0 3,16A3,3 0 0,0 6,19H19A2,2 0 0,0 21,17A2,2 0 0,0 19,15V13Z"/>
+                    </svg>
+                </div>
+                <span class="satellite-label">Outside</span>
+                <span class="satellite-value">-1.1°C</span>
+            </div>
+
+            <!-- Mode indicator -->
+            <div class="mode-indicator">
+                <span class="mode-dot"></span>
+                Heating CWU
+            </div>
+        </div>
+
+        <!-- Status row -->
+        <div class="status-row">
+            <div class="status-item">
+                <div class="status-label">Flow</div>
+                <div class="status-value hot">46.0°C</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Return</div>
+                <div class="status-value warm">45.7°C</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">ΔT</div>
+                <div class="status-value cool">+0.3°C</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

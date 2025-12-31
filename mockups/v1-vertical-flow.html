@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU System - V1 Vertical Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0e17 0%, #1a1f2e 50%, #0d1117 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 380px;
+            background: rgba(20, 27, 45, 0.9);
+            border-radius: 24px;
+            padding: 24px;
+            border: 1px solid rgba(0, 217, 255, 0.2);
+            box-shadow:
+                0 0 40px rgba(0, 217, 255, 0.1),
+                inset 0 0 60px rgba(0, 217, 255, 0.03);
+        }
+
+        .title {
+            text-align: center;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+        }
+
+        .system-diagram {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: radial-gradient(ellipse at center, rgba(0, 217, 255, 0.05) 0%, transparent 70%);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        /* Components */
+        .component {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .component-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .component-icon svg {
+            width: 48px;
+            height: 48px;
+            z-index: 2;
+        }
+
+        .component-label {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        .component-value {
+            color: #00d9ff;
+            font-size: 16px;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+        }
+
+        /* Heat Pump */
+        .heat-pump {
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .heat-pump .component-icon {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 2px solid rgba(139, 92, 246, 0.5);
+            box-shadow:
+                0 0 30px rgba(139, 92, 246, 0.3),
+                inset 0 0 20px rgba(139, 92, 246, 0.1);
+        }
+
+        .heat-pump svg {
+            fill: #a78bfa;
+        }
+
+        /* CWU Tank */
+        .cwu-tank {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .cwu-tank .component-icon {
+            width: 100px;
+            height: 120px;
+            background: linear-gradient(180deg,
+                rgba(252, 129, 129, 0.4) 0%,
+                rgba(0, 217, 255, 0.3) 100%);
+            border: 2px solid rgba(0, 217, 255, 0.5);
+            border-radius: 20px;
+            box-shadow:
+                0 0 40px rgba(0, 217, 255, 0.3),
+                inset 0 0 30px rgba(0, 217, 255, 0.1);
+        }
+
+        .cwu-tank svg {
+            fill: #00d9ff;
+        }
+
+        .tank-level {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70%;
+            background: linear-gradient(180deg,
+                rgba(252, 129, 129, 0.5) 0%,
+                rgba(0, 217, 255, 0.6) 100%);
+            border-radius: 0 0 18px 18px;
+            animation: tankPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes tankPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 0.9; }
+        }
+
+        /* Floor Heating */
+        .floor-heating {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .floor-heating .component-icon {
+            width: 140px;
+            height: 60px;
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.05) 100%);
+            border: 2px solid rgba(251, 191, 36, 0.4);
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(251, 191, 36, 0.2);
+        }
+
+        .floor-heating svg {
+            fill: #fbbf24;
+        }
+
+        /* Pipes SVG */
+        .pipes-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .pipe {
+            fill: none;
+            stroke: rgba(0, 217, 255, 0.3);
+            stroke-width: 4;
+            stroke-linecap: round;
+        }
+
+        .pipe-flow {
+            fill: none;
+            stroke: #00d9ff;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 10 20;
+            animation: flowUp 1.5s linear infinite;
+            filter: drop-shadow(0 0 6px rgba(0, 217, 255, 0.8));
+        }
+
+        .pipe-flow.down {
+            animation: flowDown 1.5s linear infinite;
+            stroke: #fc8181;
+            filter: drop-shadow(0 0 6px rgba(252, 129, 129, 0.8));
+        }
+
+        .pipe-flow.floor {
+            stroke: #fbbf24;
+            filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.8));
+        }
+
+        @keyframes flowUp {
+            0% { stroke-dashoffset: 30; }
+            100% { stroke-dashoffset: 0; }
+        }
+
+        @keyframes flowDown {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: 30; }
+        }
+
+        /* Particles */
+        .particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #00d9ff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #00d9ff, 0 0 20px #00d9ff;
+            animation: particleFlow 2s ease-in-out infinite;
+        }
+
+        .particle:nth-child(2) { animation-delay: 0.5s; }
+        .particle:nth-child(3) { animation-delay: 1s; }
+        .particle:nth-child(4) { animation-delay: 1.5s; }
+
+        @keyframes particleFlow {
+            0% {
+                bottom: 120px;
+                left: calc(50% - 30px);
+                opacity: 1;
+            }
+            50% {
+                bottom: 200px;
+                left: calc(50% - 30px);
+                opacity: 1;
+            }
+            100% {
+                bottom: 280px;
+                left: calc(50% - 30px);
+                opacity: 0;
+            }
+        }
+
+        /* Status indicators */
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+        }
+
+        .status-item {
+            text-align: center;
+        }
+
+        .status-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-value {
+            color: #00d9ff;
+            font-size: 20px;
+            font-weight: 700;
+            text-shadow: 0 0 15px rgba(0, 217, 255, 0.5);
+        }
+
+        .status-value.hot {
+            color: #fc8181;
+            text-shadow: 0 0 15px rgba(252, 129, 129, 0.5);
+        }
+
+        /* Glow effect */
+        .glow-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            animation: glowPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+
+        /* Active state indicator */
+        .active-indicator {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 16px;
+            height: 16px;
+            background: #22c55e;
+            border-radius: 50%;
+            border: 2px solid #0a0e17;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">CWU System Flow</h1>
+
+        <div class="system-diagram">
+            <!-- Pipes SVG -->
+            <svg class="pipes-svg" viewBox="0 0 300 400">
+                <!-- Main vertical pipe from pump to tank -->
+                <path class="pipe" d="M150 350 L150 250" />
+                <path class="pipe-flow" d="M150 350 L150 250" />
+
+                <!-- Pipe from tank to floor -->
+                <path class="pipe" d="M150 150 L150 80" />
+                <path class="pipe-flow floor" d="M150 150 L150 80" />
+
+                <!-- Return pipe (right side) -->
+                <path class="pipe" d="M200 80 L200 150 Q200 160 190 160 L160 160" />
+                <path class="pipe-flow down" d="M200 80 L200 150 Q200 160 190 160 L160 160" />
+
+                <!-- Return from tank to pump -->
+                <path class="pipe" d="M180 250 L180 350" />
+                <path class="pipe-flow down" d="M180 250 L180 350" />
+            </svg>
+
+            <!-- Particles -->
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+            <div class="particle"></div>
+
+            <!-- Floor Heating -->
+            <div class="component floor-heating">
+                <div class="component-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M20,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6A2,2 0 0,0 20,4M4,10H8V14H4V10M10,14V10H14V14H10M20,14H16V10H20V14Z"/>
+                    </svg>
+                </div>
+                <span class="component-label">Floor Heating</span>
+                <span class="component-value">23.5°C</span>
+            </div>
+
+            <!-- CWU Tank -->
+            <div class="component cwu-tank">
+                <div class="component-icon">
+                    <div class="tank-level"></div>
+                    <svg viewBox="0 0 24 24" style="position: relative; z-index: 2;">
+                        <path d="M12,3C8.5,3 5.5,4.6 5.5,6.5C5.5,8.4 8.5,10 12,10C15.5,10 18.5,8.4 18.5,6.5C18.5,4.6 15.5,3 12,3M5.5,8.5V17.5C5.5,19.4 8.5,21 12,21C15.5,21 18.5,19.4 18.5,17.5V8.5C18.5,10.4 15.5,12 12,12C8.5,12 5.5,10.4 5.5,8.5Z"/>
+                    </svg>
+                    <div class="active-indicator"></div>
+                </div>
+                <span class="component-label">CWU Tank</span>
+                <span class="component-value">49.0°C</span>
+            </div>
+
+            <!-- Heat Pump -->
+            <div class="component heat-pump">
+                <div class="component-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
+                    </svg>
+                    <div class="active-indicator"></div>
+                </div>
+                <span class="component-label">Heat Pump</span>
+                <span class="component-value">805 W</span>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-label">Flow</div>
+                <div class="status-value hot">46.0°C</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Return</div>
+                <div class="status-value">45.7°C</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">ΔT</div>
+                <div class="status-value">+0.3°C</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

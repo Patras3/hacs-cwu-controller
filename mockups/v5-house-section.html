@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWU System - V5 House Cross-Section</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #0c1929 0%, #162447 50%, #1f4068 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 380px;
+            background: rgba(12, 25, 41, 0.95);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .title {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .power-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .power-icon {
+            width: 20px;
+            height: 20px;
+            fill: #fbbf24;
+            animation: flash 1.5s ease-in-out infinite;
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .power-value {
+            color: #fbbf24;
+            font-size: 18px;
+            font-weight: 700;
+            text-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
+        }
+
+        /* House scene */
+        .scene {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: linear-gradient(180deg,
+                #1a365d 0%,
+                #2c5282 30%,
+                #2d3748 60%,
+                #1a202c 100%);
+            overflow: hidden;
+        }
+
+        /* Sky elements */
+        .sky {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 35%;
+        }
+
+        .moon {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle at 30% 30%,
+                #fef3c7 0%,
+                #fcd34d 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(252, 211, 77, 0.4);
+        }
+
+        .star {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: #fff;
+            border-radius: 50%;
+            animation: twinkle 2s ease-in-out infinite;
+        }
+
+        .star:nth-child(2) { top: 15px; left: 50px; animation-delay: 0.3s; }
+        .star:nth-child(3) { top: 40px; left: 100px; animation-delay: 0.7s; }
+        .star:nth-child(4) { top: 25px; left: 150px; animation-delay: 1s; }
+        .star:nth-child(5) { top: 50px; left: 200px; animation-delay: 1.5s; }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* House structure */
+        .house {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 260px;
+            height: 200px;
+        }
+
+        /* Roof */
+        .roof {
+            position: absolute;
+            top: 0;
+            left: -20px;
+            width: 300px;
+            height: 60px;
+            background: linear-gradient(180deg, #4a5568 0%, #2d3748 100%);
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+        }
+
+        .roof::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 5%;
+            width: 90%;
+            height: 8px;
+            background: #1a202c;
+        }
+
+        /* Walls */
+        .wall {
+            position: absolute;
+            top: 55px;
+            left: 0;
+            width: 100%;
+            height: 145px;
+            background: linear-gradient(90deg,
+                rgba(45, 55, 72, 0.9) 0%,
+                rgba(74, 85, 104, 0.9) 50%,
+                rgba(45, 55, 72, 0.9) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Window */
+        .window {
+            position: absolute;
+            top: 80px;
+            right: 30px;
+            width: 50px;
+            height: 60px;
+            background: linear-gradient(180deg,
+                rgba(251, 191, 36, 0.3) 0%,
+                rgba(251, 191, 36, 0.1) 100%);
+            border: 3px solid #4a5568;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+        }
+
+        .window-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 100%;
+            background: #4a5568;
+        }
+
+        .window-frame-h {
+            width: 100%;
+            height: 2px;
+        }
+
+        /* Floor section (visible cross-section) */
+        .floor-section {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: linear-gradient(180deg,
+                #553c2a 0%,
+                #3d2a1e 100%);
+            border-top: 3px solid #7c5a3d;
+        }
+
+        /* Floor heating coils */
+        .floor-coils {
+            position: absolute;
+            bottom: 5px;
+            left: 10px;
+            right: 10px;
+            height: 25px;
+        }
+
+        .coil {
+            position: absolute;
+            height: 3px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .coil::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(251, 191, 36, 0.8) 30%,
+                rgba(251, 191, 36, 1) 50%,
+                rgba(251, 191, 36, 0.8) 70%,
+                transparent 100%);
+            animation: coilFlow 2s linear infinite;
+        }
+
+        .coil-active {
+            background: rgba(251, 191, 36, 0.3);
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+        }
+
+        .coil-inactive {
+            background: rgba(100, 100, 100, 0.3);
+        }
+
+        .coil-inactive::after {
+            display: none;
+        }
+
+        .coil:nth-child(1) { top: 3px; left: 0; width: 90%; }
+        .coil:nth-child(2) { top: 10px; left: 5%; width: 85%; animation-delay: 0.3s; }
+        .coil:nth-child(3) { top: 17px; left: 0; width: 90%; animation-delay: 0.6s; }
+
+        @keyframes coilFlow {
+            from { transform: translateX(0); }
+            to { transform: translateX(50%); }
+        }
+
+        /* CWU Tank inside house */
+        .cwu-tank {
+            position: absolute;
+            top: 70px;
+            left: 25px;
+            width: 50px;
+            height: 90px;
+        }
+
+        .tank-body {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                rgba(45, 55, 72, 0.9) 0%,
+                rgba(74, 85, 104, 0.95) 30%,
+                rgba(74, 85, 104, 0.95) 70%,
+                rgba(45, 55, 72, 0.9) 100%);
+            border-radius: 8px;
+            border: 2px solid rgba(0, 217, 255, 0.5);
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                0 0 20px rgba(0, 217, 255, 0.2),
+                inset 0 0 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .tank-water-level {
+            position: absolute;
+            bottom: 0;
+            left: 2px;
+            right: 2px;
+            height: 75%;
+            background: linear-gradient(180deg,
+                rgba(252, 129, 129, 0.6) 0%,
+                rgba(0, 217, 255, 0.7) 100%);
+            border-radius: 0 0 6px 6px;
+            animation: waterBubble 3s ease-in-out infinite;
+        }
+
+        @keyframes waterBubble {
+            0%, 100% { height: 75%; }
+            50% { height: 77%; }
+        }
+
+        .tank-temp-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+            z-index: 2;
+        }
+
+        .tank-label {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00d9ff;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* Heat Pump (outside) */
+        .heat-pump-outdoor {
+            position: absolute;
+            bottom: 50px;
+            right: 20px;
+            width: 70px;
+            height: 80px;
+        }
+
+        .pump-body {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg,
+                #374151 0%,
+                #1f2937 100%);
+            border-radius: 8px;
+            border: 2px solid rgba(139, 92, 246, 0.5);
+            position: relative;
+            box-shadow:
+                0 0 25px rgba(139, 92, 246, 0.3),
+                inset 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .pump-fan {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(139, 92, 246, 0.6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fan-blade {
+            width: 30px;
+            height: 30px;
+            fill: #a78bfa;
+            animation: rotateFan 1s linear infinite;
+        }
+
+        @keyframes rotateFan {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .pump-label {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #a78bfa;
+            font-size: 8px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* Pipes */
+        .pipe-system {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .pipe {
+            fill: none;
+            stroke: rgba(100, 100, 100, 0.4);
+            stroke-width: 6;
+            stroke-linecap: round;
+        }
+
+        .pipe-inner {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 8 12;
+        }
+
+        .pipe-hot {
+            stroke: #fc8181;
+            filter: drop-shadow(0 0 3px rgba(252, 129, 129, 0.8));
+            animation: pipeFlowRight 1s linear infinite;
+        }
+
+        .pipe-cold {
+            stroke: #00d9ff;
+            filter: drop-shadow(0 0 3px rgba(0, 217, 255, 0.8));
+            animation: pipeFlowLeft 1s linear infinite;
+        }
+
+        @keyframes pipeFlowRight {
+            from { stroke-dashoffset: 20; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes pipeFlowLeft {
+            from { stroke-dashoffset: -20; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Ground */
+        .ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: linear-gradient(180deg,
+                #2d3a2d 0%,
+                #1a231a 100%);
+        }
+
+        .grass {
+            position: absolute;
+            top: -8px;
+            left: 0;
+            right: 0;
+            height: 15px;
+            background: repeating-linear-gradient(90deg,
+                transparent 0px,
+                transparent 3px,
+                #3d5a3d 3px,
+                #3d5a3d 6px);
+            clip-path: polygon(
+                0% 100%, 2% 60%, 4% 100%, 6% 50%, 8% 100%, 10% 70%,
+                12% 100%, 14% 55%, 16% 100%, 18% 65%, 20% 100%, 22% 45%,
+                24% 100%, 26% 70%, 28% 100%, 30% 50%, 32% 100%, 34% 60%,
+                36% 100%, 38% 55%, 40% 100%, 42% 70%, 44% 100%, 46% 45%,
+                48% 100%, 50% 65%, 52% 100%, 54% 50%, 56% 100%, 58% 60%,
+                60% 100%, 62% 55%, 64% 100%, 66% 70%, 68% 100%, 70% 45%,
+                72% 100%, 74% 65%, 76% 100%, 78% 50%, 80% 100%, 82% 60%,
+                84% 100%, 86% 55%, 88% 100%, 90% 70%, 92% 100%, 94% 45%,
+                96% 100%, 98% 65%, 100% 100%
+            );
+        }
+
+        /* Info bar */
+        .info-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .info-item {
+            text-align: center;
+            padding: 10px 4px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .info-label {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .info-value.cyan { color: #00d9ff; }
+        .info-value.red { color: #fc8181; }
+        .info-value.green { color: #4ade80; }
+        .info-value.yellow { color: #fbbf24; }
+
+        /* Status badge on house */
+        .status-badge {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 217, 255, 0.2);
+            color: #00d9ff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid rgba(0, 217, 255, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(5px);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00d9ff;
+            border-radius: 50%;
+            animation: statusPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span class="title">Home Heating System</span>
+            <div class="power-display">
+                <svg class="power-icon" viewBox="0 0 24 24">
+                    <path d="M11,21H13V3H11V21M5,13H7V3H5V13M19,9V3H17V9H19Z"/>
+                </svg>
+                <span class="power-value">805 W</span>
+            </div>
+        </div>
+
+        <div class="scene">
+            <!-- Sky -->
+            <div class="sky">
+                <div class="moon"></div>
+                <div class="star"></div>
+                <div class="star"></div>
+                <div class="star"></div>
+                <div class="star"></div>
+            </div>
+
+            <!-- Status badge -->
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                Heating CWU
+            </div>
+
+            <!-- Pipes SVG -->
+            <svg class="pipe-system" viewBox="0 0 380 380">
+                <!-- Pipe from pump to tank (hot - going in) -->
+                <path class="pipe" d="M320 290 L320 250 Q320 230 300 230 L180 230 Q160 230 160 210 L160 185" />
+                <path class="pipe-inner pipe-hot" d="M320 290 L320 250 Q320 230 300 230 L180 230 Q160 230 160 210 L160 185" />
+
+                <!-- Pipe from tank back to pump (cold - return) -->
+                <path class="pipe" d="M130 185 L130 250 Q130 270 150 270 L280 270 Q300 270 300 290 L300 300" />
+                <path class="pipe-inner pipe-cold" d="M130 185 L130 250 Q130 270 150 270 L280 270 Q300 270 300 290 L300 300" />
+            </svg>
+
+            <!-- House -->
+            <div class="house">
+                <div class="roof"></div>
+                <div class="wall">
+                    <!-- Window -->
+                    <div class="window">
+                        <div class="window-frame"></div>
+                        <div class="window-frame window-frame-h"></div>
+                    </div>
+
+                    <!-- CWU Tank -->
+                    <div class="cwu-tank">
+                        <span class="tank-label">CWU TANK</span>
+                        <div class="tank-body">
+                            <div class="tank-water-level"></div>
+                            <span class="tank-temp-display">49°C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Floor with heating coils -->
+                <div class="floor-section">
+                    <div class="floor-coils">
+                        <div class="coil coil-inactive"></div>
+                        <div class="coil coil-inactive"></div>
+                        <div class="coil coil-inactive"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heat Pump (outdoor unit) -->
+            <div class="heat-pump-outdoor">
+                <div class="pump-body">
+                    <div class="pump-fan">
+                        <svg class="fan-blade" viewBox="0 0 24 24">
+                            <path d="M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z"/>
+                        </svg>
+                    </div>
+                    <span class="pump-label">HEAT PUMP</span>
+                </div>
+            </div>
+
+            <!-- Ground -->
+            <div class="ground">
+                <div class="grass"></div>
+            </div>
+        </div>
+
+        <!-- Info bar -->
+        <div class="info-bar">
+            <div class="info-item">
+                <div class="info-label">CWU</div>
+                <div class="info-value cyan">49.0°C</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Flow</div>
+                <div class="info-value red">46.0°C</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Return</div>
+                <div class="info-value green">45.7°C</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Outside</div>
+                <div class="info-value yellow">-1.1°C</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
