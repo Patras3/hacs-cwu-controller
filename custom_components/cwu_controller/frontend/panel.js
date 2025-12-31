@@ -2649,10 +2649,10 @@ function updateVizPower(watts) {
     }
 
     // Update all power displays
-    document.querySelectorAll('.viz-power-val, #viz-power-value').forEach(el => {
+    document.querySelectorAll('.viz-power-val, #viz-power-value, .viz-power-value-desktop').forEach(el => {
         el.textContent = powerText;
     });
-    document.querySelectorAll('.viz-power-un, #viz-power-unit').forEach(el => {
+    document.querySelectorAll('.viz-power-un, #viz-power-unit, .viz-power-unit-desktop').forEach(el => {
         el.textContent = unitText;
     });
 
