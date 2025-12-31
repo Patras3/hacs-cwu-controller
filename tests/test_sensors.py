@@ -64,6 +64,14 @@ def coordinator_with_data(mock_coordinator):
         "cost_yesterday_cwu_estimate": 2.82,
         "cost_yesterday_floor_estimate": 2.07,
         "cost_yesterday_estimate": 4.89,
+        # Daily counters and session data
+        "electric_fallback_count_today": 3,
+        "electric_fallback_count": 2,
+        "bsb_lan_errors_today": 5,
+        "bsb_lan_available": True,
+        "session_energy_kwh": 1.25,
+        "cwu_session_start_time": "2025-01-01T10:30:00",
+        "cwu_session_start_temp": 38.5,
     }
     return mock_coordinator
 
@@ -337,3 +345,146 @@ class TestAveragePowerSensor:
 
         sensor = make_sensor(AveragePowerSensor, coordinator_with_data, mock_entry)
         assert sensor._attr_native_unit_of_measurement == "W"
+
+
+class TestElectricFallbackCountTodaySensor:
+    """Tests for Electric Fallback Count Today sensor."""
+
+    def test_sensor_value(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct electric fallback count."""
+        from custom_components.cwu_controller.sensor import ElectricFallbackCountTodaySensor
+
+        sensor = make_sensor(ElectricFallbackCountTodaySensor, coordinator_with_data, mock_entry)
+        assert sensor.native_value == 3
+
+    def test_sensor_zero_value(self, mock_coordinator, mock_entry):
+        """Test sensor returns 0 when no fallback events."""
+        from custom_components.cwu_controller.sensor import ElectricFallbackCountTodaySensor
+
+        mock_coordinator.data = {"electric_fallback_count_today": 0}
+        sensor = make_sensor(ElectricFallbackCountTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value == 0
+
+    def test_sensor_default_value(self, mock_coordinator, mock_entry):
+        """Test sensor returns 0 when key is missing."""
+        from custom_components.cwu_controller.sensor import ElectricFallbackCountTodaySensor
+
+        mock_coordinator.data = {}
+        sensor = make_sensor(ElectricFallbackCountTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value == 0
+
+    def test_sensor_attributes(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct attributes."""
+        from custom_components.cwu_controller.sensor import ElectricFallbackCountTodaySensor
+
+        sensor = make_sensor(ElectricFallbackCountTodaySensor, coordinator_with_data, mock_entry)
+        attrs = sensor.extra_state_attributes
+        assert attrs["session_count"] == 2
+        assert "last_reset" in attrs
+        assert "note" in attrs
+
+    def test_sensor_none_data(self, mock_coordinator, mock_entry):
+        """Test sensor handles None data."""
+        from custom_components.cwu_controller.sensor import ElectricFallbackCountTodaySensor
+
+        mock_coordinator.data = None
+        sensor = make_sensor(ElectricFallbackCountTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value is None
+
+
+class TestBsbLanErrorsTodaySensor:
+    """Tests for BSB-LAN Errors Today sensor."""
+
+    def test_sensor_value(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct error count."""
+        from custom_components.cwu_controller.sensor import BsbLanErrorsTodaySensor
+
+        sensor = make_sensor(BsbLanErrorsTodaySensor, coordinator_with_data, mock_entry)
+        assert sensor.native_value == 5
+
+    def test_sensor_zero_value(self, mock_coordinator, mock_entry):
+        """Test sensor returns 0 when no errors."""
+        from custom_components.cwu_controller.sensor import BsbLanErrorsTodaySensor
+
+        mock_coordinator.data = {"bsb_lan_errors_today": 0}
+        sensor = make_sensor(BsbLanErrorsTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value == 0
+
+    def test_sensor_default_value(self, mock_coordinator, mock_entry):
+        """Test sensor returns 0 when key is missing."""
+        from custom_components.cwu_controller.sensor import BsbLanErrorsTodaySensor
+
+        mock_coordinator.data = {}
+        sensor = make_sensor(BsbLanErrorsTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value == 0
+
+    def test_sensor_attributes(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct attributes."""
+        from custom_components.cwu_controller.sensor import BsbLanErrorsTodaySensor
+
+        sensor = make_sensor(BsbLanErrorsTodaySensor, coordinator_with_data, mock_entry)
+        attrs = sensor.extra_state_attributes
+        assert attrs["bsb_lan_available"] is True
+        assert "last_reset" in attrs
+        assert "note" in attrs
+
+    def test_sensor_none_data(self, mock_coordinator, mock_entry):
+        """Test sensor handles None data."""
+        from custom_components.cwu_controller.sensor import BsbLanErrorsTodaySensor
+
+        mock_coordinator.data = None
+        sensor = make_sensor(BsbLanErrorsTodaySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value is None
+
+
+class TestSessionEnergySensor:
+    """Tests for CWU Session Energy sensor."""
+
+    def test_sensor_value(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct session energy."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        sensor = make_sensor(SessionEnergySensor, coordinator_with_data, mock_entry)
+        assert sensor.native_value == 1.25
+
+    def test_sensor_none_value(self, mock_coordinator, mock_entry):
+        """Test sensor returns None when no session active."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        mock_coordinator.data = {"session_energy_kwh": None}
+        sensor = make_sensor(SessionEnergySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value is None
+
+    def test_sensor_missing_key(self, mock_coordinator, mock_entry):
+        """Test sensor returns None when key is missing."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        mock_coordinator.data = {}
+        sensor = make_sensor(SessionEnergySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value is None
+
+    def test_sensor_attributes(self, coordinator_with_data, mock_entry):
+        """Test sensor returns correct attributes."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        sensor = make_sensor(SessionEnergySensor, coordinator_with_data, mock_entry)
+        attrs = sensor.extra_state_attributes
+        assert attrs["session_start_time"] == "2025-01-01T10:30:00"
+        assert attrs["session_start_temp"] == 38.5
+        assert attrs["cwu_heating_minutes"] == 45.5
+        assert "note" in attrs
+
+    def test_sensor_unit(self, coordinator_with_data, mock_entry):
+        """Test sensor has kWh unit."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        sensor = make_sensor(SessionEnergySensor, coordinator_with_data, mock_entry)
+        assert sensor._attr_native_unit_of_measurement == "kWh"
+
+    def test_sensor_none_data(self, mock_coordinator, mock_entry):
+        """Test sensor handles None data."""
+        from custom_components.cwu_controller.sensor import SessionEnergySensor
+
+        mock_coordinator.data = None
+        sensor = make_sensor(SessionEnergySensor, mock_coordinator, mock_entry)
+        assert sensor.native_value is None
