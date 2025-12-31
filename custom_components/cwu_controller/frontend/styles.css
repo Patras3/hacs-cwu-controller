@@ -3727,22 +3727,22 @@ body {
 
 /* Power badge */
 .viz-power-badge {
-    fill: rgba(0, 20, 40, 0.9);
+    fill: rgba(0, 20, 40, 0.95);
     stroke: var(--viz-cyan);
-    stroke-width: 1;
-    filter: drop-shadow(0 0 6px var(--viz-cyan-glow));
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 8px var(--viz-cyan-glow)) drop-shadow(0 0 16px var(--viz-cyan-glow));
 }
 .viz-power-value {
     font-family: 'Oxanium', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 700;
     fill: var(--viz-cyan);
-    filter: drop-shadow(0 0 4px var(--viz-cyan-glow));
+    filter: drop-shadow(0 0 6px var(--viz-cyan-glow));
 }
 .viz-power-unit {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 7px;
-    fill: rgba(0,255,255,0.6);
+    font-size: 10px;
+    fill: rgba(0,255,255,0.8);
 }
 
 /* Defrost mode */
@@ -3845,58 +3845,58 @@ body {
 /* Labels */
 .viz-label {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 7px;
-    fill: rgba(0,255,255,0.5);
-    letter-spacing: 1px;
+    font-size: 11px;
+    fill: rgba(0,255,255,0.7);
+    letter-spacing: 2px;
 }
 
 /* Temperature badges */
 .viz-temp-badge {
-    fill: rgba(0, 20, 40, 0.9);
+    fill: rgba(0, 20, 40, 0.95);
     stroke: var(--viz-cyan);
-    stroke-width: 1;
-    filter: drop-shadow(0 0 8px var(--viz-cyan-glow));
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 10px var(--viz-cyan-glow)) drop-shadow(0 0 20px var(--viz-cyan-glow));
 }
 .viz-temp-badge-value {
     font-family: 'Oxanium', sans-serif;
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 20px;
+    font-weight: 700;
     fill: var(--viz-cyan);
-    filter: drop-shadow(0 0 4px var(--viz-cyan-glow));
+    filter: drop-shadow(0 0 6px var(--viz-cyan-glow));
 }
 
 /* Target temp */
 .viz-target-badge {
-    fill: rgba(255, 85, 51, 0.1);
+    fill: rgba(255, 85, 51, 0.15);
     stroke: var(--viz-hot);
-    stroke-width: 1;
-    stroke-dasharray: 3 2;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 2;
 }
 .viz-target-value {
     font-family: 'Oxanium', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     fill: var(--viz-hot);
-    filter: drop-shadow(0 0 3px var(--viz-hot-glow));
+    filter: drop-shadow(0 0 4px var(--viz-hot-glow));
 }
 .viz-target-label {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 6px;
-    fill: rgba(255,85,51,0.6);
-    letter-spacing: 1px;
+    font-size: 8px;
+    fill: rgba(255,85,51,0.8);
+    letter-spacing: 2px;
 }
 
 /* Flow/Return temp badges */
 .viz-flow-badge {
     font-family: 'Oxanium', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     filter: drop-shadow(0 0 6px var(--viz-hot-glow));
 }
 .viz-return-badge {
     font-family: 'Oxanium', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     filter: drop-shadow(0 0 6px var(--viz-cold-glow));
 }
 

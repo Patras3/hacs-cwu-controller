@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.2.5">
+    <link rel="stylesheet" href="styles.css?v=8.3.0">
 </head>
 <body>
     <div class="container">
@@ -42,7 +42,7 @@
 
         <!-- System Visualization Card (Holographic) - MOBILE VERSION -->
         <div class="system-viz-card system-viz-mobile" id="system-viz-card">
-            <svg viewBox="0 -10 480 300" id="system-viz-svg">
+            <svg viewBox="0 -15 480 330" id="system-viz-svg">
                 <defs>
                     <linearGradient id="vizHelixGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stop-color="#FF5533"/>
@@ -76,9 +76,9 @@
                         <circle cx="40" cy="42" r="2.5" fill="#00FFFF" class="viz-glow-s"/>
                     </g>
                     <g transform="translate(105, 42)" id="viz-power-group">
-                        <rect class="viz-power-badge" x="-18" y="-14" width="36" height="28" rx="3"/>
-                        <text class="viz-power-value" id="viz-power-value" x="0" y="0" text-anchor="middle">--</text>
-                        <text class="viz-power-unit" id="viz-power-unit" x="0" y="9" text-anchor="middle">W</text>
+                        <rect class="viz-power-badge" x="-26" y="-18" width="52" height="36" rx="4"/>
+                        <text class="viz-power-value" id="viz-power-value" x="0" y="2" text-anchor="middle">--</text>
+                        <text class="viz-power-unit" id="viz-power-unit" x="0" y="14" text-anchor="middle">W</text>
                     </g>
                     <g class="viz-defrost-indicator" id="viz-defrost-indicator" transform="translate(40, 42)">
                         <circle cx="0" cy="0" r="38" fill="rgba(136,221,255,0.08)" class="viz-defrost-icon"/>
@@ -115,32 +115,32 @@
                     <path class="viz-helix viz-helix-back" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
                     <path class="viz-helix viz-helix-front viz-helix-flow" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
                     <g transform="translate(60, 5)">
-                        <rect class="viz-target-badge" x="-24" y="-10" width="48" height="22" rx="3"/>
+                        <rect class="viz-target-badge" x="-32" y="-12" width="64" height="28" rx="4"/>
                         <text class="viz-target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
-                        <text class="viz-target-value" id="viz-target-temp" x="0" y="8" text-anchor="middle">--°C</text>
+                        <text class="viz-target-value" id="viz-target-temp" x="0" y="11" text-anchor="middle">--°C</text>
                     </g>
                     <g transform="translate(60, 155)">
-                        <rect class="viz-temp-badge" x="-28" y="-12" width="56" height="24" rx="4"/>
-                        <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="4" text-anchor="middle">--°</text>
+                        <rect class="viz-temp-badge" x="-36" y="-16" width="72" height="32" rx="5"/>
+                        <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="6" text-anchor="middle">--°</text>
                     </g>
-                    <text class="viz-label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
+                    <text class="viz-label" x="60" y="248" text-anchor="middle">CWU</text>
                 </g>
 
                 <!-- Pipes to tank -->
                 <g class="viz-tank-view" id="viz-tank-pipes">
                     <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,30 L332,30"/>
-                    <rect x="200" y="2" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                    <rect x="195" y="-2" width="52" height="24" rx="4" fill="rgba(255,85,51,0.2)" stroke="var(--viz-hot)" stroke-width="1.5"/>
                     <text class="viz-flow-badge" id="viz-flow-temp-cwu" x="221" y="16" text-anchor="middle" fill="var(--viz-hot)">--°</text>
                     <path class="viz-pipe-cold viz-pipe-flow" d="M332,190 L200,190 L200,115 L145,115"/>
-                    <rect x="200" y="198" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
-                    <text class="viz-return-badge" id="viz-return-temp-cwu" x="221" y="212" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                    <rect x="195" y="196" width="52" height="24" rx="4" fill="rgba(0,136,255,0.2)" stroke="var(--viz-cold)" stroke-width="1.5"/>
+                    <text class="viz-return-badge" id="viz-return-temp-cwu" x="221" y="214" text-anchor="middle" fill="var(--viz-cold)">--°</text>
                 </g>
 
                 <!-- Delta T (CWU) -->
-                <g class="viz-tank-view viz-delta-badge" transform="translate(172, 90)">
-                    <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
-                    <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
-                    <text id="viz-delta-cwu" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                <g class="viz-tank-view viz-delta-badge" transform="translate(185, 90)">
+                    <rect x="-28" y="-14" width="56" height="30" rx="5" fill="rgba(0,255,255,0.15)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                    <text x="0" y="-4" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:9px; fill:rgba(0,255,255,0.9);">ΔT</text>
+                    <text id="viz-delta-cwu" x="0" y="11" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:15px;font-weight:700; fill:var(--viz-cyan);">--°</text>
                 </g>
 
                 <!-- FLOOR HEATING -->
@@ -178,25 +178,26 @@
                 </g>
 
                 <!-- Delta T (Floor) -->
-                <g class="viz-floor-view viz-delta-badge" transform="translate(172, 90)">
-                    <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
-                    <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
-                    <text id="viz-delta-floor" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                <g class="viz-floor-view viz-delta-badge" transform="translate(185, 90)">
+                    <rect x="-28" y="-14" width="56" height="30" rx="5" fill="rgba(0,255,255,0.15)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                    <text x="0" y="-4" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:9px; fill:rgba(0,255,255,0.9);">ΔT</text>
+                    <text id="viz-delta-floor" x="0" y="11" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:15px;font-weight:700; fill:var(--viz-cyan);">--°</text>
                 </g>
 
                 <!-- Status section -->
-                <g transform="translate(20, 242)">
+                <g transform="translate(15, 250)">
+                    <rect x="-8" y="-16" width="220" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
                     <g class="viz-tank-view">
-                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
-                        <text id="viz-dhw-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
+                        <text id="viz-dhw-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
                     <g class="viz-floor-view">
-                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
-                        <text id="viz-hc1-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
+                        <text id="viz-hc1-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
-                    <g transform="translate(0, 16)">
-                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
-                        <text id="viz-hp-status" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                    <g transform="translate(0, 20)">
+                        <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
+                        <text id="viz-hp-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
                 </g>
             </svg>
@@ -336,7 +337,7 @@
                     <span class="badge" id="viz-state-badge">--</span>
                 </div>
                 <div class="system-viz-content">
-                    <svg viewBox="0 -10 480 300" class="system-viz-svg-desktop">
+                    <svg viewBox="0 -15 480 330" class="system-viz-svg-desktop">
                         <!-- Uses same gradient/clip IDs as mobile - both defined, browser uses first -->
                         <!-- HEAT PUMP -->
                         <g transform="translate(15, 45)">
@@ -355,9 +356,9 @@
                                 <circle cx="40" cy="42" r="2.5" fill="#00FFFF" class="viz-glow-s"/>
                             </g>
                             <g transform="translate(105, 42)" class="viz-power-group-desktop">
-                                <rect class="viz-power-badge" x="-18" y="-14" width="36" height="28" rx="3"/>
-                                <text class="viz-power-value viz-power-value-desktop" x="0" y="0" text-anchor="middle">--</text>
-                                <text class="viz-power-unit viz-power-unit-desktop" x="0" y="9" text-anchor="middle">W</text>
+                                <rect class="viz-power-badge" x="-26" y="-18" width="52" height="36" rx="4"/>
+                                <text class="viz-power-value viz-power-value-desktop" x="0" y="2" text-anchor="middle">--</text>
+                                <text class="viz-power-unit viz-power-unit-desktop" x="0" y="14" text-anchor="middle">W</text>
                             </g>
                             <g class="viz-defrost-indicator viz-defrost-indicator-desktop" transform="translate(40, 42)">
                                 <circle cx="0" cy="0" r="38" fill="rgba(136,221,255,0.08)" class="viz-defrost-icon"/>
@@ -392,30 +393,30 @@
                             <path class="viz-helix viz-helix-back" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
                             <path class="viz-helix viz-helix-front viz-helix-flow" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
                             <g transform="translate(60, 5)">
-                                <rect class="viz-target-badge" x="-24" y="-10" width="48" height="22" rx="3"/>
+                                <rect class="viz-target-badge" x="-32" y="-12" width="64" height="28" rx="4"/>
                                 <text class="viz-target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
-                                <text class="viz-target-value viz-target-temp-desktop" x="0" y="8" text-anchor="middle">--°C</text>
+                                <text class="viz-target-value viz-target-temp-desktop" x="0" y="11" text-anchor="middle">--°C</text>
                             </g>
                             <g transform="translate(60, 155)">
-                                <rect class="viz-temp-badge" x="-28" y="-12" width="56" height="24" rx="4"/>
-                                <text class="viz-temp-badge-value viz-cwu-temp-desktop" x="0" y="4" text-anchor="middle">--°</text>
+                                <rect class="viz-temp-badge" x="-36" y="-16" width="72" height="32" rx="5"/>
+                                <text class="viz-temp-badge-value viz-cwu-temp-desktop" x="0" y="6" text-anchor="middle">--°</text>
                             </g>
                             <text class="viz-label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
                         </g>
                         <!-- Pipes to tank -->
                         <g class="viz-tank-view viz-tank-view-desktop">
                             <path class="viz-pipe-hot viz-pipe-flow" d="M145,65 L200,65 L200,30 L332,30"/>
-                            <rect x="200" y="2" width="42" height="18" rx="3" fill="rgba(255,85,51,0.15)" stroke="var(--viz-hot)" stroke-width="1"/>
+                            <rect x="195" y="-2" width="52" height="24" rx="4" fill="rgba(255,85,51,0.2)" stroke="var(--viz-hot)" stroke-width="1.5"/>
                             <text class="viz-flow-badge viz-flow-temp-cwu-desktop" x="221" y="16" text-anchor="middle" fill="var(--viz-hot)">--°</text>
                             <path class="viz-pipe-cold viz-pipe-flow" d="M332,190 L200,190 L200,115 L145,115"/>
-                            <rect x="200" y="198" width="42" height="18" rx="3" fill="rgba(0,136,255,0.15)" stroke="var(--viz-cold)" stroke-width="1"/>
-                            <text class="viz-return-badge viz-return-temp-cwu-desktop" x="221" y="212" text-anchor="middle" fill="var(--viz-cold)">--°</text>
+                            <rect x="195" y="196" width="52" height="24" rx="4" fill="rgba(0,136,255,0.2)" stroke="var(--viz-cold)" stroke-width="1.5"/>
+                            <text class="viz-return-badge viz-return-temp-cwu-desktop" x="221" y="214" text-anchor="middle" fill="var(--viz-cold)">--°</text>
                         </g>
                         <!-- Delta T (CWU) -->
-                        <g class="viz-tank-view viz-tank-view-desktop viz-delta-badge" transform="translate(172, 90)">
-                            <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
-                            <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
-                            <text class="viz-delta-cwu-desktop" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                        <g class="viz-tank-view viz-tank-view-desktop viz-delta-badge" transform="translate(185, 90)">
+                            <rect x="-28" y="-14" width="56" height="30" rx="5" fill="rgba(0,255,255,0.15)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                            <text x="0" y="-4" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:9px; fill:rgba(0,255,255,0.9);">ΔT</text>
+                            <text class="viz-delta-cwu-desktop" x="0" y="11" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:15px;font-weight:700; fill:var(--viz-cyan);">--°</text>
                         </g>
                         <!-- FLOOR HEATING -->
                         <g class="viz-floor-view viz-floor-view-desktop" transform="translate(260, 15)">
@@ -450,24 +451,25 @@
                             <text class="viz-return-badge viz-return-temp-floor-desktop" x="236" y="182" text-anchor="middle" fill="var(--viz-cold)">--°</text>
                         </g>
                         <!-- Delta T (Floor) -->
-                        <g class="viz-floor-view viz-floor-view-desktop viz-delta-badge" transform="translate(172, 90)">
-                            <rect x="-22" y="-12" width="44" height="24" rx="4" fill="rgba(0,255,255,0.12)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
-                            <text x="0" y="-3" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:7px; fill:rgba(0,255,255,0.8);">ΔT</text>
-                            <text class="viz-delta-floor-desktop" x="0" y="9" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:600; fill:var(--viz-cyan);">--°</text>
+                        <g class="viz-floor-view viz-floor-view-desktop viz-delta-badge" transform="translate(185, 90)">
+                            <rect x="-28" y="-14" width="56" height="30" rx="5" fill="rgba(0,255,255,0.15)" stroke="var(--viz-cyan)" stroke-width="1.5"/>
+                            <text x="0" y="-4" text-anchor="middle" style="font-family:'IBM Plex Mono',monospace;font-size:9px; fill:rgba(0,255,255,0.9);">ΔT</text>
+                            <text class="viz-delta-floor-desktop" x="0" y="11" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:15px;font-weight:700; fill:var(--viz-cyan);">--°</text>
                         </g>
                         <!-- Status section -->
-                        <g transform="translate(20, 242)">
+                        <g transform="translate(15, 250)">
+                            <rect x="-8" y="-16" width="220" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
                             <g class="viz-tank-view viz-tank-view-desktop">
-                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
-                                <text class="viz-dhw-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
+                                <text class="viz-dhw-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
                             <g class="viz-floor-view viz-floor-view-desktop">
-                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
-                                <text class="viz-hc1-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
+                                <text class="viz-hc1-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
-                            <g transform="translate(0, 16)">
-                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
-                                <text class="viz-hp-status-desktop" x="40" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:8px;fill:rgba(0,255,255,0.8);">---</text>
+                            <g transform="translate(0, 20)">
+                                <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
+                                <text class="viz-hp-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
                         </g>
                     </svg>
@@ -1240,6 +1242,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.2.7"></script>
+    <script src="panel.js?v=8.3.0"></script>
 </body>
 </html>
