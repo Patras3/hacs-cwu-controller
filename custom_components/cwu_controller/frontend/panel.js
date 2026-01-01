@@ -2012,9 +2012,9 @@ function getTimeRemaining(isoString) {
 }
 
 async function setModeAuto() {
-    if (currentData.manualOverride) {
-        await callService('cwu_controller', 'force_auto');
-    }
+    // Always call force_auto - it cancels manual override AND floor boost
+    await callService('cwu_controller', 'force_auto');
+    showNotification('Switched to AUTO mode', 'success');
 }
 
 function openModeModal(type) {

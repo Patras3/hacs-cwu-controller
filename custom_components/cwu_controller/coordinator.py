@@ -1118,7 +1118,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._log_action("Force Floor", f"Manual override for {duration_minutes} min")
 
     async def async_force_auto(self) -> None:
-        """Cancel manual override and let controller decide from scratch."""
+        """Cancel manual override, floor boost, and let controller decide from scratch."""
         self._manual_override = False
         self._manual_override_until = None
         self._manual_heat_to_active = False
@@ -1126,7 +1126,12 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._change_state(STATE_IDLE)
         self._cwu_heating_start = None
         self._cwu_session_start_temp = None
-        self._log_action("Manual override cancelled", "Switching to auto mode")
+
+        # Also cancel floor boost if active
+        if self._floor_boost_active:
+            await self.async_floor_boost_cancel()
+
+        self._log_action("Auto mode", "Cancelled all overrides, switching to auto")
         # Next coordinator update will run control logic and decide
 
     async def async_heat_to_temp(self, target_temp: float) -> None:
