@@ -1,5 +1,5 @@
 /**
- * CWU Controller Panel JavaScript v8.2
+ * CWU Controller Panel JavaScript v8.3
  * v3.0: Redesigned with compact state bar, mode selector, and integrated cycle timer
  * v4.0: Added tariff breakdown, token handling, safe_mode, winter emergency threshold
  * v6.0: Major release - Winter mode, Safe mode, G12w tariff tracking
@@ -10,6 +10,7 @@
  * v8.0: Anti-oscillation UI (HP ready, hold times, max temp, night window), enhanced state display
  * v8.1: BSB-LAN only refactor - removed cloud entities, CWU/floor modes from BSB-LAN exclusively
  * v8.2: Added holographic system visualization card (heat pump, CWU tank, floor heating)
+ * v8.3: Added Floor Boost UI - raise floor temp to 28°C for X hours or until session ends
  */
 
 // Configuration
@@ -2026,22 +2027,25 @@ function openModeModal(type) {
     const icon = document.getElementById('mode-modal-icon');
     const desc = document.getElementById('mode-modal-description');
     const slider = document.getElementById('duration-slider');
-    const tabs = document.getElementById('mode-tabs');
+    const tabsCwu = document.getElementById('mode-tabs-cwu');
+    const tabsFloor = document.getElementById('mode-tabs-floor');
 
     if (type === 'cwu') {
         title.textContent = 'Force CWU Heating';
         icon.innerHTML = '<span class="mdi mdi-water-boiler"></span>';
         icon.querySelector('.mdi').style.color = 'var(--accent-cyan)';
         desc.textContent = 'Force CWU heating for:';
-        // Show tabs for CWU (duration + heat-to)
-        tabs.style.display = 'flex';
+        // Show CWU tabs (duration + heat-to)
+        tabsCwu.style.display = 'flex';
+        tabsFloor.style.display = 'none';
     } else {
-        title.textContent = 'Force Floor Heating';
+        title.textContent = 'Floor Heating';
         icon.innerHTML = '<span class="mdi mdi-heating-coil"></span>';
         icon.querySelector('.mdi').style.color = 'var(--accent-orange)';
         desc.textContent = 'Force floor heating for:';
-        // Hide tabs for floor (only duration)
-        tabs.style.display = 'none';
+        // Show Floor tabs (duration + boost)
+        tabsCwu.style.display = 'none';
+        tabsFloor.style.display = 'flex';
     }
 
     // Reset to duration tab
@@ -2050,6 +2054,7 @@ function openModeModal(type) {
     slider.value = selectedDuration;
     updateDurationDisplay();
     updatePresetButtons();
+    updateBoostStatus();
 
     modal.classList.add('open');
 }
@@ -2057,24 +2062,42 @@ function openModeModal(type) {
 function switchModeTab(tab) {
     selectedModeTab = tab;
 
-    const tabDuration = document.getElementById('tab-duration');
+    // CWU tabs
+    const tabDurationCwu = document.getElementById('tab-duration-cwu');
     const tabHeatTo = document.getElementById('tab-heat-to');
+    // Floor tabs
+    const tabDurationFloor = document.getElementById('tab-duration-floor');
+    const tabBoost = document.getElementById('tab-boost');
+    // Panels
     const panelDuration = document.getElementById('panel-duration');
     const panelHeatTo = document.getElementById('panel-heat-to');
+    const panelBoost = document.getElementById('panel-boost');
     const confirmBtn = document.getElementById('mode-confirm-btn');
 
+    // Reset all tabs and panels
+    [tabDurationCwu, tabHeatTo, tabDurationFloor, tabBoost].forEach(t => t?.classList.remove('active'));
+    [panelDuration, panelHeatTo, panelBoost].forEach(p => { if(p) p.style.display = 'none'; });
+
     if (tab === 'duration') {
-        tabDuration.classList.add('active');
-        tabHeatTo.classList.remove('active');
+        if (selectedModeType === 'cwu') {
+            tabDurationCwu?.classList.add('active');
+        } else {
+            tabDurationFloor?.classList.add('active');
+        }
         panelDuration.style.display = 'block';
-        panelHeatTo.style.display = 'none';
+        confirmBtn.style.display = 'block';
         confirmBtn.innerHTML = '<span class="mdi mdi-check"></span> Confirm';
-    } else {
-        tabDuration.classList.remove('active');
-        tabHeatTo.classList.add('active');
-        panelDuration.style.display = 'none';
+    } else if (tab === 'heat-to') {
+        tabHeatTo?.classList.add('active');
         panelHeatTo.style.display = 'block';
+        confirmBtn.style.display = 'block';
         confirmBtn.innerHTML = '<span class="mdi mdi-fire"></span> Start Heating';
+    } else if (tab === 'boost') {
+        tabBoost?.classList.add('active');
+        panelBoost.style.display = 'block';
+        // Hide the generic confirm button - boost has its own buttons
+        confirmBtn.style.display = 'none';
+        updateBoostStatus();
     }
 }
 
@@ -2177,6 +2200,107 @@ function updateHeatToProgress() {
         progressText.textContent = `${cwuTemp?.toFixed(1) || '--'}°C / ${heatToTarget}°C`;
     } else {
         progressContainer.style.display = 'none';
+    }
+}
+
+/**
+ * Floor Boost functions
+ */
+let selectedBoostDuration = 2;
+
+function updateBoostDurationDisplay() {
+    const slider = document.getElementById('boost-duration-slider');
+    const display = document.getElementById('boost-duration-value');
+    selectedBoostDuration = parseInt(slider.value);
+    display.textContent = selectedBoostDuration;
+    updateBoostPresetButtons();
+}
+
+function setBoostDuration(hours) {
+    selectedBoostDuration = hours;
+    document.getElementById('boost-duration-slider').value = hours;
+    document.getElementById('boost-duration-value').textContent = hours;
+    updateBoostPresetButtons();
+}
+
+function updateBoostPresetButtons() {
+    document.querySelectorAll('.boost-presets .preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+        const btnHours = parseInt(btn.textContent);
+        if (btnHours === selectedBoostDuration) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+async function confirmBoostDuration() {
+    closeModal('mode-modal');
+    try {
+        await callService('cwu_controller', 'floor_boost', { hours: selectedBoostDuration });
+        showNotification(`Floor boost started for ${selectedBoostDuration}h (28°C)`, 'success');
+    } catch (error) {
+        showNotification('Failed to start floor boost: ' + error.message, 'error');
+    }
+}
+
+async function confirmBoostSession() {
+    closeModal('mode-modal');
+    try {
+        await callService('cwu_controller', 'floor_boost_session');
+        showNotification('Floor boost started until session ends (28°C)', 'success');
+    } catch (error) {
+        showNotification('Failed to start floor boost: ' + error.message, 'error');
+    }
+}
+
+async function cancelBoost() {
+    try {
+        await callService('cwu_controller', 'floor_boost_cancel');
+        showNotification('Floor boost cancelled', 'info');
+        updateBoostStatus();
+    } catch (error) {
+        showNotification('Failed to cancel boost: ' + error.message, 'error');
+    }
+}
+
+function updateBoostStatus() {
+    const attrs = currentData.attributes || {};
+    const boostActive = attrs.floor_boost_active;
+    const boostSession = attrs.floor_boost_session;
+    const boostUntil = attrs.floor_boost_until;
+
+    const statusEl = document.getElementById('boost-status');
+    const statusText = document.getElementById('boost-status-text');
+    const sessionBtn = document.getElementById('boost-session-btn');
+    const durationSlider = document.querySelector('.boost-option');
+
+    if (boostActive) {
+        statusEl.style.display = 'flex';
+        if (boostSession) {
+            statusText.textContent = 'Boost active (until session ends)';
+        } else if (boostUntil) {
+            const until = new Date(boostUntil);
+            const remaining = Math.max(0, Math.round((until - new Date()) / 60000));
+            const hours = Math.floor(remaining / 60);
+            const mins = remaining % 60;
+            statusText.textContent = `Boost active (${hours}h ${mins}m remaining)`;
+        } else {
+            statusText.textContent = 'Boost active';
+        }
+        // Show cancel button, hide start controls
+        sessionBtn.textContent = 'Cancel Boost';
+        sessionBtn.classList.add('btn-cancel-boost');
+        sessionBtn.onclick = cancelBoost;
+        if (durationSlider) durationSlider.style.display = 'none';
+        document.querySelector('.boost-divider').style.display = 'none';
+    } else {
+        statusEl.style.display = 'none';
+        // Show start controls
+        sessionBtn.innerHTML = '<span class="mdi mdi-timer-sand"></span> Until Session Ends';
+        sessionBtn.classList.remove('btn-cancel-boost');
+        sessionBtn.onclick = confirmBoostSession;
+        if (durationSlider) durationSlider.style.display = 'flex';
+        document.querySelector('.boost-divider').style.display = 'flex';
     }
 }
 

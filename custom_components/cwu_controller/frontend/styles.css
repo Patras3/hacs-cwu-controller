@@ -2634,6 +2634,107 @@ body {
     transform: translateY(-2px);
 }
 
+/* Floor Boost Panel */
+.boost-options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.boost-option {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.boost-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.boost-presets {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.boost-presets .preset-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.boost-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.boost-divider::before,
+.boost-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.btn-session {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--glass-bg);
+    border: 1px solid var(--accent-orange);
+    color: var(--accent-orange);
+    font-weight: 600;
+}
+
+.btn-session:hover {
+    background: rgba(237, 137, 54, 0.15);
+    box-shadow: 0 0 20px rgba(237, 137, 54, 0.3);
+}
+
+.btn-session .mdi {
+    font-size: 18px;
+}
+
+.boost-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-top: 12px;
+    background: rgba(237, 137, 54, 0.15);
+    border: 1px solid var(--accent-orange);
+    border-radius: var(--radius-sm);
+    color: var(--accent-orange);
+    font-weight: 500;
+}
+
+.boost-status .mdi {
+    font-size: 18px;
+    animation: boost-pulse 1.5s infinite;
+}
+
+@keyframes boost-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.btn-cancel-boost {
+    background: rgba(252, 129, 129, 0.1);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.btn-cancel-boost:hover {
+    background: rgba(252, 129, 129, 0.2);
+}
+
 /* State compact colors */
 .state-compact.state-heating-cwu {
     border-color: rgba(0, 217, 255, 0.4);

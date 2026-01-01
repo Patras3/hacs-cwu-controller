@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.5.0">
+    <link rel="stylesheet" href="styles.css?v=8.6.0">
 </head>
 <body>
     <div class="container">
@@ -1193,13 +1193,23 @@
                     <span class="mdi mdi-water-boiler"></span>
                 </div>
 
-                <!-- Tabs (only visible for CWU) -->
-                <div class="mode-tabs" id="mode-tabs">
-                    <button class="mode-tab active" id="tab-duration" onclick="switchModeTab('duration')">
+                <!-- Tabs for CWU -->
+                <div class="mode-tabs" id="mode-tabs-cwu">
+                    <button class="mode-tab active" id="tab-duration-cwu" onclick="switchModeTab('duration')">
                         <span class="mdi mdi-timer-outline"></span> Duration
                     </button>
                     <button class="mode-tab" id="tab-heat-to" onclick="switchModeTab('heat-to')">
                         <span class="mdi mdi-target"></span> Heat to °C
+                    </button>
+                </div>
+
+                <!-- Tabs for Floor -->
+                <div class="mode-tabs" id="mode-tabs-floor" style="display: none;">
+                    <button class="mode-tab active" id="tab-duration-floor" onclick="switchModeTab('duration')">
+                        <span class="mdi mdi-timer-outline"></span> Force
+                    </button>
+                    <button class="mode-tab" id="tab-boost" onclick="switchModeTab('boost')">
+                        <span class="mdi mdi-radiator"></span> Boost 28°C
                     </button>
                 </div>
 
@@ -1246,6 +1256,47 @@
                     <span class="heat-to-progress-text" id="heat-to-progress-text">--°C / --°C</span>
                 </div>
 
+                <!-- Floor Boost Panel -->
+                <div class="mode-panel" id="panel-boost" style="display: none;">
+                    <p class="mode-modal-description">Raise floor temp to 28°C:</p>
+                    <div class="boost-options">
+                        <div class="boost-option">
+                            <label class="boost-label">Duration (hours):</label>
+                            <div class="duration-slider-container">
+                                <input type="range" id="boost-duration-slider" min="1" max="8" step="1" value="2"
+                                       oninput="updateBoostDurationDisplay()">
+                                <div class="duration-display">
+                                    <span class="duration-value" id="boost-duration-value">2</span>
+                                    <span class="duration-unit">h</span>
+                                </div>
+                            </div>
+                            <div class="duration-presets boost-presets">
+                                <button class="preset-btn" onclick="setBoostDuration(1)">1h</button>
+                                <button class="preset-btn active" onclick="setBoostDuration(2)">2h</button>
+                                <button class="preset-btn" onclick="setBoostDuration(3)">3h</button>
+                                <button class="preset-btn" onclick="setBoostDuration(4)">4h</button>
+                                <button class="preset-btn" onclick="setBoostDuration(6)">6h</button>
+                                <button class="preset-btn" onclick="setBoostDuration(8)">8h</button>
+                            </div>
+                            <button class="btn btn-primary" onclick="confirmBoostDuration()">
+                                <span class="mdi mdi-radiator"></span>
+                                Start Boost
+                            </button>
+                        </div>
+                        <div class="boost-divider">
+                            <span>or</span>
+                        </div>
+                        <button class="btn btn-secondary btn-session" id="boost-session-btn" onclick="confirmBoostSession()">
+                            <span class="mdi mdi-timer-sand"></span>
+                            Until Session Ends
+                        </button>
+                    </div>
+                    <div class="boost-status" id="boost-status" style="display: none;">
+                        <span class="mdi mdi-radiator"></span>
+                        <span id="boost-status-text">Boost active</span>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary btn-block" id="mode-confirm-btn" onclick="confirmMode()">
                     <span class="mdi mdi-check"></span>
                     Confirm
@@ -1257,6 +1308,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.5.0"></script>
+    <script src="panel.js?v=8.6.0"></script>
 </body>
 </html>
