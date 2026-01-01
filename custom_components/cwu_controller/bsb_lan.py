@@ -15,6 +15,7 @@ from .const import (
     BSB_LAN_READ_PARAMS,
     BSB_LAN_PARAM_CWU_MODE,
     BSB_LAN_PARAM_FLOOR_MODE,
+    BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT,
     BSB_LAN_PARAM_CWU_TARGET_NOMINAL,
     BSB_LAN_CWU_MAX_TEMP,
     BSB_LAN_STATE_VERIFY_INTERVAL,
@@ -202,6 +203,32 @@ class BSBLanClient:
             )
             return False
         return await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, int(temp))
+
+    async def async_set_floor_comfort_setpoint(self, temp: float) -> bool:
+        """Set floor heating comfort setpoint (param 710).
+
+        Args:
+            temp: Target room temperature in °C.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return await self.async_write_parameter(BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT, temp)
+
+    async def async_get_floor_comfort_setpoint(self) -> float | None:
+        """Get current floor comfort setpoint (param 710).
+
+        Returns:
+            Current setpoint in °C, or None if read fails.
+        """
+        data = await self.async_read_parameters(str(BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT))
+        if data:
+            param_data = data.get(str(BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT), {})
+            try:
+                return float(param_data.get("value", 0))
+            except (ValueError, TypeError):
+                return None
+        return None
 
     async def async_write_and_verify(
         self, param: int, value: int, verify_delay: float = 5.0

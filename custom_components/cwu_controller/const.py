@@ -138,7 +138,7 @@ BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before marking una
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
 # BSB-LAN Parameters for reading (includes 1610 for CWU target setpoint)
-BSB_LAN_READ_PARAMS: Final = "700,1600,1610,8000,8003,8006,8412,8410,8830,8700"
+BSB_LAN_READ_PARAMS: Final = "700,710,1600,1610,8000,8003,8006,8412,8410,8830,8700"
 
 # BSB-LAN Control Parameters (write)
 BSB_LAN_PARAM_CWU_MODE: Final = 1600  # 0=Off, 1=On, 2=Eco
@@ -148,6 +148,10 @@ BSB_LAN_PARAM_FLOOR_MODE: Final = 700  # 0=Protection, 1=Automatic, 2=Reduced, 3
 BSB_LAN_PARAM_CWU_TARGET_NOMINAL: Final = 1610  # DHW nominal setpoint
 BSB_LAN_PARAM_CWU_TARGET_REDUCED: Final = 1612  # DHW reduced setpoint
 BSB_LAN_CWU_MAX_TEMP: Final = 55  # Maximum CWU temperature settable
+
+# BSB-LAN Floor Comfort Setpoint Parameter
+BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT: Final = 710  # Room temp comfort setpoint
+BSB_FLOOR_BOOST_TEMP: Final = 28.0  # Temperature for floor boost (max)
 
 # BSB-LAN CWU Modes (parameter 1600)
 BSB_CWU_MODE_OFF: Final = 0

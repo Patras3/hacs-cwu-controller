@@ -81,6 +81,8 @@ from .const import (
     BSB_CWU_MODE_ON,
     BSB_FLOOR_MODE_PROTECTION,
     BSB_FLOOR_MODE_AUTOMATIC,
+    BSB_FLOOR_MODE_COMFORT,
+    BSB_FLOOR_BOOST_TEMP,
     BSB_DHW_STATUS_CHARGING,
     BSB_DHW_STATUS_CHARGING_ELECTRIC,
     BSB_HP_COMPRESSOR_ON,
@@ -244,6 +246,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_heat_to_target: float | None = None
         self._manual_heat_to_original_target: float | None = None
         self._manual_heat_to_active: bool = False
+
+        # Floor boost feature - temporarily raise floor heating temperature
+        self._floor_boost_active: bool = False
+        self._floor_boost_session: bool = False  # True if boost until session ends
+        self._floor_boost_until: datetime | None = None  # For timed boost
+        self._floor_boost_original_mode: int | None = None  # Original param 700 value
+        self._floor_boost_original_setpoint: float | None = None  # Original param 710 value
 
         # Config overrides from number entities (runtime changes)
         self._config_overrides: dict[str, float] = {}
@@ -1159,6 +1168,111 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             f"Target {target_temp:.0f}°C, current {cwu_temp:.1f}°C" if cwu_temp else f"Target {target_temp:.0f}°C"
         )
 
+    async def async_floor_boost_timed(self, hours: int) -> None:
+        """Boost floor heating to max temp for specified hours.
+
+        Args:
+            hours: Duration in hours (1-8)
+        """
+        if hours < 1 or hours > 8:
+            _LOGGER.warning("Floor boost hours %s out of range (1-8)", hours)
+            return
+
+        # Store original values before boost
+        self._floor_boost_original_setpoint = await self._bsb_client.async_get_floor_comfort_setpoint()
+        if self._floor_boost_original_setpoint is None:
+            _LOGGER.warning("Could not read current floor setpoint, aborting boost")
+            return
+
+        # Read current mode
+        bsb_data = await self._bsb_client.async_read_parameters("700")
+        if bsb_data:
+            try:
+                self._floor_boost_original_mode = int(bsb_data.get("700", {}).get("value", 1))
+            except (ValueError, TypeError):
+                self._floor_boost_original_mode = BSB_FLOOR_MODE_AUTOMATIC
+
+        # Set boost parameters
+        await self._bsb_client.async_set_floor_comfort_setpoint(BSB_FLOOR_BOOST_TEMP)
+        await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_COMFORT)
+
+        self._floor_boost_active = True
+        self._floor_boost_session = False
+        self._floor_boost_until = datetime.now() + timedelta(hours=hours)
+
+        self._log_action(
+            f"Floor Boost {hours}h",
+            f"Set {BSB_FLOOR_BOOST_TEMP}°C (was {self._floor_boost_original_setpoint}°C)"
+        )
+
+    async def async_floor_boost_session(self) -> None:
+        """Boost floor heating until current floor heating session ends."""
+        # Store original values before boost
+        self._floor_boost_original_setpoint = await self._bsb_client.async_get_floor_comfort_setpoint()
+        if self._floor_boost_original_setpoint is None:
+            _LOGGER.warning("Could not read current floor setpoint, aborting boost")
+            return
+
+        # Read current mode
+        bsb_data = await self._bsb_client.async_read_parameters("700")
+        if bsb_data:
+            try:
+                self._floor_boost_original_mode = int(bsb_data.get("700", {}).get("value", 1))
+            except (ValueError, TypeError):
+                self._floor_boost_original_mode = BSB_FLOOR_MODE_AUTOMATIC
+
+        # Set boost parameters
+        await self._bsb_client.async_set_floor_comfort_setpoint(BSB_FLOOR_BOOST_TEMP)
+        await self._bsb_client.async_set_floor_mode(BSB_FLOOR_MODE_COMFORT)
+
+        self._floor_boost_active = True
+        self._floor_boost_session = True
+        self._floor_boost_until = None
+
+        self._log_action(
+            "Floor Boost Session",
+            f"Set {BSB_FLOOR_BOOST_TEMP}°C until session ends (was {self._floor_boost_original_setpoint}°C)"
+        )
+
+    async def async_floor_boost_cancel(self) -> None:
+        """Cancel floor boost and restore original settings."""
+        if not self._floor_boost_active:
+            return
+
+        # Restore original values
+        if self._floor_boost_original_setpoint is not None:
+            await self._bsb_client.async_set_floor_comfort_setpoint(self._floor_boost_original_setpoint)
+
+        if self._floor_boost_original_mode is not None:
+            await self._bsb_client.async_set_floor_mode(self._floor_boost_original_mode)
+
+        original_setpoint = self._floor_boost_original_setpoint
+        self._floor_boost_active = False
+        self._floor_boost_session = False
+        self._floor_boost_until = None
+        self._floor_boost_original_mode = None
+        self._floor_boost_original_setpoint = None
+
+        self._log_action(
+            "Floor Boost Cancelled",
+            f"Restored {original_setpoint}°C"
+        )
+
+    @property
+    def floor_boost_active(self) -> bool:
+        """Return if floor boost is active."""
+        return self._floor_boost_active
+
+    @property
+    def floor_boost_session(self) -> bool:
+        """Return if floor boost is session-based."""
+        return self._floor_boost_session
+
+    @property
+    def floor_boost_until(self) -> datetime | None:
+        """Return floor boost end time."""
+        return self._floor_boost_until
+
     def get_config_value(self, key: str, default: float) -> float:
         """Get config value with runtime overrides.
 
@@ -1346,6 +1460,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "manual_heat_to_active": self._manual_heat_to_active,
             "manual_heat_to_target": self._manual_heat_to_target,
             "dhw_charged_at": self._dhw_charged_at.isoformat() if self._dhw_charged_at else None,
+            # Floor boost feature
+            "floor_boost_active": self._floor_boost_active,
+            "floor_boost_session": self._floor_boost_session,
+            "floor_boost_until": self._floor_boost_until.isoformat() if self._floor_boost_until else None,
+            "floor_boost_original_setpoint": self._floor_boost_original_setpoint,
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
             "cwu_session_start_temp": self._cwu_session_start_temp,
@@ -1451,6 +1570,18 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
                 self._manual_override = False
                 self._manual_override_until = None
                 self._log_action("Manual override expired", "Timer reached, returning to auto mode")
+
+        # Check floor boost expiry (timed)
+        if self._floor_boost_active and self._floor_boost_until:
+            if now > self._floor_boost_until:
+                await self.async_floor_boost_cancel()
+                self._log_action("Floor Boost expired", "Timer reached, restored original settings")
+
+        # Check floor boost session end (when switching away from floor heating)
+        if self._floor_boost_active and self._floor_boost_session:
+            if self._current_state not in (STATE_HEATING_FLOOR, STATE_IDLE):
+                await self.async_floor_boost_cancel()
+                self._log_action("Floor Boost session ended", "Floor heating stopped, restored original settings")
 
         # Handle fake heating even in manual CWU mode
         # (don't switch to floor, just restart CWU after wait period)
