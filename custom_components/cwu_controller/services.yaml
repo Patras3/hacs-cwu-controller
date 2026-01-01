@@ -76,3 +76,28 @@ heat_to_temp:
           max: 55
           step: 1
           unit_of_measurement: "°C"
+
+floor_boost:
+  name: Floor Boost
+  description: Boost floor heating to 28°C for specified duration
+  fields:
+    hours:
+      name: Hours
+      description: Duration in hours (1-8)
+      required: false
+      default: 2
+      example: 2
+      selector:
+        number:
+          min: 1
+          max: 8
+          step: 1
+          unit_of_measurement: "h"
+
+floor_boost_session:
+  name: Floor Boost Session
+  description: Boost floor heating to 28°C until current floor heating session ends
+
+floor_boost_cancel:
+  name: Floor Boost Cancel
+  description: Cancel floor boost and restore original settings

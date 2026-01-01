@@ -29,13 +29,7 @@ async def async_setup_entry(
         ForceFloor3HButton(coordinator, entry),
         ForceFloor6HButton(coordinator, entry),
         ForceAutoButton(coordinator, entry),
-        # Floor boost buttons (raise temp to 28°C)
-        FloorBoost1HButton(coordinator, entry),
-        FloorBoost2HButton(coordinator, entry),
-        FloorBoost3HButton(coordinator, entry),
-        FloorBoost4HButton(coordinator, entry),
-        FloorBoost6HButton(coordinator, entry),
-        FloorBoost8HButton(coordinator, entry),
+        # Floor boost buttons (session and cancel only - use service for timed boost)
         FloorBoostSessionButton(coordinator, entry),
         FloorBoostCancelButton(coordinator, entry),
     ]
@@ -181,86 +175,6 @@ class ForceAutoButton(CWUControllerBaseButton):
     async def async_press(self) -> None:
         """Handle button press - cancel override and let controller decide."""
         await self.coordinator.async_force_auto()
-
-
-# Floor Boost buttons - raise floor temp to 28°C for specified time
-
-class FloorBoost1HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 1 hour."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_1h", "Floor Boost 1h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(1)
-
-
-class FloorBoost2HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 2 hours."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_2h", "Floor Boost 2h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(2)
-
-
-class FloorBoost3HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 3 hours."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_3h", "Floor Boost 3h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(3)
-
-
-class FloorBoost4HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 4 hours."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_4h", "Floor Boost 4h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(4)
-
-
-class FloorBoost6HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 6 hours."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_6h", "Floor Boost 6h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(6)
-
-
-class FloorBoost8HButton(CWUControllerBaseButton):
-    """Button to boost floor heating for 8 hours."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize button."""
-        super().__init__(coordinator, entry, "floor_boost_8h", "Floor Boost 8h")
-        self._attr_icon = "mdi:radiator"
-
-    async def async_press(self) -> None:
-        """Handle button press."""
-        await self.coordinator.async_floor_boost_timed(8)
 
 
 class FloorBoostSessionButton(CWUControllerBaseButton):
