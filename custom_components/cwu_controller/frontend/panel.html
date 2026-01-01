@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.4.0">
+    <link rel="stylesheet" href="styles.css?v=8.5.0">
 </head>
 <body>
     <div class="container">
@@ -338,7 +338,22 @@
                 </div>
                 <div class="system-viz-content">
                     <svg viewBox="0 -15 480 330" class="system-viz-svg-desktop">
-                        <!-- Uses same gradient/clip IDs as mobile - both defined, browser uses first -->
+                        <defs>
+                            <linearGradient id="vizHelixGradDesktop" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#FF5533"/>
+                                <stop offset="30%" stop-color="#FF7744"/>
+                                <stop offset="50%" stop-color="#DDAA44"/>
+                                <stop offset="70%" stop-color="#44AADD"/>
+                                <stop offset="100%" stop-color="#0088FF"/>
+                            </linearGradient>
+                            <linearGradient id="vizWaterGradDesktop" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#FF5533" stop-opacity="0.3"/>
+                                <stop offset="40%" stop-color="#CC8844" stop-opacity="0.2"/>
+                                <stop offset="70%" stop-color="#44AADD" stop-opacity="0.2"/>
+                                <stop offset="100%" stop-color="#0066FF" stop-opacity="0.3"/>
+                            </linearGradient>
+                            <clipPath id="vizTankClipDesktop"><path d="M14,28 L14,215 A48,12 0 0,0 106,215 L106,28 A48,12 0 0,1 14,28"/></clipPath>
+                        </defs>
                         <!-- HEAT PUMP -->
                         <g transform="translate(15, 45)">
                             <rect class="viz-w viz-f viz-glow" x="0" y="0" width="130" height="85" rx="3"/>
@@ -389,9 +404,9 @@
                             <line class="viz-w-bright" x1="12" y1="15" x2="12" y2="215"/>
                             <line class="viz-w-bright" x1="108" y1="15" x2="108" y2="215"/>
                             <ellipse class="viz-w-bright" cx="60" cy="215" rx="48" ry="12"/>
-                            <rect x="12" y="28" width="96" height="200" fill="url(#vizWaterGrad)" clip-path="url(#vizTankClip)"/>
-                            <path class="viz-helix viz-helix-back" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
-                            <path class="viz-helix viz-helix-front viz-helix-flow" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                            <rect x="12" y="28" width="96" height="200" fill="url(#vizWaterGradDesktop)" clip-path="url(#vizTankClipDesktop)"/>
+                            <path class="viz-helix viz-helix-back" style="stroke:url(#vizHelixGradDesktop)" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
+                            <path class="viz-helix viz-helix-front viz-helix-flow" style="stroke:url(#vizHelixGradDesktop)" d="M22,35 C22,43 98,43 98,51 C98,59 22,59 22,67 C22,75 98,75 98,83 C98,91 22,91 22,99 C22,107 98,107 98,115 C98,123 22,123 22,131 C22,139 98,139 98,147 C98,155 22,155 22,163 C22,171 98,171 98,179 C98,187 22,187 22,195"/>
                             <g transform="translate(60, 5)">
                                 <rect class="viz-target-badge" x="-32" y="-12" width="64" height="28" rx="4"/>
                                 <text class="viz-target-label" x="0" y="-3" text-anchor="middle">TARGET</text>
@@ -1242,6 +1257,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.4.0"></script>
+    <script src="panel.js?v=8.5.0"></script>
 </body>
 </html>
