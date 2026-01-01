@@ -3852,9 +3852,9 @@ body {
 
 /* Temperature badges */
 .viz-temp-badge {
-    fill: rgba(0, 20, 40, 0.95);
+    fill: rgba(0, 30, 50, 0.98);
     stroke: var(--viz-cyan);
-    stroke-width: 1.5;
+    stroke-width: 2;
     filter: drop-shadow(0 0 10px var(--viz-cyan-glow)) drop-shadow(0 0 20px var(--viz-cyan-glow));
 }
 .viz-temp-badge-value {
