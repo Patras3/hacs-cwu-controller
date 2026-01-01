@@ -1029,9 +1029,11 @@ function updateSessionPumpData() {
     if (deltaEl) {
         const deltaT = bsb.delta_t !== null ? bsb.delta_t : (bsb.flow_temp && bsb.return_temp ? bsb.flow_temp - bsb.return_temp : null);
         if (deltaT !== null) {
-            deltaEl.textContent = `${deltaT.toFixed(1)}°C`;
+            deltaEl.textContent = `${deltaT >= 0 ? '+' : ''}${deltaT.toFixed(1)}°C`;
             // Color based on delta T quality
-            if (deltaT >= 3 && deltaT <= 5) {
+            if (deltaT < 0) {
+                deltaEl.style.color = '#fc8181'; // Bad - reversed flow
+            } else if (deltaT >= 3 && deltaT <= 5) {
                 deltaEl.style.color = '#68d391'; // Good
             } else if (deltaT > 0.5 && deltaT < 3) {
                 deltaEl.style.color = '#ed8936'; // Warning
@@ -2384,7 +2386,10 @@ function updateBsbLanDisplay(bsbData) {
     // Delta T interpretation
     let deltaTClass = 'normal';
     let deltaTDesc = '';
-    if (deltaT >= 3 && deltaT <= 5) {
+    if (deltaT < 0) {
+        deltaTClass = 'bad';
+        deltaTDesc = 'Reversed';
+    } else if (deltaT >= 3 && deltaT <= 5) {
         deltaTClass = 'good';
         deltaTDesc = 'Normal';
     } else if (deltaT > 0.5 && deltaT < 3) {
@@ -2729,7 +2734,7 @@ function updateSystemVisualization() {
     });
 
     document.querySelectorAll('.viz-delta-val, #viz-delta-cwu, #viz-delta-floor, .viz-delta-cwu-desktop, .viz-delta-floor-desktop').forEach(el => {
-        el.textContent = formatTemp(Math.abs(deltaT));
+        el.textContent = (deltaT >= 0 ? '+' : '') + deltaT.toFixed(1) + '°C';
     });
 
     // Update status texts

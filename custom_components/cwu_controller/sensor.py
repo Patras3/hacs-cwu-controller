@@ -700,12 +700,14 @@ class BsbDeltaTSensor(CWUControllerBaseSensor):
         if delta is None:
             return {"interpretation": "unknown"}
 
-        if delta >= 3.0 and delta <= 5.0:
+        if delta < 0:
+            interpretation = "reversed"
+        elif delta >= 3.0 and delta <= 5.0:
             interpretation = "good"
         elif delta > 0.5 and delta < 3.0:
             interpretation = "weak"
         elif delta <= 0.5:
-            interpretation = "bad"
+            interpretation = "no_flow"
         else:
             interpretation = "high"
 
