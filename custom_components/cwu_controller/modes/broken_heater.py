@@ -394,12 +394,19 @@ class BrokenHeaterMode(BaseModeHandler):
             hysteresis = self.get_config_value(CONF_CWU_HYSTERESIS, DEFAULT_CWU_HYSTERESIS)
             cwu_start_temp = self.coord._get_cwu_temperature()
 
-            # Only start if temp is below threshold (respects hysteresis)
+            # Only start CWU if temp is below threshold (respects hysteresis)
             if cwu_start_temp is not None and cwu_start_temp >= target - hysteresis:
-                # Temp is OK, stay idle
+                # CWU temp is OK - switch to floor heating to keep house warm
                 _LOGGER.debug(
-                    f"Idle: CWU {cwu_start_temp:.1f}°C >= threshold {target - hysteresis:.1f}°C, staying idle"
+                    f"Idle: CWU {cwu_start_temp:.1f}°C >= threshold {target - hysteresis:.1f}°C, switching to floor"
                 )
+                self._log_action(
+                    "Floor ON (CWU OK)",
+                    f"CWU {cwu_start_temp:.1f}°C OK, heating floor to keep house warm"
+                )
+                await self._switch_to_floor()
+                self._change_state(STATE_HEATING_FLOOR)
+                self.coord._last_mode_switch = now
                 return
 
             self._log_action(
