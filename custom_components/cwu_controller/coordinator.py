@@ -1508,6 +1508,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "floor_boost_active": self._floor_boost_active,
             "floor_boost_session": self._floor_boost_session,
             "floor_boost_until": self._floor_boost_until.isoformat() if self._floor_boost_until else None,
+            "floor_boost_original_mode": self._floor_boost_original_mode,
             "floor_boost_original_setpoint": self._floor_boost_original_setpoint,
             # CWU Session data
             "cwu_session_start_time": self._cwu_heating_start.isoformat() if self._cwu_heating_start else None,
