@@ -83,6 +83,8 @@ from .const import (
     BSB_FLOOR_MODE_AUTOMATIC,
     BSB_FLOOR_MODE_COMFORT,
     BSB_FLOOR_BOOST_TEMP,
+    BSB_FLOOR_MIN_TEMP,
+    BSB_FLOOR_MAX_TEMP,
     BSB_DHW_STATUS_CHARGING,
     BSB_DHW_STATUS_CHARGING_ELECTRIC,
     BSB_HP_COMPRESSOR_ON,
@@ -767,6 +769,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._bsb_lan_data = {
             "floor_mode": raw_data.get("700", {}).get("desc", "---"),
+            "floor_comfort_setpoint": self._parse_bsb_value(raw_data.get("710", {})),
             "cwu_mode": raw_data.get("1600", {}).get("desc", "---"),
             "cwu_target_setpoint": self._parse_bsb_value(raw_data.get("1610", {})),
             "hc1_status": raw_data.get("8000", {}).get("desc", "---"),
@@ -1262,6 +1265,42 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "Floor Boost Cancelled",
             f"Restored {original_setpoint}°C"
         )
+
+    async def async_set_floor_temperature(self, temp: float) -> None:
+        """Set floor heating target temperature directly via BSB-LAN.
+
+        This is a simple direct setter without boost logic - just sets the
+        floor comfort setpoint (param 710) to the specified temperature.
+
+        Args:
+            temp: Target temperature in °C (15-28)
+        """
+        # Validate range
+        if temp < BSB_FLOOR_MIN_TEMP or temp > BSB_FLOOR_MAX_TEMP:
+            _LOGGER.warning(
+                "Floor temp %s°C out of range (%s-%s°C)",
+                temp, BSB_FLOOR_MIN_TEMP, BSB_FLOOR_MAX_TEMP
+            )
+            return
+
+        # Cancel any active floor boost first
+        if self._floor_boost_active:
+            # Just clear boost state without restoring original setpoint
+            self._floor_boost_active = False
+            self._floor_boost_session = False
+            self._floor_boost_until = None
+            self._floor_boost_original_mode = None
+            self._floor_boost_original_setpoint = None
+
+        # Set the temperature via BSB-LAN
+        success = await self._bsb_client.async_set_floor_comfort_setpoint(temp)
+        if success:
+            self._log_action(
+                "Floor Temp Set",
+                f"Manual set to {temp}°C"
+            )
+        else:
+            _LOGGER.error("Failed to set floor temperature to %s°C", temp)
 
     @property
     def floor_boost_active(self) -> bool:

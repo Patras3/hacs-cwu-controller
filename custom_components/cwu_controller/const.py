@@ -152,6 +152,8 @@ BSB_LAN_CWU_MAX_TEMP: Final = 55  # Maximum CWU temperature settable
 # BSB-LAN Floor Comfort Setpoint Parameter
 BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT: Final = 710  # Room temp comfort setpoint
 BSB_FLOOR_BOOST_TEMP: Final = 28.0  # Temperature for floor boost (max)
+BSB_FLOOR_MIN_TEMP: Final = 15.0  # Minimum floor temperature settable
+BSB_FLOOR_MAX_TEMP: Final = 28.0  # Maximum floor temperature settable
 
 # BSB-LAN CWU Modes (parameter 1600)
 BSB_CWU_MODE_OFF: Final = 0

@@ -2070,15 +2070,17 @@ function switchModeTab(tab) {
     // Floor tabs
     const tabDurationFloor = document.getElementById('tab-duration-floor');
     const tabBoost = document.getElementById('tab-boost');
+    const tabFloorTemp = document.getElementById('tab-floor-temp');
     // Panels
     const panelDuration = document.getElementById('panel-duration');
     const panelHeatTo = document.getElementById('panel-heat-to');
     const panelBoost = document.getElementById('panel-boost');
+    const panelFloorTemp = document.getElementById('panel-floor-temp');
     const confirmBtn = document.getElementById('mode-confirm-btn');
 
     // Reset all tabs and panels
-    [tabDurationCwu, tabHeatTo, tabDurationFloor, tabBoost].forEach(t => t?.classList.remove('active'));
-    [panelDuration, panelHeatTo, panelBoost].forEach(p => { if(p) p.style.display = 'none'; });
+    [tabDurationCwu, tabHeatTo, tabDurationFloor, tabBoost, tabFloorTemp].forEach(t => t?.classList.remove('active'));
+    [panelDuration, panelHeatTo, panelBoost, panelFloorTemp].forEach(p => { if(p) p.style.display = 'none'; });
 
     if (tab === 'duration') {
         if (selectedModeType === 'cwu') {
@@ -2100,6 +2102,12 @@ function switchModeTab(tab) {
         // Hide the generic confirm button - boost has its own buttons
         confirmBtn.style.display = 'none';
         updateBoostStatus();
+    } else if (tab === 'floor-temp') {
+        tabFloorTemp?.classList.add('active');
+        panelFloorTemp.style.display = 'block';
+        // Hide the generic confirm button - floor-temp has its own button
+        confirmBtn.style.display = 'none';
+        updateFloorTempFromBsb();
     }
 }
 
@@ -2303,6 +2311,61 @@ function updateBoostStatus() {
         sessionBtn.onclick = confirmBoostSession;
         if (durationSlider) durationSlider.style.display = 'flex';
         document.querySelector('.boost-divider').style.display = 'flex';
+    }
+}
+
+/**
+ * Floor Temperature Setting functions
+ */
+let selectedFloorTemp = 21;
+
+function updateFloorTempDisplay() {
+    const slider = document.getElementById('floor-temp-slider');
+    const display = document.getElementById('floor-temp-value');
+    selectedFloorTemp = parseFloat(slider.value);
+    display.textContent = selectedFloorTemp;
+    updateFloorTempPresetButtons();
+}
+
+function setFloorTemp(temp) {
+    selectedFloorTemp = temp;
+    document.getElementById('floor-temp-slider').value = temp;
+    document.getElementById('floor-temp-value').textContent = temp;
+    updateFloorTempPresetButtons();
+}
+
+function updateFloorTempPresetButtons() {
+    document.querySelectorAll('.floor-temp-presets .preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+        const btnTemp = parseFloat(btn.textContent);
+        if (btnTemp === selectedFloorTemp) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+function updateFloorTempFromBsb() {
+    // Get current floor setpoint from BSB-LAN data (param 710)
+    const attrs = currentData.attributes || {};
+    const bsbLan = attrs.bsb_lan || {};
+    const floorSetpoint = bsbLan.floor_comfort_setpoint;
+    if (floorSetpoint !== undefined && floorSetpoint !== null) {
+        const currentTemp = parseFloat(floorSetpoint);
+        document.getElementById('floor-temp-current-value').textContent = currentTemp.toFixed(1);
+        // Set slider to current value
+        setFloorTemp(currentTemp);
+    } else {
+        document.getElementById('floor-temp-current-value').textContent = '--';
+    }
+}
+
+async function confirmFloorTemp() {
+    closeModal('mode-modal');
+    try {
+        await callService('cwu_controller', 'floor_set_temperature', { temperature: selectedFloorTemp });
+        showNotification(`Floor temperature set to ${selectedFloorTemp}°C`, 'success');
+    } catch (error) {
+        showNotification('Failed to set floor temperature: ' + error.message, 'error');
     }
 }
 

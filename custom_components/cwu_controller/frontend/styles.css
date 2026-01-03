@@ -2735,6 +2735,40 @@ body {
     background: rgba(252, 129, 129, 0.2);
 }
 
+/* Floor Temperature Setting Panel */
+.floor-temp-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.floor-temp-current {
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-align: center;
+    padding: 8px;
+    background: var(--glass-bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.floor-temp-current span {
+    color: var(--accent-orange);
+    font-weight: 600;
+}
+
+.floor-temp-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+}
+
+.floor-temp-presets .preset-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
 /* State compact colors */
 .state-compact.state-heating-cwu {
     border-color: rgba(0, 217, 255, 0.4);
