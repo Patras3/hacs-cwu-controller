@@ -142,6 +142,11 @@ async def _async_register_services(hass: HomeAssistant, coordinator: CWUControll
         """Handle floor boost cancel - restore original settings."""
         await coordinator.async_floor_boost_cancel()
 
+    async def handle_floor_set_temperature(call):
+        """Handle floor set temperature - set floor temp directly via BSB-LAN."""
+        temp = call.data.get("temperature", 21)
+        await coordinator.async_set_floor_temperature(temp)
+
     hass.services.async_register(DOMAIN, "force_cwu", handle_force_cwu)
     hass.services.async_register(DOMAIN, "force_floor", handle_force_floor)
     hass.services.async_register(DOMAIN, "force_auto", handle_force_auto)
@@ -152,3 +157,4 @@ async def _async_register_services(hass: HomeAssistant, coordinator: CWUControll
     hass.services.async_register(DOMAIN, "floor_boost", handle_floor_boost)
     hass.services.async_register(DOMAIN, "floor_boost_session", handle_floor_boost_session)
     hass.services.async_register(DOMAIN, "floor_boost_cancel", handle_floor_boost_cancel)
+    hass.services.async_register(DOMAIN, "floor_set_temperature", handle_floor_set_temperature)

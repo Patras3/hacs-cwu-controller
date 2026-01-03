@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.6.0">
+    <link rel="stylesheet" href="styles.css?v=8.7.0">
 </head>
 <body>
     <div class="container">
@@ -1211,6 +1211,9 @@
                     <button class="mode-tab" id="tab-boost" onclick="switchModeTab('boost')">
                         <span class="mdi mdi-radiator"></span> Boost 28°C
                     </button>
+                    <button class="mode-tab" id="tab-floor-temp" onclick="switchModeTab('floor-temp')">
+                        <span class="mdi mdi-thermometer"></span> Set °C
+                    </button>
                 </div>
 
                 <!-- Duration Panel -->
@@ -1297,6 +1300,35 @@
                     </div>
                 </div>
 
+                <!-- Floor Set Temperature Panel -->
+                <div class="mode-panel" id="panel-floor-temp" style="display: none;">
+                    <p class="mode-modal-description">Set floor target temperature:</p>
+                    <div class="floor-temp-container">
+                        <div class="floor-temp-current" id="floor-temp-current">
+                            Current: <span id="floor-temp-current-value">--</span>°C
+                        </div>
+                        <div class="duration-slider-container">
+                            <input type="range" id="floor-temp-slider" min="15" max="28" step="0.5" value="21"
+                                   oninput="updateFloorTempDisplay()">
+                            <div class="duration-display">
+                                <span class="duration-value" id="floor-temp-value">21</span>
+                                <span class="duration-unit">°C</span>
+                            </div>
+                        </div>
+                        <div class="duration-presets floor-temp-presets">
+                            <button class="preset-btn" onclick="setFloorTemp(18)">18°C</button>
+                            <button class="preset-btn" onclick="setFloorTemp(20)">20°C</button>
+                            <button class="preset-btn active" onclick="setFloorTemp(21)">21°C</button>
+                            <button class="preset-btn" onclick="setFloorTemp(22)">22°C</button>
+                            <button class="preset-btn" onclick="setFloorTemp(24)">24°C</button>
+                        </div>
+                        <button class="btn btn-primary" onclick="confirmFloorTemp()">
+                            <span class="mdi mdi-thermometer"></span>
+                            Set Temperature
+                        </button>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary btn-block" id="mode-confirm-btn" onclick="confirmMode()">
                     <span class="mdi mdi-check"></span>
                     Confirm
@@ -1308,6 +1340,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.6.0"></script>
+    <script src="panel.js?v=8.7.0"></script>
 </body>
 </html>

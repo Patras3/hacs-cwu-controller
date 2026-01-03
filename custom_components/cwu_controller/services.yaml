@@ -101,3 +101,19 @@ floor_boost_session:
 floor_boost_cancel:
   name: Floor Boost Cancel
   description: Cancel floor boost and restore original settings
+
+floor_set_temperature:
+  name: Floor Set Temperature
+  description: Set floor heating target temperature directly via BSB-LAN (param 710)
+  fields:
+    temperature:
+      name: Temperature
+      description: Target temperature in °C (15-28)
+      required: true
+      example: 21
+      selector:
+        number:
+          min: 15
+          max: 28
+          step: 0.5
+          unit_of_measurement: "°C"
