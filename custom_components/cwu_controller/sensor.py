@@ -176,6 +176,14 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             "max_temp_detected": data.get("max_temp_detected", False),
             # Night floor window (broken_heater mode)
             "is_night_floor_window": data.get("is_night_floor_window", False),
+            # BSB-LAN data for frontend
+            "bsb_lan": data.get("bsb_lan", {}),
+            "bsb_lan_data": data.get("bsb_lan", {}),  # Alias for compatibility
+            # Floor boost status
+            "floor_boost_active": data.get("floor_boost_active", False),
+            "floor_boost_session": data.get("floor_boost_session", False),
+            "floor_boost_until": data.get("floor_boost_until"),
+            "floor_boost_original_setpoint": data.get("floor_boost_original_setpoint"),
             # Last action reasoning
             "last_reasoning": self.coordinator.last_reasoning,
         }
