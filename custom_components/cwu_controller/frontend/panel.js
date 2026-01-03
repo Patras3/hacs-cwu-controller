@@ -2345,12 +2345,12 @@ function updateFloorTempPresetButtons() {
 }
 
 function updateFloorTempFromBsb() {
-    // Get current floor setpoint from BSB-LAN data
+    // Get current floor setpoint from BSB-LAN data (param 710)
     const attrs = currentData.attributes || {};
-    const bsbData = attrs.bsb_lan_data || {};
-    const param710 = bsbData['710'];
-    if (param710 && param710.value !== undefined) {
-        const currentTemp = parseFloat(param710.value);
+    const bsbLan = attrs.bsb_lan || {};
+    const floorSetpoint = bsbLan.floor_comfort_setpoint;
+    if (floorSetpoint !== undefined && floorSetpoint !== null) {
+        const currentTemp = parseFloat(floorSetpoint);
         document.getElementById('floor-temp-current-value').textContent = currentTemp.toFixed(1);
         // Set slider to current value
         setFloorTemp(currentTemp);

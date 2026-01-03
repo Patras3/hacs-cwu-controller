@@ -769,6 +769,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._bsb_lan_data = {
             "floor_mode": raw_data.get("700", {}).get("desc", "---"),
+            "floor_comfort_setpoint": self._parse_bsb_value(raw_data.get("710", {})),
             "cwu_mode": raw_data.get("1600", {}).get("desc", "---"),
             "cwu_target_setpoint": self._parse_bsb_value(raw_data.get("1610", {})),
             "hc1_status": raw_data.get("8000", {}).get("desc", "---"),
