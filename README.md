@@ -1,7 +1,7 @@
 # CWU Controller for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/release/your-username/hacs-cwu-controller.svg)](https://github.com/your-username/hacs-cwu-controller/releases)
+[![GitHub Release](https://img.shields.io/github/release/Patras3/hacs-cwu-controller.svg)](https://github.com/Patras3/hacs-cwu-controller/releases)
 
 A smart Home Assistant integration that manages heat pump water heating (CWU) and floor heating when your CWU electric heater is broken. The controller ensures you always have hot water AND a warm house by intelligently switching between heating modes.
 
@@ -35,7 +35,7 @@ When your CWU electric heater breaks, the heat pump doesn't know it's broken - i
 2. Click on "Integrations"
 3. Click the three dots in the top right corner
 4. Select "Custom repositories"
-5. Add the URL: `https://github.com/your-username/hacs-cwu-controller`
+5. Add the URL: `https://github.com/Patras3/hacs-cwu-controller`
 6. Select category: "Integration"
 7. Click "Add"
 8. Search for "CWU Controller" and install
