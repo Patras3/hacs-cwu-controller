@@ -1250,13 +1250,6 @@ class TestGetTargetTemp:
         """Test getting default critical temp."""
         assert mock_coordinator._get_critical_temp() == 35.0  # DEFAULT_CWU_CRITICAL_TEMP
 
-    def test_winter_target_capped_at_max(self, mock_coordinator):
-        """Test winter target is capped at 55°C."""
-        mock_coordinator.config["cwu_target_temp"] = 52.0  # base 52 + winter 5 = 57, but capped at 55
-        winter_target = mock_coordinator.get_winter_cwu_target()
-        assert winter_target == 55.0  # WINTER_CWU_MAX_TEMP
-
-
 class TestHoldTimeRemaining:
     """Tests for _get_hold_time_remaining helper method."""
 

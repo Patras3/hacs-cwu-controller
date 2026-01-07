@@ -131,9 +131,6 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             "is_cheap_tariff": data.get("is_cheap_tariff"),
             "current_tariff_rate": data.get("current_tariff_rate"),
             "is_cwu_heating_window": data.get("is_cwu_heating_window"),
-            # Winter mode specific
-            "winter_cwu_target": data.get("winter_cwu_target"),
-            "winter_cwu_emergency_threshold": data.get("winter_cwu_emergency_threshold"),
             # Energy tracking - totals
             "energy_today_cwu_kwh": data.get("energy_today_cwu_kwh"),
             "energy_today_floor_kwh": data.get("energy_today_floor_kwh"),
