@@ -17,10 +17,6 @@ from .const import (
     TARIFF_CHEAP_RATE,
     TARIFF_EXPENSIVE_RATE,
     WINTER_CWU_HEATING_WINDOWS,
-    WINTER_CWU_TARGET_OFFSET,
-    WINTER_CWU_EMERGENCY_OFFSET,
-    WINTER_CWU_MAX_TEMP,
-    DEFAULT_CWU_TARGET_TEMP,
 )
 
 
@@ -100,28 +96,3 @@ def is_winter_cwu_heating_window(dt: datetime | None = None) -> bool:
     return False
 
 
-def get_winter_cwu_target(base_target: float = DEFAULT_CWU_TARGET_TEMP) -> float:
-    """Get CWU target temperature for winter mode.
-
-    Applies winter offset (+5°C), capped at 55°C.
-
-    Args:
-        base_target: Base CWU target temperature
-
-    Returns:
-        Winter mode target temperature
-    """
-    target = base_target + WINTER_CWU_TARGET_OFFSET
-    return min(target, WINTER_CWU_MAX_TEMP)
-
-
-def get_winter_cwu_emergency_threshold(base_target: float = DEFAULT_CWU_TARGET_TEMP) -> float:
-    """Get temperature below which CWU heating is forced outside windows.
-
-    Args:
-        base_target: Base CWU target temperature
-
-    Returns:
-        Emergency threshold temperature
-    """
-    return get_winter_cwu_target(base_target) - WINTER_CWU_EMERGENCY_OFFSET

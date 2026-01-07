@@ -62,9 +62,6 @@ from .const import (
     TARIFF_CHEAP_WINDOWS,
     # Winter mode settings
     WINTER_CWU_HEATING_WINDOWS,
-    WINTER_CWU_TARGET_OFFSET,
-    WINTER_CWU_EMERGENCY_OFFSET,
-    WINTER_CWU_MAX_TEMP,
     WINTER_CWU_NO_PROGRESS_TIMEOUT,
     WINTER_CWU_MIN_TEMP_INCREASE,
     # Energy tracking
@@ -370,16 +367,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def is_winter_cwu_heating_window(self, dt: datetime | None = None) -> bool:
         """Check if current time is in winter mode CWU heating window."""
         return tariff.is_winter_cwu_heating_window(dt)
-
-    def get_winter_cwu_target(self) -> float:
-        """Get CWU target temperature for winter mode."""
-        base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        return tariff.get_winter_cwu_target(base_target)
-
-    def get_winter_cwu_emergency_threshold(self) -> float:
-        """Get temperature below which CWU heating is forced outside windows."""
-        base_target = self.config.get("cwu_target_temp", DEFAULT_CWU_TARGET_TEMP)
-        return tariff.get_winter_cwu_emergency_threshold(base_target)
 
     async def async_set_operating_mode(self, mode: str) -> None:
         """Set operating mode."""
@@ -1521,9 +1508,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "is_cheap_tariff": self.is_cheap_tariff(),
             "current_tariff_rate": self.get_current_tariff_rate(),
             "is_cwu_heating_window": self.is_winter_cwu_heating_window() if self._operating_mode == MODE_WINTER else False,
-            # Winter mode specific
-            "winter_cwu_target": self.get_winter_cwu_target() if self._operating_mode == MODE_WINTER else None,
-            "winter_cwu_emergency_threshold": self.get_winter_cwu_emergency_threshold() if self._operating_mode == MODE_WINTER else None,
             # Energy tracking (using property for calculated values)
             "energy_today_cwu_kwh": self.energy_today["cwu"],
             "energy_today_cwu_cheap_kwh": self.energy_today["cwu_cheap"],

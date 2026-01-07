@@ -39,54 +39,63 @@ Okno wieczorne zostało dodane, bo:
 2. Dorośli kąpią się 2-4h później (około północy)
 3. Taryfa jest tania od 22:00, więc dogrzanie nic nie kosztuje ekstra
 
-## Temperatury w trybie Winter (domyślne wartości)
+## Temperatury w trybie Winter
 
-| Parametr | Wartość | Opis |
-|----------|---------|------|
-| **Target zimowy** | **50°C** | Docelowa temperatura (45°C + 5°C offset) |
-| **Próg awaryjny** | **40°C** | Poniżej tej temperatury grzanie włącza się ZAWSZE |
-| **Maksimum** | **55°C** | Górny limit temperatury |
+Winter mode używa **tych samych ustawień temperatury** co pozostałe tryby:
+
+| Parametr | Domyślna | Opis |
+|----------|----------|------|
+| **CWU Target** | 55°C | Docelowa temperatura (konfigurowalna) |
+| **CWU Min** | 40°C | Poniżej tej temperatury grzanie włącza się ZAWSZE (emergency) |
+| **Hysteresis** | 5°C | Grzanie zaczyna się gdy temp < target - hysteresis |
+
+## Funkcje identyczne z trybem Broken Heater
+
+Winter mode dzieli następujące funkcje z trybem Broken Heater:
+
+- **Hysteresis** - zapobiega częstym przełączeniom (grzej gdy temp < target - 5°C)
+- **Anti-oscillation** - minimalne czasy grzania (15 min CWU, 20 min podłoga)
+- **DHW Charged handling** - 5 min przerwy po "naładowaniu" przed przełączeniem
+- **Fake heating notification** - powiadomienie gdy grzałka może być zepsuta
 
 ## Scenariusze działania
 
 ### Scenariusz 1: Normalny dzień roboczy
 
 ```
-Poniedziałek, workday sensor = ON
+Poniedziałek, workday sensor = ON, target = 55°C, hysteresis = 5°C
 
-00:00-03:00  │ Idle - czekamy na okno grzewcze
-             │ CWU: 42°C (powyżej progu 40°C - OK)
+00:00-03:00  │ Floor - czekamy na okno grzewcze
+             │ CWU: 52°C (powyżej progu 50°C = target-hysteresis)
              │
 03:00        │ ✅ START okna grzewczego (poranne)
-             │ CWU: 41°C → Rozpoczynamy grzanie do 50°C
+             │ CWU: 48°C < 50°C → Rozpoczynamy grzanie do 55°C
              │
-05:30        │ CWU osiąga 50°C → STOP grzania
+05:30        │ CWU osiąga 55°C → przełącz na floor
              │
 06:00        │ Koniec okna, koniec taniej taryfy
              │
-06:00-13:00  │ Idle - droga taryfa
-             │ CWU spada powoli: 50°C → 44°C
+06:00-13:00  │ Floor - droga taryfa
+             │ CWU spada powoli: 55°C → 51°C
              │
 13:00        │ ✅ START okna grzewczego (popołudniowe)
-             │ CWU: 44°C → Dogrzewamy do 50°C
+             │ CWU: 51°C > 50°C → NIE grzejemy (hysteresis)
              │
-14:15        │ CWU osiąga 50°C → STOP grzania
+14:30        │ CWU: 49°C < 50°C → Dogrzewamy do 55°C
              │
 15:00        │ Koniec okna, koniec taniej taryfy
              │
-15:00-18:00  │ Idle - droga taryfa
+15:00-18:00  │ Floor - droga taryfa
              │
 18:00-21:00  │ 🛁 Kąpiel dzieci
-             │ CWU spada: 50°C → 43°C
+             │ CWU spada: 55°C → 46°C
              │
 22:00        │ ✅ START okna grzewczego (wieczorne)
-             │ CWU: 43°C → Dogrzewamy do 50°C
-             │ (dzieci wykąpane, dorośli za 2-4h)
+             │ CWU: 44°C < 50°C → Dogrzewamy do 55°C
              │
-23:15        │ CWU osiąga 50°C → STOP grzania
+23:15        │ CWU osiąga 55°C → przełącz na floor
              │
-24:00        │ Koniec okna wieczornego
-             │ 🛁 Kąpiel dorosłych (00:00-02:00)
+24:00        │ 🛁 Kąpiel dorosłych (00:00-02:00)
              │ Woda ciepła i gotowa!
 ```
 
@@ -107,18 +116,17 @@ grzanie włączy się i nadal będzie liczone jako tanie.
 
 ```
 Środa, godz. 18:00 - droga taryfa
-CWU spadło do 38°C (poniżej progu 40°C)
+CWU spadło do 38°C (poniżej progu 40°C = CWU Min)
 
 18:00        │ ⚠️ EMERGENCY! CWU < 40°C
              │ Grzanie włącza się MIMO drogiej taryfy
              │ Stan: emergency_cwu
              │
-18:45        │ CWU osiąga 40°C → STOP grzania
-             │ (grzejemy tylko do progu, nie do targetu)
-             │ Powrót do Idle
+18:45        │ CWU osiąga 43°C (min + 3°C buffer)
+             │ → przełącz na floor
              │
-             │ Pełne nagrzanie do 50°C nastąpi
-             │ w następnym oknie (03:00 lub 13:00)
+             │ Pełne nagrzanie do 55°C nastąpi
+             │ w następnym oknie (22:00 lub 03:00)
 ```
 
 ## Logika decyzyjna
@@ -128,21 +136,22 @@ CWU spadło do 38°C (poniżej progu 40°C)
 │                    WINTER MODE                          │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  CWU < 40°C ?                                          │
+│  CWU < CWU_MIN (40°C) ?                                │
 │      │                                                  │
 │      ├── TAK → GRZEJ NATYCHMIAST (emergency)           │
 │      │         (niezależnie od taryfy i okna)          │
-│      │         do osiągnięcia 40°C                     │
+│      │         do osiągnięcia min + 3°C                │
 │      │                                                  │
 │      └── NIE → Czy jest okno grzewcze?                 │
 │                (03:00-06:00, 13:00-15:00, 22:00-24:00) │
 │                    │                                    │
-│                    ├── TAK → CWU < 50°C ?              │
+│                    ├── TAK → CWU < TARGET - HYSTERESIS?│
 │                    │             │                      │
 │                    │             ├── TAK → GRZEJ       │
-│                    │             └── NIE → IDLE        │
+│                    │             │   (do TARGET)       │
+│                    │             └── NIE → FLOOR       │
 │                    │                                    │
-│                    └── NIE → IDLE (czekaj na okno)     │
+│                    └── NIE → FLOOR (czekaj na okno)    │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -161,9 +170,20 @@ Załóżmy dzienne zużycie 5 kWh na CWU:
 ## Interakcja z ogrzewaniem podłogowym
 
 W trybie Winter:
-1. Priorytet ma CWU podczas okien grzewczych
+1. Priorytet ma CWU podczas okien grzewczych (jeśli temp < target - hysteresis)
 2. Podłogówka działa gdy CWU jest nagrzane lub poza oknami
 3. Awaryjne grzanie CWU (< 40°C) ma najwyższy priorytet
+4. Anti-oscillation zapobiega częstym przełączeniom
+
+## Monitorowanie grzałki
+
+Winter mode zakłada, że grzałka elektryczna działa poprawnie. Jeśli wykryje próbę użycia grzałki bez jej działania (fake heating), wyśle powiadomienie:
+
+> ⚠️ Heater Problem Detected!
+> Pump is trying to use electric heater but it may not be working.
+> Please check the heater!
+
+Grzanie kontynuuje się normalnie - to tylko ostrzeżenie.
 
 ## Wymagania
 
@@ -174,8 +194,10 @@ W trybie Winter:
 
 Wszystkie wartości można zmienić w UI (Ustawienia → Urządzenia → CWU Controller → Konfiguruj):
 
-| Parametr | Domyślna | Zakres | Wpływ na Winter mode |
-|----------|----------|--------|---------------------|
-| CWU Target Temp | 45°C | 40-55°C | Winter target = wartość + 5°C |
+| Parametr | Domyślna | Zakres | Opis |
+|----------|----------|--------|------|
+| CWU Target Temp | 55°C | 40-55°C | Docelowa temperatura CWU |
+| CWU Min Temp | 40°C | 35-45°C | Próg awaryjny (emergency) |
+| CWU Hysteresis | 5°C | 2-10°C | Różnica przed rozpoczęciem grzania |
 | Tariff Cheap Rate | 0.72 zł | 0.1-5.0 | Kalkulacja kosztów |
 | Tariff Expensive Rate | 1.16 zł | 0.1-5.0 | Kalkulacja kosztów |

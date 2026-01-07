@@ -51,7 +51,6 @@ def coordinator_with_data(mock_coordinator):
         "is_cheap_tariff": True,
         "current_tariff_rate": 0.72,
         "is_cwu_heating_window": False,
-        "winter_cwu_target": None,
         "energy_today_cwu_kwh": 2.5,
         "energy_today_floor_kwh": 1.8,
         "energy_today_total_kwh": 4.3,

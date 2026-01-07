@@ -123,9 +123,7 @@ WINTER_CWU_HEATING_WINDOWS: Final = [
     (13, 15),  # 13:00 - 15:00 (cheap tariff)
     (22, 24),  # 22:00 - 24:00 (cheap tariff, after kids bath, before adults)
 ]
-WINTER_CWU_TARGET_OFFSET: Final = 5.0  # Additional degrees above configured target
-WINTER_CWU_EMERGENCY_OFFSET: Final = 10.0  # Heat outside windows if below target - this offset
-WINTER_CWU_MAX_TEMP: Final = 55.0  # Maximum CWU temperature in winter mode
+# Note: Winter mode now uses the same target temperature as other modes (no offset)
 WINTER_CWU_NO_PROGRESS_TIMEOUT: Final = 180  # Minutes before checking for progress (3h)
 WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in timeout period
 

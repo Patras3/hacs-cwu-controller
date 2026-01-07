@@ -755,8 +755,6 @@ function updateOperatingModeDisplay() {
     const tariffCheapRate = attrs.tariff_cheap_rate || 0.72;
     const tariffExpensiveRate = attrs.tariff_expensive_rate || 1.16;
     const isHeatingWindow = attrs.is_cwu_heating_window || false;
-    const winterTarget = attrs.winter_cwu_target;
-    const winterEmergencyThreshold = attrs.winter_cwu_emergency_threshold;
 
     // Update mode selector
     const modeSelect = document.getElementById('operating-mode-select');
@@ -792,10 +790,8 @@ function updateOperatingModeDisplay() {
         expensiveRateEl.textContent = tariffExpensiveRate.toFixed(2);
     }
 
-    // Show/hide winter mode specific info
+    // Show/hide winter mode specific info (heating window status)
     const heatingWindowRow = document.getElementById('heating-window-row');
-    const winterTargetRow = document.getElementById('winter-target-row');
-    const winterEmergencyRow = document.getElementById('winter-emergency-row');
 
     if (mode === 'winter') {
         if (heatingWindowRow) {
@@ -806,18 +802,8 @@ function updateOperatingModeDisplay() {
                 statusEl.style.color = isHeatingWindow ? '#68d391' : '#a0aec0';
             }
         }
-        if (winterTargetRow && winterTarget) {
-            winterTargetRow.style.display = 'flex';
-            document.getElementById('winter-cwu-target').textContent = winterTarget.toFixed(1);
-        }
-        if (winterEmergencyRow && winterEmergencyThreshold) {
-            winterEmergencyRow.style.display = 'flex';
-            document.getElementById('winter-emergency-threshold').textContent = winterEmergencyThreshold.toFixed(1);
-        }
     } else {
         if (heatingWindowRow) heatingWindowRow.style.display = 'none';
-        if (winterTargetRow) winterTargetRow.style.display = 'none';
-        if (winterEmergencyRow) winterEmergencyRow.style.display = 'none';
     }
 }
 
