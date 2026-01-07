@@ -10,7 +10,6 @@ import logging
 from datetime import datetime
 
 from ..const import (
-    STATE_IDLE,
     STATE_HEATING_CWU,
     STATE_HEATING_FLOOR,
     STATE_EMERGENCY_CWU,
@@ -56,24 +55,35 @@ class WinterMode(BaseModeHandler):
         is_heating_window = self.coord.is_winter_cwu_heating_window()
 
         # =====================================================================
-        # Phase 1: Fake heating detection (notification only)
+        # Phase 1: Fake heating detection (notification only, no recovery)
         # =====================================================================
         if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             fake_heating = self.coord._detect_fake_heating_bsb()
             if fake_heating:
-                # Send notification but don't do full recovery - heater should work!
-                await self._async_send_notification(
-                    "⚠️ Heater Problem Detected!",
-                    f"Pump is trying to use electric heater but it may not be working.\n"
-                    f"CWU temp: {cwu_temp}°C\n\n"
-                    f"Please check the heater! Heating continues..."
-                )
-                self._log_action(
-                    "Fake heating warning",
-                    f"Electric heater may be broken, CWU at {cwu_temp:.1f}°C"
-                    if cwu_temp else "Electric heater may be broken"
-                )
-                # Don't return - continue with normal logic
+                # Only send notification once per fake heating event
+                if self.coord._fake_heating_detected_at is None:
+                    self.coord._fake_heating_detected_at = now
+                    await self._async_send_notification(
+                        "⚠️ Heater Problem Detected!",
+                        f"Pump is trying to use electric heater but it may not be working.\n"
+                        f"CWU temp: {cwu_temp}°C\n\n"
+                        f"Please check the heater! Heating continues..."
+                    )
+                    self._log_action(
+                        "Fake heating warning",
+                        f"Electric heater may be broken, CWU at {cwu_temp:.1f}°C"
+                        if cwu_temp else "Electric heater may be broken"
+                    )
+                # Don't return - continue with normal logic (heater should work!)
+            else:
+                # Fake heating condition cleared - reset tracking
+                if self.coord._fake_heating_detected_at is not None:
+                    self.coord._fake_heating_detected_at = None
+                    self._log_action(
+                        "Fake heating cleared",
+                        f"Heater appears to be working again, CWU at {cwu_temp:.1f}°C"
+                        if cwu_temp else "Heater appears to be working again"
+                    )
 
         # =====================================================================
         # Phase 2: Emergency handling - critical floor temperature takes priority
@@ -176,7 +186,7 @@ class WinterMode(BaseModeHandler):
 
             # Check if we should start CWU heating (with hysteresis)
             if cwu_temp < target - hysteresis:
-                if self._current_state != STATE_HEATING_CWU:
+                if self._current_state not in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
                     can_switch, reason = self._can_switch_mode(STATE_HEATING_CWU)
                     if can_switch:
                         await self._switch_to_cwu()
@@ -194,7 +204,7 @@ class WinterMode(BaseModeHandler):
                 return
 
             # CWU temp is OK (above target - hysteresis) - check if we should stop
-            if self._current_state == STATE_HEATING_CWU:
+            if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
                 # Only stop if we've reached the full target
                 if cwu_temp >= target:
                     can_switch, reason = self._can_switch_mode(STATE_HEATING_FLOOR)
@@ -322,11 +332,3 @@ class WinterMode(BaseModeHandler):
                 self.coord._last_mode_switch = now
             else:
                 _LOGGER.debug("Default floor switch blocked: %s", reason)
-
-        # =====================================================================
-        # Phase 11: Currently on floor outside window - check if should resume CWU
-        # =====================================================================
-        if self._current_state == STATE_HEATING_FLOOR:
-            # Outside heating window - only resume CWU if temp dropped below min
-            # (handled in Phase 7)
-            pass
