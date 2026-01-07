@@ -58,12 +58,14 @@ POWER_SPIKE_THRESHOLD: Final = 200  # Min power spike indicating real CWU heatin
 POWER_PUMP_RUNNING: Final = 80  # Pump running but not compressor
 POWER_THERMODYNAMIC_MIN: Final = 300  # Thermodynamic heating active
 POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating
+POWER_ELECTRIC_HEATER_MIN: Final = 2500  # Min power when electric heater is working (3.3kW heater)
 
 # Time constants
 CWU_MAX_HEATING_TIME: Final = 170  # 2h50m in minutes (before 3h limit)
 CWU_PAUSE_TIME: Final = 10  # 10 minutes pause between cycles
 FAKE_HEATING_DETECTION_TIME: Final = 10  # Minutes of low power before detection
 FAKE_HEATING_RESTART_WAIT: Final = 2  # Minutes to wait before restarting after fake heating
+HEATER_LOW_POWER_DETECTION_TIME: Final = 5  # Minutes of low power while "Charging electric" before alert
 SENSOR_UNAVAILABLE_GRACE: Final = 30  # Minutes before using fallback
 
 # Evening bath time settings

@@ -55,34 +55,36 @@ class WinterMode(BaseModeHandler):
         is_heating_window = self.coord.is_winter_cwu_heating_window()
 
         # =====================================================================
-        # Phase 1: Fake heating detection (notification only, no recovery)
+        # Phase 1: Heater not working detection (winter mode specific)
+        # Detects: "Charging electric" status but power < 2500W for 5+ minutes
         # =====================================================================
         if self._current_state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
-            fake_heating = self.coord._detect_fake_heating_bsb()
-            if fake_heating:
-                # Only send notification once per fake heating event
+            heater_broken = self.coord._detect_heater_not_working()
+            if heater_broken:
+                # Only send notification once per event
                 if self.coord._fake_heating_detected_at is None:
                     self.coord._fake_heating_detected_at = now
                     await self._async_send_notification(
-                        "⚠️ Heater Problem Detected!",
-                        f"Pump is trying to use electric heater but it may not be working.\n"
+                        "⚠️ Electric Heater Not Working!",
+                        f"Pump reports 'Charging electric' but power is too low.\n"
+                        f"Expected: >2500W (3.3kW heater)\n"
                         f"CWU temp: {cwu_temp}°C\n\n"
-                        f"Please check the heater! Heating continues..."
+                        f"The heater may be broken! Heating continues with heat pump only..."
                     )
                     self._log_action(
-                        "Fake heating warning",
-                        f"Electric heater may be broken, CWU at {cwu_temp:.1f}°C"
-                        if cwu_temp else "Electric heater may be broken"
+                        "Heater not working",
+                        f"'Charging electric' but low power, CWU at {cwu_temp:.1f}°C"
+                        if cwu_temp else "'Charging electric' but low power"
                     )
-                # Don't return - continue with normal logic (heater should work!)
+                # Don't return - continue with normal logic
             else:
-                # Fake heating condition cleared - reset tracking
+                # Condition cleared - reset tracking
                 if self.coord._fake_heating_detected_at is not None:
                     self.coord._fake_heating_detected_at = None
                     self._log_action(
-                        "Fake heating cleared",
-                        f"Heater appears to be working again, CWU at {cwu_temp:.1f}°C"
-                        if cwu_temp else "Heater appears to be working again"
+                        "Heater working",
+                        f"Power consumption normal, CWU at {cwu_temp:.1f}°C"
+                        if cwu_temp else "Power consumption normal"
                     )
 
         # =====================================================================

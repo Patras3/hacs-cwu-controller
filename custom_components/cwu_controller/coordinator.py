@@ -33,10 +33,12 @@ from .const import (
     POWER_IDLE_THRESHOLD,
     POWER_SPIKE_THRESHOLD,
     POWER_THERMODYNAMIC_MIN,
+    POWER_ELECTRIC_HEATER_MIN,
     CWU_MAX_HEATING_TIME,
     CWU_PAUSE_TIME,
     FAKE_HEATING_DETECTION_TIME,
     FAKE_HEATING_RESTART_WAIT,
+    HEATER_LOW_POWER_DETECTION_TIME,
     SENSOR_UNAVAILABLE_GRACE,
     EVENING_PREP_HOUR,
     BATH_TIME_HOUR,
@@ -199,6 +201,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # BSB-LAN fake heating detection
         self._bsb_dhw_charging_no_compressor_since: datetime | None = None
+        # Electric heater low power detection (winter mode)
+        self._heater_low_power_since: datetime | None = None
 
         # Anti-oscillation: last mode switch timestamp
         self._last_mode_switch: datetime | None = None
@@ -828,6 +832,58 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         else:
             # Reset tracking
             self._bsb_dhw_charging_no_compressor_since = None
+
+        return False
+
+    def _detect_heater_not_working(self) -> bool:
+        """Detect if electric heater is not working (for winter mode).
+
+        In winter mode, we expect the heater to work. This detects:
+        - DHW status shows "Charging electric" (heater should be working)
+        - BUT power consumption is < 2500W (3.3kW heater should draw ~3000W+)
+        - For at least HEATER_LOW_POWER_DETECTION_TIME minutes
+
+        Returns True if heater appears broken, False otherwise.
+        """
+        if not self._bsb_lan_data:
+            return False
+
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+
+        # Only check when pump reports electric heater is charging
+        if BSB_DHW_STATUS_CHARGING_ELECTRIC.lower() not in dhw_status.lower():
+            # Not using electric heater - reset tracking
+            self._heater_low_power_since = None
+            return False
+
+        # Electric heater is supposedly charging - check power
+        power = self._get_sensor_value(self.config.get("power_sensor"))
+        if power is None:
+            # No power data - can't detect
+            return False
+
+        # If power is high enough, heater is working
+        if power >= POWER_ELECTRIC_HEATER_MIN:
+            self._heater_low_power_since = None
+            return False
+
+        # Power is low while "Charging electric" - start/continue tracking
+        now = datetime.now()
+        if self._heater_low_power_since is None:
+            self._heater_low_power_since = now
+            _LOGGER.debug(
+                "Heater low power detected: %.0fW < %dW while 'Charging electric'",
+                power, POWER_ELECTRIC_HEATER_MIN
+            )
+
+        # Check if threshold reached
+        elapsed = (now - self._heater_low_power_since).total_seconds() / 60
+        if elapsed >= HEATER_LOW_POWER_DETECTION_TIME:
+            _LOGGER.warning(
+                "Heater appears broken: %.0fW for %.1f min (expected >%dW)",
+                power, elapsed, POWER_ELECTRIC_HEATER_MIN
+            )
+            return True
 
         return False
 
