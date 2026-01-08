@@ -58,6 +58,14 @@ async def async_setup_entry(
         ElectricFallbackCountTodaySensor(coordinator, entry),
         BsbLanErrorsTodaySensor(coordinator, entry),
         SessionEnergySensor(coordinator, entry),
+        # Diagnostic consumer sensors
+        BsbHc1ThermostatDemandSensor(coordinator, entry),
+        BsbDhwPumpStateSensor(coordinator, entry),
+        BsbElectricHeaterStateSensor(coordinator, entry),
+        BsbDhwPumpHoursSensor(coordinator, entry),
+        BsbDhwPumpStartsSensor(coordinator, entry),
+        BsbElectricHeaterHoursSensor(coordinator, entry),
+        BsbElectricHeaterStartsSensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -82,7 +90,7 @@ class CWUControllerBaseSensor(CoordinatorEntity, SensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.7.0",
+            "sw_version": "5.0.0",
         }
 
 
@@ -860,3 +868,138 @@ class SessionEnergySensor(CWUControllerBaseSensor):
             "cwu_heating_minutes": self.coordinator.data.get("cwu_heating_minutes", 0),
             "note": "Energy consumed since CWU heating session started",
         }
+
+
+# -----------------------------------------------------------------------------
+# Diagnostic Consumer Sensors (8749, 8820, 8821, 8840-8843)
+# -----------------------------------------------------------------------------
+
+class BsbHc1ThermostatDemandSensor(CWUControllerBaseSensor):
+    """Sensor showing HC1 room thermostat demand from BSB-LAN (param 8749)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_hc1_thermostat_demand", "BSB HC1 Thermostat Demand")
+        self._attr_icon = "mdi:thermostat"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return HC1 thermostat demand status."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("hc1_thermostat_demand", "---")
+
+
+class BsbDhwPumpStateSensor(CWUControllerBaseSensor):
+    """Sensor showing DHW pump state from BSB-LAN (param 8820)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_dhw_pump_state", "BSB DHW Pump State")
+        self._attr_icon = "mdi:pump"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return DHW pump state."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("dhw_pump_state", "---")
+
+
+class BsbElectricHeaterStateSensor(CWUControllerBaseSensor):
+    """Sensor showing electric immersion heater state from BSB-LAN (param 8821)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_electric_heater_state", "BSB Electric Heater State")
+        self._attr_icon = "mdi:heating-coil"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return electric heater state."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("electric_heater_state", "---")
+
+
+class BsbDhwPumpHoursSensor(CWUControllerBaseSensor):
+    """Sensor showing DHW pump run hours from BSB-LAN (param 8840)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_dhw_pump_hours", "BSB DHW Pump Hours")
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = UnitOfTime.HOURS
+        self._attr_icon = "mdi:timer"
+        self._attr_suggested_display_precision = 0
+
+    @property
+    def native_value(self) -> float | None:
+        """Return DHW pump run hours."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("dhw_pump_hours")
+
+
+class BsbDhwPumpStartsSensor(CWUControllerBaseSensor):
+    """Sensor showing DHW pump start counter from BSB-LAN (param 8841)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_dhw_pump_starts", "BSB DHW Pump Starts")
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:counter"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return DHW pump start count."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        value = bsb.get("dhw_pump_starts")
+        return int(value) if value is not None else None
+
+
+class BsbElectricHeaterHoursSensor(CWUControllerBaseSensor):
+    """Sensor showing electric heater run hours from BSB-LAN (param 8842)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_electric_heater_hours", "BSB Electric Heater Hours")
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = UnitOfTime.HOURS
+        self._attr_icon = "mdi:timer"
+        self._attr_suggested_display_precision = 0
+
+    @property
+    def native_value(self) -> float | None:
+        """Return electric heater run hours."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return bsb.get("electric_heater_hours")
+
+
+class BsbElectricHeaterStartsSensor(CWUControllerBaseSensor):
+    """Sensor showing electric heater start counter from BSB-LAN (param 8843)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "bsb_electric_heater_starts", "BSB Electric Heater Starts")
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:counter"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return electric heater start count."""
+        if self.coordinator.data is None:
+            return None
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        value = bsb.get("electric_heater_starts")
+        return int(value) if value is not None else None

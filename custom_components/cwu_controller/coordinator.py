@@ -766,6 +766,14 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "return_temp": self._parse_bsb_value(raw_data.get("8410", {})),
             "cwu_temp": self._parse_bsb_value(raw_data.get("8830", {})),
             "outside_temp": self._parse_bsb_value(raw_data.get("8700", {})),
+            # Diagnostic consumer parameters
+            "hc1_thermostat_demand": raw_data.get("8749", {}).get("desc", "---"),
+            "dhw_pump_state": raw_data.get("8820", {}).get("desc", "---"),
+            "electric_heater_state": raw_data.get("8821", {}).get("desc", "---"),
+            "dhw_pump_hours": self._parse_bsb_value(raw_data.get("8840", {})),
+            "dhw_pump_starts": self._parse_bsb_value(raw_data.get("8841", {})),
+            "electric_heater_hours": self._parse_bsb_value(raw_data.get("8842", {})),
+            "electric_heater_starts": self._parse_bsb_value(raw_data.get("8843", {})),
         }
 
         # Calculate delta T
