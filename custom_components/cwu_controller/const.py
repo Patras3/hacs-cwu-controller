@@ -136,7 +136,9 @@ BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before marking una
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
 # BSB-LAN Parameters for reading (includes 1610 for CWU target setpoint)
-BSB_LAN_READ_PARAMS: Final = "700,710,1600,1610,8000,8003,8006,8412,8410,8830,8700"
+# Diagnostic parameters: 8749 (HC1 thermostat demand), 8820/8821 (pump/heater state),
+# 8840-8843 (run hours and start counters for DHW pump and electric heater)
+BSB_LAN_READ_PARAMS: Final = "700,710,1600,1610,8000,8003,8006,8412,8410,8830,8700,8749,8820,8821,8840,8841,8842,8843"
 
 # BSB-LAN Control Parameters (write)
 BSB_LAN_PARAM_CWU_MODE: Final = 1600  # 0=Off, 1=On, 2=Eco
