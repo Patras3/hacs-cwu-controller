@@ -954,15 +954,15 @@ class BsbDhwPumpStartsSensor(CWUControllerBaseSensor):
         super().__init__(coordinator, entry, "bsb_dhw_pump_starts", "BSB DHW Pump Starts")
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_icon = "mdi:counter"
-        self._attr_suggested_display_precision = 0
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> int | None:
         """Return DHW pump start count."""
         if self.coordinator.data is None:
             return None
         bsb = self.coordinator.data.get("bsb_lan", {})
-        return bsb.get("dhw_pump_starts")
+        value = bsb.get("dhw_pump_starts")
+        return int(value) if value is not None else None
 
 
 class BsbElectricHeaterHoursSensor(CWUControllerBaseSensor):
@@ -994,12 +994,12 @@ class BsbElectricHeaterStartsSensor(CWUControllerBaseSensor):
         super().__init__(coordinator, entry, "bsb_electric_heater_starts", "BSB Electric Heater Starts")
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_icon = "mdi:counter"
-        self._attr_suggested_display_precision = 0
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> int | None:
         """Return electric heater start count."""
         if self.coordinator.data is None:
             return None
         bsb = self.coordinator.data.get("bsb_lan", {})
-        return bsb.get("electric_heater_starts")
+        value = bsb.get("electric_heater_starts")
+        return int(value) if value is not None else None
