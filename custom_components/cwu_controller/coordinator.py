@@ -375,6 +375,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             return
 
         old_mode = self._operating_mode
+        if old_mode == mode:
+            # Mode not changed, skip reset (important during state restoration)
+            return
+
         self._operating_mode = mode
         self._log_action(f"Operating mode changed: {old_mode} -> {mode}", "User selected new operating mode")
 
