@@ -5,6 +5,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -12,6 +13,7 @@ from .const import (
     MODE_BROKEN_HEATER,
     MODE_WINTER,
     MODE_SUMMER,
+    OPERATING_MODES,
 )
 from .coordinator import CWUControllerCoordinator
 
@@ -38,7 +40,7 @@ async def async_setup_entry(
     ])
 
 
-class OperatingModeSelect(CoordinatorEntity, SelectEntity):
+class OperatingModeSelect(CoordinatorEntity, RestoreEntity, SelectEntity):
     """Select entity for operating mode."""
 
     def __init__(
@@ -53,6 +55,15 @@ class OperatingModeSelect(CoordinatorEntity, SelectEntity):
         self._attr_icon = "mdi:cog"
         self._attr_options = MODE_OPTIONS
         self._entry = entry
+
+    async def async_added_to_hass(self) -> None:
+        """Restore previous state when entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+
+        # Try to restore previous operating mode
+        if (last_state := await self.async_get_last_state()) is not None:
+            if last_state.state in OPERATING_MODES:
+                await self.coordinator.async_set_operating_mode(last_state.state)
 
     @property
     def current_option(self) -> str | None:
