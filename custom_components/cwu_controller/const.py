@@ -8,8 +8,9 @@ MANUFACTURER: Final = "CWU Controller"
 MODE_BROKEN_HEATER: Final = "broken_heater"
 MODE_WINTER: Final = "winter"
 MODE_SUMMER: Final = "summer"
+MODE_HEAT_PUMP: Final = "heat_pump"
 
-OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER]
+OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER, MODE_HEAT_PUMP]
 
 # Configuration keys
 CONF_OPERATING_MODE: Final = "operating_mode"
@@ -58,6 +59,7 @@ POWER_SPIKE_THRESHOLD: Final = 200  # Min power spike indicating real CWU heatin
 POWER_PUMP_RUNNING: Final = 80  # Pump running but not compressor
 POWER_THERMODYNAMIC_MIN: Final = 300  # Thermodynamic heating active
 POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating
+POWER_ELECTRIC_HEATER_MIN: Final = 2500  # Electric heater should draw ~3.3kW, >2.5kW expected
 
 # Time constants
 CWU_MAX_HEATING_TIME: Final = 170  # 2h50m in minutes (before 3h limit)
@@ -80,6 +82,12 @@ STATE_EMERGENCY_FLOOR: Final = "emergency_floor"
 STATE_FAKE_HEATING_DETECTED: Final = "fake_heating_detected"
 STATE_FAKE_HEATING_RESTARTING: Final = "fake_heating_restarting"
 STATE_SAFE_MODE: Final = "safe_mode"  # Sensors unavailable - heat pump controls everything
+
+# Heat Pump mode states (pump decides, we monitor)
+STATE_PUMP_IDLE: Final = "pump_idle"  # Both enabled, pump not heating
+STATE_PUMP_HEATING_CWU: Final = "pump_heating_cwu"  # Pump heating CWU thermodynamically
+STATE_PUMP_HEATING_FLOOR: Final = "pump_heating_floor"  # Pump heating floor
+STATE_PUMP_HEATING_CWU_ELECTRIC: Final = "pump_heating_cwu_electric"  # CWU via electric heater (3.3kW)
 
 # Urgency levels
 URGENCY_NONE: Final = 0

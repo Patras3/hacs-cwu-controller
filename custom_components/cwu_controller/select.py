@@ -13,6 +13,7 @@ from .const import (
     MODE_BROKEN_HEATER,
     MODE_WINTER,
     MODE_SUMMER,
+    MODE_HEAT_PUMP,
     OPERATING_MODES,
 )
 from .coordinator import CWUControllerCoordinator
@@ -22,6 +23,7 @@ MODE_LABELS = {
     MODE_BROKEN_HEATER: "Broken Heater",
     MODE_WINTER: "Winter",
     MODE_SUMMER: "Summer",
+    MODE_HEAT_PUMP: "Heat Pump",
 }
 
 MODE_OPTIONS = list(MODE_LABELS.keys())

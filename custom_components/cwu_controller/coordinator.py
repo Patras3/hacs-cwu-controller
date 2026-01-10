@@ -25,6 +25,10 @@ from .const import (
     STATE_FAKE_HEATING_DETECTED,
     STATE_FAKE_HEATING_RESTARTING,
     STATE_SAFE_MODE,
+    STATE_PUMP_IDLE,
+    STATE_PUMP_HEATING_CWU,
+    STATE_PUMP_HEATING_FLOOR,
+    STATE_PUMP_HEATING_CWU_ELECTRIC,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -52,6 +56,7 @@ from .const import (
     MODE_BROKEN_HEATER,
     MODE_WINTER,
     MODE_SUMMER,
+    MODE_HEAT_PUMP,
     CONF_OPERATING_MODE,
     CONF_WORKDAY_SENSOR,
     # Tariff constants
@@ -125,7 +130,7 @@ from .const import (
     CONF_BEDROOM_MIN_TEMP,
 )
 from .bsb_lan import BSBLanClient
-from .modes import BrokenHeaterMode, WinterMode, SummerMode
+from .modes import BrokenHeaterMode, WinterMode, SummerMode, HeatPumpMode
 from . import tariff
 from .energy import EnergyTracker
 from .notifications import async_send_notification, async_check_and_send_daily_report
@@ -261,6 +266,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             MODE_BROKEN_HEATER: BrokenHeaterMode(self),
             MODE_WINTER: WinterMode(self),
             MODE_SUMMER: SummerMode(self),
+            MODE_HEAT_PUMP: HeatPumpMode(self),
         }
 
         # Register shutdown handler to save data
@@ -370,7 +376,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
     async def async_set_operating_mode(self, mode: str) -> None:
         """Set operating mode."""
-        if mode not in (MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER):
+        if mode not in (MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER, MODE_HEAT_PUMP):
             _LOGGER.warning("Invalid operating mode: %s", mode)
             return
 
@@ -383,12 +389,22 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._log_action(f"Operating mode changed: {old_mode} -> {mode}", "User selected new operating mode")
 
         # Reset state when changing modes
-        self._change_state(STATE_IDLE)
         self._cwu_heating_start = None
         self._cwu_session_start_temp = None
         self._pause_start = None
         self._low_power_start = None
         self._fake_heating_detected_at = None
+
+        # Heat Pump mode: start with pump_idle, enable both CWU and floor
+        if mode == MODE_HEAT_PUMP:
+            self._change_state(STATE_PUMP_IDLE)
+            # Enable both CWU and floor - pump will control
+            await self._async_set_floor_on()
+            await asyncio.sleep(30)
+            await self._async_set_cwu_on()
+            self._log_action("Heat Pump mode active", "Both CWU and floor enabled, pump controls heating")
+        else:
+            self._change_state(STATE_IDLE)
 
     def _get_sensor_value(self, entity_id: str | None, default: float | None = None) -> float | None:
         """Get sensor value with fallback handling."""
@@ -950,6 +966,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """
         state = self._current_state
 
+        # Heat Pump mode states: both always on (pump decides)
+        if state in (STATE_PUMP_IDLE, STATE_PUMP_HEATING_CWU, STATE_PUMP_HEATING_FLOOR, STATE_PUMP_HEATING_CWU_ELECTRIC):
+            return (True, True)
+
         if state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
             # CWU heating: CWU on, floor off
             return (True, False)
@@ -1125,7 +1145,6 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._manual_override_until = None
         self._manual_heat_to_active = False
         self._manual_heat_to_target = None
-        self._change_state(STATE_IDLE)
         self._cwu_heating_start = None
         self._cwu_session_start_temp = None
 
@@ -1133,7 +1152,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if self._floor_boost_active:
             await self.async_floor_boost_cancel()
 
-        self._log_action("Auto mode", "Cancelled all overrides, switching to auto")
+        # Set appropriate initial state based on operating mode
+        if self._operating_mode == MODE_HEAT_PUMP:
+            self._change_state(STATE_PUMP_IDLE)
+            # Ensure both CWU and floor are enabled for heat_pump mode
+            await self._async_set_floor_on()
+            await asyncio.sleep(30)
+            await self._async_set_cwu_on()
+            self._log_action("Auto mode", "Cancelled overrides, returning to Heat Pump mode (both enabled)")
+        else:
+            self._change_state(STATE_IDLE)
+            self._log_action("Auto mode", "Cancelled all overrides, switching to auto")
         # Next coordinator update will run control logic and decide
 
     async def async_heat_to_temp(self, target_temp: float) -> None:
@@ -1610,7 +1639,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             if now > self._manual_override_until:
                 self._manual_override = False
                 self._manual_override_until = None
-                self._log_action("Manual override expired", "Timer reached, returning to auto mode")
+                # Restore appropriate state based on operating mode
+                if self._operating_mode == MODE_HEAT_PUMP:
+                    self._change_state(STATE_PUMP_IDLE)
+                    await self._async_set_floor_on()
+                    await asyncio.sleep(30)
+                    await self._async_set_cwu_on()
+                    self._log_action("Manual override expired", "Returning to Heat Pump mode (both enabled)")
+                else:
+                    self._log_action("Manual override expired", "Timer reached, returning to auto mode")
 
         # Check floor boost expiry (timed)
         if self._floor_boost_active and self._floor_boost_until:
@@ -1620,7 +1657,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Check floor boost session end (when switching away from floor heating)
         if self._floor_boost_active and self._floor_boost_session:
-            if self._current_state not in (STATE_HEATING_FLOOR, STATE_IDLE):
+            floor_states = (STATE_HEATING_FLOOR, STATE_IDLE, STATE_PUMP_HEATING_FLOOR, STATE_PUMP_IDLE)
+            if self._current_state not in floor_states:
                 await self.async_floor_boost_cancel()
                 self._log_action("Floor Boost session ended", "Floor heating stopped, restored original settings")
 
