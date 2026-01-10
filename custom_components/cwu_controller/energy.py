@@ -23,6 +23,10 @@ from .const import (
     STATE_FAKE_HEATING_DETECTED,
     STATE_FAKE_HEATING_RESTARTING,
     STATE_SAFE_MODE,
+    STATE_PUMP_IDLE,
+    STATE_PUMP_HEATING_CWU,
+    STATE_PUMP_HEATING_FLOOR,
+    STATE_PUMP_HEATING_CWU_ELECTRIC,
     ENERGY_DELTA_ANOMALY_THRESHOLD,
 )
 
@@ -141,6 +145,8 @@ class EnergyTracker:
             STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING,
             STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR,
             STATE_SAFE_MODE,
+            # Heat Pump mode states (actively heating)
+            STATE_PUMP_HEATING_CWU, STATE_PUMP_HEATING_FLOOR, STATE_PUMP_HEATING_CWU_ELECTRIC,
         )
 
     def _is_cwu_state(self, state: str | None) -> bool:
@@ -150,13 +156,19 @@ class EnergyTracker:
         return state in (
             STATE_HEATING_CWU, STATE_EMERGENCY_CWU,
             STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING,
+            # Heat Pump mode CWU states
+            STATE_PUMP_HEATING_CWU, STATE_PUMP_HEATING_CWU_ELECTRIC,
         )
 
     def _is_floor_state(self, state: str | None) -> bool:
         """Check if given state is a floor heating state."""
         if state is None:
             return False
-        return state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR)
+        return state in (
+            STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR,
+            # Heat Pump mode floor state
+            STATE_PUMP_HEATING_FLOOR,
+        )
 
     def _attribute_energy(self, kwh: float, state: str, is_cheap: bool) -> None:
         """Attribute energy consumption to the appropriate counter."""

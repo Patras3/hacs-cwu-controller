@@ -78,6 +78,11 @@ const STATE_ICONS = {
     'fake_heating_detected': 'mdi-alert-circle',
     'fake_heating_restarting': 'mdi-refresh-circle',
     'safe_mode': 'mdi-shield-check',
+    // Heat Pump mode states
+    'pump_idle': 'mdi-heat-pump-outline',
+    'pump_heating_cwu': 'mdi-water-boiler',
+    'pump_heating_floor': 'mdi-heating-coil',
+    'pump_heating_cwu_electric': 'mdi-water-boiler-alert',
 };
 
 const STATE_CLASSES = {
@@ -89,6 +94,11 @@ const STATE_CLASSES = {
     'fake_heating_restarting': 'state-heating-cwu',
     'pause': 'state-pause',
     'safe_mode': 'state-safe-mode',
+    // Heat Pump mode states
+    'pump_idle': 'state-pump-idle',
+    'pump_heating_cwu': 'state-heating-cwu',
+    'pump_heating_floor': 'state-heating-floor',
+    'pump_heating_cwu_electric': 'state-pump-electric',
 };
 
 const STATE_DESCRIPTIONS = {
@@ -101,6 +111,11 @@ const STATE_DESCRIPTIONS = {
     'fake_heating_detected': 'Fake heating detected - waiting for HP ready',
     'fake_heating_restarting': 'HP ready - restarting CWU heating',
     'safe_mode': 'Safe mode - BSB-LAN unavailable, using cloud backup',
+    // Heat Pump mode states
+    'pump_idle': 'Heat Pump mode - pump is idle, monitoring',
+    'pump_heating_cwu': 'Heat Pump mode - pump is heating CWU (thermodynamic)',
+    'pump_heating_floor': 'Heat Pump mode - pump is heating floor',
+    'pump_heating_cwu_electric': 'Heat Pump mode - electric heater active for CWU (3.3kW)',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
