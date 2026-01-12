@@ -6,9 +6,16 @@ We only monitor what the pump is doing and track energy consumption accordingly.
 Key features:
 - Both CWU and floor modes are always ON - pump decides what to heat
 - Monitor DHW/HC1/HP status to detect what's currently being heated
+- Track 3 electric heaters: 1 for CWU (8821), 2 for floor (8402, 8403)
 - Send notification when electric heater activates
 - Detect potential heater failure (pump says heater on but power is low)
 - Energy tracking based on detected heating type
+
+Main state reflects what is being heated:
+- pump_idle: nothing being heated
+- pump_cwu: CWU being heated (compressor and/or electric)
+- pump_floor: Floor being heated (compressor and/or electric)
+- pump_both: Both CWU and floor being heated simultaneously
 """
 
 from __future__ import annotations
@@ -18,14 +25,17 @@ from datetime import datetime
 
 from ..const import (
     STATE_PUMP_IDLE,
-    STATE_PUMP_HEATING_CWU,
-    STATE_PUMP_HEATING_FLOOR,
-    STATE_PUMP_HEATING_CWU_ELECTRIC,
+    STATE_PUMP_CWU,
+    STATE_PUMP_FLOOR,
+    STATE_PUMP_BOTH,
     STATE_SAFE_MODE,
     BSB_DHW_STATUS_CHARGING,
     BSB_DHW_STATUS_CHARGING_ELECTRIC,
     BSB_HP_COMPRESSOR_ON,
     POWER_ELECTRIC_HEATER_MIN,
+    COMPRESSOR_TARGET_CWU,
+    COMPRESSOR_TARGET_FLOOR,
+    COMPRESSOR_TARGET_IDLE,
 )
 from .base import BaseModeHandler
 
@@ -50,9 +60,14 @@ class HeatPumpMode(BaseModeHandler):
         """Initialize the mode handler."""
         super().__init__(coordinator)
         # Track electric heater activation to avoid duplicate notifications
-        self._electric_heater_notified: bool = False
+        self._electric_heater_cwu_notified: bool = False
+        self._electric_heater_floor_notified: bool = False
         # Track when we last detected low power during electric heating
         self._low_power_electric_warning_at: datetime | None = None
+        # Track last detected states for change detection
+        self._last_compressor_target: str = COMPRESSOR_TARGET_IDLE
+        self._last_cwu_electric: bool = False
+        self._last_floor_electric: bool = False
 
     async def run_logic(
         self,
@@ -71,115 +86,211 @@ class HeatPumpMode(BaseModeHandler):
         # Ensure both CWU and floor are enabled on mode entry
         await self._ensure_both_enabled()
 
+        if not self._bsb_lan_data:
+            return
+
         # Get current pump status from BSB-LAN
-        dhw_status = self._bsb_lan_data.get("dhw_status", "") if self._bsb_lan_data else ""
-        hp_status = self._bsb_lan_data.get("hp_status", "") if self._bsb_lan_data else ""
-        hc1_status = self._bsb_lan_data.get("hc1_status", "") if self._bsb_lan_data else ""
+        dhw_status = self._bsb_lan_data.get("dhw_status", "")
+        hp_status = self._bsb_lan_data.get("hp_status", "")
+        hc1_status = self._bsb_lan_data.get("hc1_status", "")
+
+        # Get electric heater states
+        cwu_electric_on = self._bsb_lan_data.get("electric_heater_cwu_state", "Off").lower() == "on"
+        floor_electric_1_on = self._bsb_lan_data.get("electric_heater_floor_1_state", "Off").lower() == "on"
+        floor_electric_2_on = self._bsb_lan_data.get("electric_heater_floor_2_state", "Off").lower() == "on"
+        floor_electric_on = floor_electric_1_on or floor_electric_2_on
 
         # Get current power for heater verification
         power = self.coord._get_sensor_value(self.coord.config.get("power_sensor"))
 
-        # Detect current heating state based on BSB-LAN status
-        new_state = self._detect_heating_state(dhw_status, hp_status, hc1_status, power)
+        # Detect compressor target
+        compressor_target = self._detect_compressor_target(dhw_status, hp_status, hc1_status)
 
-        # Handle state transitions and notifications
+        # Determine main state based on what's being heated
+        new_state = self._determine_main_state(
+            compressor_target, cwu_electric_on, floor_electric_on
+        )
+
+        # Handle main state transition
         if new_state != self._current_state:
-            await self._handle_state_change(new_state, cwu_temp, power)
+            await self._handle_state_change(
+                new_state, compressor_target, cwu_electric_on, floor_electric_on,
+                cwu_temp, power
+            )
 
-        # Check for potential heater failure (pump says electric but power is low)
-        if new_state == STATE_PUMP_HEATING_CWU_ELECTRIC:
+        # Handle heater notifications separately (they have their own state tracking)
+        await self._handle_heater_notifications(
+            cwu_electric_on, floor_electric_on, cwu_temp, power
+        )
+
+        # Check for potential heater failure
+        if cwu_electric_on:
             await self._check_heater_power(power, cwu_temp)
 
-    def _detect_heating_state(
+    def _detect_compressor_target(
         self,
         dhw_status: str,
         hp_status: str,
         hc1_status: str,
-        power: float | None,
     ) -> str:
-        """Detect current heating state from BSB-LAN status.
+        """Detect what the compressor is currently heating.
 
-        Returns the appropriate state based on what the pump is doing.
+        Returns: COMPRESSOR_TARGET_CWU, COMPRESSOR_TARGET_FLOOR, or COMPRESSOR_TARGET_IDLE
         """
         dhw_lower = dhw_status.lower()
         hp_lower = hp_status.lower()
         hc1_lower = hc1_status.lower()
 
-        # Check for electric heater CWU heating first (highest priority for detection)
-        if BSB_DHW_STATUS_CHARGING_ELECTRIC.lower() in dhw_lower:
-            return STATE_PUMP_HEATING_CWU_ELECTRIC
+        compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_lower
 
-        # Check for thermodynamic CWU heating
-        if BSB_DHW_STATUS_CHARGING.lower() in dhw_lower:
-            # Verify compressor is actually running for thermodynamic heating
-            if BSB_HP_COMPRESSOR_ON.lower() in hp_lower:
-                return STATE_PUMP_HEATING_CWU
+        if not compressor_on:
+            return COMPRESSOR_TARGET_IDLE
 
-        # Check for floor heating
-        # HC1 status indicates floor heating circuit activity
-        # Common values: "Off", "Heating", "Cooling", etc.
-        if "heating" in hc1_lower or "heat" in hc1_lower:
-            return STATE_PUMP_HEATING_FLOOR
+        # Check if heating CWU (thermodynamically, not electric)
+        if BSB_DHW_STATUS_CHARGING.lower() in dhw_lower and "electric" not in dhw_lower:
+            return COMPRESSOR_TARGET_CWU
 
-        # Also check if compressor is running for floor (when DHW not charging)
-        if BSB_HP_COMPRESSOR_ON.lower() in hp_lower:
-            # Compressor running but not for DHW - likely floor
-            if "charging" not in dhw_lower:
-                return STATE_PUMP_HEATING_FLOOR
+        # Check if heating floor
+        # HC1 status values that indicate floor heating: "Heating", "Warmer function active", "Comfort"
+        if any(x in hc1_lower for x in ["heating", "warmer", "comfort"]):
+            return COMPRESSOR_TARGET_FLOOR
 
-        # Nothing actively heating
-        return STATE_PUMP_IDLE
+        # Compressor on but unclear target - check if DHW is not active
+        if "charging" not in dhw_lower:
+            return COMPRESSOR_TARGET_FLOOR
+
+        return COMPRESSOR_TARGET_IDLE
+
+    def _determine_main_state(
+        self,
+        compressor_target: str,
+        cwu_electric_on: bool,
+        floor_electric_on: bool,
+    ) -> str:
+        """Determine main state based on what's being heated.
+
+        Main state reflects the heating priority/activity:
+        - pump_both: Both CWU and floor are being heated (any combination)
+        - pump_cwu: Only CWU is being heated
+        - pump_floor: Only floor is being heated
+        - pump_idle: Nothing is being heated
+        """
+        cwu_heating = (compressor_target == COMPRESSOR_TARGET_CWU) or cwu_electric_on
+        floor_heating = (compressor_target == COMPRESSOR_TARGET_FLOOR) or floor_electric_on
+
+        if cwu_heating and floor_heating:
+            return STATE_PUMP_BOTH
+        elif cwu_heating:
+            return STATE_PUMP_CWU
+        elif floor_heating:
+            return STATE_PUMP_FLOOR
+        else:
+            return STATE_PUMP_IDLE
+
+    def _is_cwu_heating_state(self, state: str) -> bool:
+        """Check if state indicates CWU is being heated."""
+        return state in (STATE_PUMP_CWU, STATE_PUMP_BOTH)
 
     async def _handle_state_change(
         self,
         new_state: str,
+        compressor_target: str,
+        cwu_electric_on: bool,
+        floor_electric_on: bool,
         cwu_temp: float | None,
         power: float | None,
     ) -> None:
-        """Handle transition to new state with logging and notifications."""
+        """Handle transition to new state with logging and session tracking."""
         old_state = self._current_state
+        now = datetime.now()
+
+        # Track CWU session start/end for UI compatibility
+        was_heating_cwu = self._is_cwu_heating_state(old_state)
+        will_heat_cwu = self._is_cwu_heating_state(new_state)
+
+        if will_heat_cwu and not was_heating_cwu:
+            # Starting CWU heating - begin session
+            self.coord._cwu_heating_start = now
+            self.coord._cwu_session_start_temp = cwu_temp if cwu_temp is not None else self.coord._last_known_cwu_temp
+            self.coord._cwu_session_start_energy_kwh = self.coord._get_energy_meter_value()
+            _LOGGER.debug(
+                "Heat Pump: CWU session started at %.1f°C",
+                self.coord._cwu_session_start_temp or 0
+            )
+        elif was_heating_cwu and not will_heat_cwu:
+            # Stopped CWU heating - end session
+            _LOGGER.debug(
+                "Heat Pump: CWU session ended (was %.1f°C, now %.1f°C)",
+                self.coord._cwu_session_start_temp or 0,
+                cwu_temp or 0
+            )
+            self.coord._cwu_heating_start = None
+            self.coord._cwu_session_start_temp = None
+            self.coord._cwu_session_start_energy_kwh = None
+
         self._change_state(new_state)
 
-        # Map old and new states to readable names for logging
+        # Map states to readable names for logging
         state_names = {
             STATE_PUMP_IDLE: "Idle",
-            STATE_PUMP_HEATING_CWU: "CWU (thermodynamic)",
-            STATE_PUMP_HEATING_FLOOR: "Floor",
-            STATE_PUMP_HEATING_CWU_ELECTRIC: "CWU (electric heater)",
+            STATE_PUMP_CWU: "CWU",
+            STATE_PUMP_FLOOR: "Floor",
+            STATE_PUMP_BOTH: "CWU+Floor",
         }
         old_name = state_names.get(old_state, old_state)
         new_name = state_names.get(new_state, new_state)
 
-        # Log the state change
+        # Build detailed reason
         reason_parts = []
+        if compressor_target != COMPRESSOR_TARGET_IDLE:
+            reason_parts.append(f"Compressor: {compressor_target}")
+        if cwu_electric_on:
+            reason_parts.append("CWU heater: ON")
+        if floor_electric_on:
+            reason_parts.append("Floor heater: ON")
         if cwu_temp is not None:
-            reason_parts.append(f"CWU: {cwu_temp:.1f}C")
+            reason_parts.append(f"CWU: {cwu_temp:.1f}°C")
         if power is not None:
             reason_parts.append(f"Power: {power:.0f}W")
+
         reason = ", ".join(reason_parts) if reason_parts else "Pump decision"
+        self._log_action(f"{old_name} → {new_name}", reason)
 
-        self._log_action(f"{old_name} -> {new_name}", reason)
+    async def _handle_heater_notifications(
+        self,
+        cwu_electric_on: bool,
+        floor_electric_on: bool,
+        cwu_temp: float | None,
+        power: float | None,
+    ) -> None:
+        """Handle notifications for electric heater state changes."""
+        # CWU heater notification
+        if cwu_electric_on and not self._electric_heater_cwu_notified:
+            await self._notify_electric_heater_on("CWU", cwu_temp, power)
+            self._electric_heater_cwu_notified = True
+        elif not cwu_electric_on:
+            self._electric_heater_cwu_notified = False
 
-        # Special handling for electric heater activation
-        if new_state == STATE_PUMP_HEATING_CWU_ELECTRIC and old_state != STATE_PUMP_HEATING_CWU_ELECTRIC:
-            await self._notify_electric_heater_on(cwu_temp, power)
-            self._electric_heater_notified = True
-        elif new_state != STATE_PUMP_HEATING_CWU_ELECTRIC:
-            self._electric_heater_notified = False
-            self._low_power_electric_warning_at = None
+        # Floor heater notification
+        if floor_electric_on and not self._electric_heater_floor_notified:
+            await self._notify_electric_heater_on("Floor", cwu_temp, power)
+            self._electric_heater_floor_notified = True
+        elif not floor_electric_on:
+            self._electric_heater_floor_notified = False
 
     async def _notify_electric_heater_on(
         self,
+        heater_type: str,
         cwu_temp: float | None,
         power: float | None,
     ) -> None:
         """Send notification when electric heater activates."""
         power_str = f"{power:.0f}W" if power is not None else "unknown"
-        cwu_str = f"{cwu_temp:.1f}C" if cwu_temp is not None else "unknown"
+        cwu_str = f"{cwu_temp:.1f}°C" if cwu_temp is not None else "unknown"
 
         await self._async_send_notification(
-            "Electric Heater Active",
-            f"Heat pump switched to electric heater for CWU.\n"
+            f"Electric Heater Active ({heater_type})",
+            f"Heat pump switched to electric heater for {heater_type}.\n"
             f"CWU temp: {cwu_str}\n"
             f"Power: {power_str}\n\n"
             f"This is expected when thermodynamic heating cannot meet demand."

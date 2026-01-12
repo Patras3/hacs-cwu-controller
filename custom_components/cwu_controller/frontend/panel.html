@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=8.7.0">
+    <link rel="stylesheet" href="styles.css?v=9.0.0">
 </head>
 <body>
     <div class="container">
@@ -124,6 +124,16 @@
                         <text class="viz-temp-badge-value" id="viz-cwu-temp" x="0" y="7" text-anchor="middle">--°</text>
                     </g>
                     <text class="viz-label" x="60" y="248" text-anchor="middle">CWU</text>
+                    <!-- Electric heater indicator -->
+                    <g class="viz-heater-indicator" id="viz-cwu-heater-indicator" transform="translate(60, 228)">
+                        <rect x="-28" y="-8" width="56" height="16" rx="3" fill="rgba(255,136,0,0.15)" stroke="#FF8800" stroke-width="1"/>
+                        <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#FF8800;letter-spacing:1px;">⚡ HEATER</text>
+                    </g>
+                    <!-- Compressor indicator -->
+                    <g class="viz-compressor-indicator" id="viz-cwu-compressor-indicator" transform="translate(60, 210)">
+                        <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(0,200,255,0.15)" stroke="#00C8FF" stroke-width="1"/>
+                        <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#00C8FF;letter-spacing:1px;">❄ COMPRESSOR</text>
+                    </g>
                 </g>
 
                 <!-- Pipes to tank -->
@@ -165,6 +175,16 @@
                     <circle class="viz-conn-hot" cx="20" cy="24" r="5"/>
                     <circle class="viz-conn-cold" cx="20" cy="145" r="5"/>
                     <text class="viz-label" x="100" y="168" text-anchor="middle" style="font-size:9px; letter-spacing:2px;">PODŁOGOWE</text>
+                    <!-- Electric heater indicator -->
+                    <g class="viz-heater-indicator" id="viz-floor-heater-indicator" transform="translate(100, 182)">
+                        <rect x="-28" y="-8" width="56" height="16" rx="3" fill="rgba(255,136,0,0.15)" stroke="#FF8800" stroke-width="1"/>
+                        <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#FF8800;letter-spacing:1px;">⚡ HEATER</text>
+                    </g>
+                    <!-- Compressor indicator -->
+                    <g class="viz-compressor-indicator" id="viz-floor-compressor-indicator" transform="translate(100, 198)">
+                        <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(0,200,255,0.15)" stroke="#00C8FF" stroke-width="1"/>
+                        <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#00C8FF;letter-spacing:1px;">❄ COMPRESSOR</text>
+                    </g>
                 </g>
 
                 <!-- Pipes to floor -->
@@ -417,6 +437,16 @@
                                 <text class="viz-temp-badge-value viz-cwu-temp-desktop" x="0" y="6" text-anchor="middle">--°</text>
                             </g>
                             <text class="viz-label" x="60" y="245" text-anchor="middle" style="font-size:10px; letter-spacing:3px;">CWU</text>
+                            <!-- Electric heater indicator -->
+                            <g class="viz-heater-indicator viz-cwu-heater-indicator-desktop" transform="translate(60, 228)">
+                                <rect x="-28" y="-8" width="56" height="16" rx="3" fill="rgba(255,136,0,0.15)" stroke="#FF8800" stroke-width="1"/>
+                                <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#FF8800;letter-spacing:1px;">⚡ HEATER</text>
+                            </g>
+                            <!-- Compressor indicator -->
+                            <g class="viz-compressor-indicator viz-cwu-compressor-indicator-desktop" transform="translate(60, 210)">
+                                <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(0,200,255,0.15)" stroke="#00C8FF" stroke-width="1"/>
+                                <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#00C8FF;letter-spacing:1px;">❄ COMPRESSOR</text>
+                            </g>
                         </g>
                         <!-- Pipes to tank -->
                         <g class="viz-tank-view viz-tank-view-desktop">
@@ -455,6 +485,16 @@
                             <circle class="viz-conn-hot" cx="20" cy="24" r="5"/>
                             <circle class="viz-conn-cold" cx="20" cy="145" r="5"/>
                             <text class="viz-label" x="100" y="168" text-anchor="middle" style="font-size:9px; letter-spacing:2px;">PODŁOGOWE</text>
+                            <!-- Electric heater indicator -->
+                            <g class="viz-heater-indicator viz-floor-heater-indicator-desktop" transform="translate(100, 182)">
+                                <rect x="-28" y="-8" width="56" height="16" rx="3" fill="rgba(255,136,0,0.15)" stroke="#FF8800" stroke-width="1"/>
+                                <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#FF8800;letter-spacing:1px;">⚡ HEATER</text>
+                            </g>
+                            <!-- Compressor indicator -->
+                            <g class="viz-compressor-indicator viz-floor-compressor-indicator-desktop" transform="translate(100, 198)">
+                                <rect x="-32" y="-8" width="64" height="16" rx="3" fill="rgba(0,200,255,0.15)" stroke="#00C8FF" stroke-width="1"/>
+                                <text x="0" y="4" text-anchor="middle" style="font-family:'Oxanium',sans-serif;font-size:9px;font-weight:600;fill:#00C8FF;letter-spacing:1px;">❄ COMPRESSOR</text>
+                            </g>
                         </g>
                         <!-- Pipes to floor -->
                         <g class="viz-floor-view viz-floor-view-desktop">
@@ -507,6 +547,7 @@
                             <option value="broken_heater">Broken Heater</option>
                             <option value="winter">Winter</option>
                             <option value="summer">Summer (N/A)</option>
+                            <option value="heat_pump">Heat Pump</option>
                         </select>
                     </div>
                     <div class="tariff-info">
@@ -1332,6 +1373,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=8.7.0"></script>
+    <script src="panel.js?v=9.0.0"></script>
 </body>
 </html>

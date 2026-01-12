@@ -498,10 +498,15 @@ body {
     background: linear-gradient(135deg, rgba(104, 211, 145, 0.1), rgba(104, 211, 145, 0.05));
 }
 
-.state-display.state-pump-electric {
-    border-color: rgba(255, 193, 7, 0.4);
-    background: linear-gradient(135deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.05));
-    animation: electric-pulse 1.5s infinite;
+.state-display.state-pump-both {
+    border-color: rgba(183, 148, 244, 0.4);
+    background: linear-gradient(135deg, rgba(183, 148, 244, 0.15), rgba(128, 90, 213, 0.05));
+    animation: both-pulse 2s infinite;
+}
+
+@keyframes both-pulse {
+    0%, 100% { border-color: rgba(183, 148, 244, 0.4); }
+    50% { border-color: rgba(183, 148, 244, 0.7); }
 }
 
 @keyframes electric-pulse {
@@ -2825,14 +2830,14 @@ body {
     color: var(--accent-green);
 }
 
-.state-compact.state-pump-electric {
-    border-color: rgba(255, 193, 7, 0.4);
-    background: rgba(255, 193, 7, 0.15);
-    animation: electric-pulse 1.5s infinite;
+.state-compact.state-pump-both {
+    border-color: rgba(183, 148, 244, 0.4);
+    background: rgba(183, 148, 244, 0.15);
+    animation: both-pulse 2s infinite;
 }
 
-.state-compact.state-pump-electric .state-icon-sm {
-    color: #ffc107;
+.state-compact.state-pump-both .state-icon-sm {
+    color: var(--accent-purple);
 }
 
 .state-compact.state-safe-mode {
@@ -3921,6 +3926,24 @@ body {
 .viz-defrost-indicator { opacity: 0; transition: opacity 0.3s; }
 .system-viz-card.defrost .viz-defrost-indicator { opacity: 1; }
 
+/* Electric heater indicators (hidden by default, shown via JS) */
+.viz-heater-indicator { opacity: 0; transition: opacity 0.3s; }
+.viz-heater-indicator.active { opacity: 1; }
+.viz-heater-indicator.active rect { animation: heaterPulse 1.5s ease-in-out infinite; }
+@keyframes heaterPulse {
+    0%, 100% { fill: rgba(255,136,0,0.15); }
+    50% { fill: rgba(255,136,0,0.4); }
+}
+
+/* Compressor indicators (hidden by default, shown via JS) */
+.viz-compressor-indicator { opacity: 0; transition: opacity 0.3s; }
+.viz-compressor-indicator.active { opacity: 1; }
+.viz-compressor-indicator.active rect { animation: compressorPulse 2s ease-in-out infinite; }
+@keyframes compressorPulse {
+    0%, 100% { fill: rgba(0,200,255,0.15); }
+    50% { fill: rgba(0,200,255,0.35); }
+}
+
 .viz-defrost-icon {
     fill: #88DDFF;
     filter: drop-shadow(0 0 4px rgba(136,221,255,0.8));
@@ -4081,6 +4104,10 @@ body {
 
 .system-viz-card.show-floor .viz-tank-view { display: none; }
 .system-viz-card.show-floor .viz-floor-view { display: block; }
+
+/* Show both CWU tank and floor heating side by side (pump_both state) */
+.system-viz-card.show-both .viz-tank-view { display: block; transform: scale(0.7) translate(-80px, 30px); }
+.system-viz-card.show-both .viz-floor-view { display: block; transform: scale(0.7) translate(-180px, 30px); }
 
 /* Connection dots */
 .viz-conn-hot {

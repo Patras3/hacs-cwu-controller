@@ -26,9 +26,12 @@ from .const import (
     STATE_FAKE_HEATING_RESTARTING,
     STATE_SAFE_MODE,
     STATE_PUMP_IDLE,
-    STATE_PUMP_HEATING_CWU,
-    STATE_PUMP_HEATING_FLOOR,
-    STATE_PUMP_HEATING_CWU_ELECTRIC,
+    STATE_PUMP_CWU,
+    STATE_PUMP_FLOOR,
+    STATE_PUMP_BOTH,
+    COMPRESSOR_TARGET_CWU,
+    COMPRESSOR_TARGET_FLOOR,
+    COMPRESSOR_TARGET_IDLE,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -235,6 +238,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             get_meter_value=lambda: self._get_energy_meter_value(),
             get_current_state=lambda: self._current_state,
             is_cheap_tariff=lambda: self.is_cheap_tariff(),
+            get_heater_states=lambda: self._get_heater_states(),
+            get_compressor_target=lambda: self._get_compressor_target(),
         )
 
         # State verification - periodically check pump state matches expected
@@ -789,11 +794,17 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # Diagnostic consumer parameters
             "hc1_thermostat_demand": raw_data.get("8749", {}).get("desc", "---"),
             "dhw_pump_state": raw_data.get("8820", {}).get("desc", "---"),
-            "electric_heater_state": raw_data.get("8821", {}).get("desc", "---"),
+            # Electric heaters state (3 heaters: 1 for CWU, 2 for floor)
+            "electric_heater_cwu_state": raw_data.get("8821", {}).get("desc", "---"),
+            "electric_heater_floor_1_state": raw_data.get("8402", {}).get("desc", "---"),
+            "electric_heater_floor_2_state": raw_data.get("8403", {}).get("desc", "---"),
+            # Run hours and start counters
             "dhw_pump_hours": self._parse_bsb_value(raw_data.get("8840", {})),
             "dhw_pump_starts": self._parse_bsb_value(raw_data.get("8841", {})),
-            "electric_heater_hours": self._parse_bsb_value(raw_data.get("8842", {})),
-            "electric_heater_starts": self._parse_bsb_value(raw_data.get("8843", {})),
+            "electric_heater_cwu_hours": self._parse_bsb_value(raw_data.get("8842", {})),
+            "electric_heater_cwu_starts": self._parse_bsb_value(raw_data.get("8843", {})),
+            "electric_heater_floor_hours": self._parse_bsb_value(raw_data.get("8456", {})),
+            "electric_heater_floor_starts": self._parse_bsb_value(raw_data.get("8457", {})),
         }
 
         # Calculate delta T
@@ -967,7 +978,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         state = self._current_state
 
         # Heat Pump mode states: both always on (pump decides)
-        if state in (STATE_PUMP_IDLE, STATE_PUMP_HEATING_CWU, STATE_PUMP_HEATING_FLOOR, STATE_PUMP_HEATING_CWU_ELECTRIC):
+        if state in (STATE_PUMP_IDLE, STATE_PUMP_CWU, STATE_PUMP_FLOOR, STATE_PUMP_BOTH):
             return (True, True)
 
         if state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU):
@@ -1041,6 +1052,62 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Get current value from energy meter sensor (kWh)."""
         energy_sensor = self.config.get(CONF_ENERGY_SENSOR, DEFAULT_ENERGY_SENSOR)
         return self._get_sensor_value(energy_sensor)
+
+    def _get_heater_states(self) -> tuple[bool, bool, bool]:
+        """Get current heater states from BSB-LAN data.
+
+        Returns:
+            Tuple of (cwu_heater_on, floor_heater_1_on, floor_heater_2_on)
+
+        Note:
+            During fake heating detection (broken heater mode), BSB-LAN reports
+            heater as ON but it's not actually consuming power. We return False
+            in these states to avoid over-attributing energy.
+        """
+        if not self._bsb_lan_data:
+            return (False, False, False)
+
+        # During fake heating states, heater is reported ON but not consuming power
+        if self._current_state in (STATE_FAKE_HEATING_DETECTED, STATE_FAKE_HEATING_RESTARTING):
+            return (False, False, False)
+
+        cwu_on = self._bsb_lan_data.get("electric_heater_cwu_state", "Off").lower() == "on"
+        floor1_on = self._bsb_lan_data.get("electric_heater_floor_1_state", "Off").lower() == "on"
+        floor2_on = self._bsb_lan_data.get("electric_heater_floor_2_state", "Off").lower() == "on"
+        return (cwu_on, floor1_on, floor2_on)
+
+    def _get_compressor_target(self) -> str:
+        """Detect what the compressor is currently heating.
+
+        Returns:
+            COMPRESSOR_TARGET_CWU, COMPRESSOR_TARGET_FLOOR, or COMPRESSOR_TARGET_IDLE
+        """
+        if not self._bsb_lan_data:
+            return COMPRESSOR_TARGET_IDLE
+
+        dhw_status = self._bsb_lan_data.get("dhw_status", "").lower()
+        hp_status = self._bsb_lan_data.get("hp_status", "").lower()
+        hc1_status = self._bsb_lan_data.get("hc1_status", "").lower()
+
+        # Check if compressor is running
+        compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_status
+        if not compressor_on:
+            return COMPRESSOR_TARGET_IDLE
+
+        # Check if heating CWU (thermodynamically, not electric)
+        if BSB_DHW_STATUS_CHARGING.lower() in dhw_status and "electric" not in dhw_status:
+            return COMPRESSOR_TARGET_CWU
+
+        # Check if heating floor
+        # HC1 status values that indicate floor heating: "Heating", "Warmer function active", "Comfort"
+        if any(x in hc1_status for x in ["heating", "warmer", "comfort"]):
+            return COMPRESSOR_TARGET_FLOOR
+
+        # Compressor on but unclear target - check if DHW is not active
+        if "charging" not in dhw_status:
+            return COMPRESSOR_TARGET_FLOOR
+
+        return COMPRESSOR_TARGET_IDLE
 
     def _check_daily_counters_reset(self) -> None:
         """Reset daily counters at midnight."""
@@ -1620,6 +1687,8 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "bsb_lan_errors_today": self.bsb_lan_errors_today,
             # Session energy tracking
             "session_energy_kwh": self.session_energy_kwh,
+            # Heat Pump mode - compressor target (cwu/floor/idle)
+            "compressor_target": self._get_compressor_target(),
         }
 
         if self._fake_heating_detected_at:
@@ -1657,7 +1726,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Check floor boost session end (when switching away from floor heating)
         if self._floor_boost_active and self._floor_boost_session:
-            floor_states = (STATE_HEATING_FLOOR, STATE_IDLE, STATE_PUMP_HEATING_FLOOR, STATE_PUMP_IDLE)
+            floor_states = (STATE_HEATING_FLOOR, STATE_IDLE, STATE_PUMP_FLOOR, STATE_PUMP_IDLE, STATE_PUMP_BOTH)
             if self._current_state not in floor_states:
                 await self.async_floor_boost_cancel()
                 self._log_action("Floor Boost session ended", "Floor heating stopped, restored original settings")

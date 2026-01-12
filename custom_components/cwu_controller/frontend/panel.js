@@ -80,9 +80,9 @@ const STATE_ICONS = {
     'safe_mode': 'mdi-shield-check',
     // Heat Pump mode states
     'pump_idle': 'mdi-heat-pump-outline',
-    'pump_heating_cwu': 'mdi-water-boiler',
-    'pump_heating_floor': 'mdi-heating-coil',
-    'pump_heating_cwu_electric': 'mdi-water-boiler-alert',
+    'pump_cwu': 'mdi-water-boiler',
+    'pump_floor': 'mdi-heating-coil',
+    'pump_both': 'mdi-radiator',
 };
 
 const STATE_CLASSES = {
@@ -96,9 +96,9 @@ const STATE_CLASSES = {
     'safe_mode': 'state-safe-mode',
     // Heat Pump mode states
     'pump_idle': 'state-pump-idle',
-    'pump_heating_cwu': 'state-heating-cwu',
-    'pump_heating_floor': 'state-heating-floor',
-    'pump_heating_cwu_electric': 'state-pump-electric',
+    'pump_cwu': 'state-heating-cwu',
+    'pump_floor': 'state-heating-floor',
+    'pump_both': 'state-pump-both',
 };
 
 const STATE_DESCRIPTIONS = {
@@ -113,9 +113,9 @@ const STATE_DESCRIPTIONS = {
     'safe_mode': 'Safe mode - BSB-LAN unavailable, using cloud backup',
     // Heat Pump mode states
     'pump_idle': 'Heat Pump mode - pump is idle, monitoring',
-    'pump_heating_cwu': 'Heat Pump mode - pump is heating CWU (thermodynamic)',
-    'pump_heating_floor': 'Heat Pump mode - pump is heating floor',
-    'pump_heating_cwu_electric': 'Heat Pump mode - electric heater active for CWU (3.3kW)',
+    'pump_cwu': 'Heat Pump mode - heating CWU (compressor and/or electric)',
+    'pump_floor': 'Heat Pump mode - heating floor (compressor and/or electric)',
+    'pump_both': 'Heat Pump mode - heating both CWU and floor simultaneously',
 };
 
 const URGENCY_COLORS = ['#68d391', '#8BC34A', '#FF9800', '#FF5722', '#F44336'];
@@ -2699,11 +2699,15 @@ function updateQuickStats() {
         const stateName = state.replace(/_/g, ' ');
         quickStateName.textContent = stateName.charAt(0).toUpperCase() + stateName.slice(1);
 
-        // Apply state class for coloring
+        // Apply state class for coloring (use STATE_CLASSES mapping first, then fallback to includes)
         quickStateBadge.className = 'quick-state-badge';
         quickTempWidget.className = 'quick-widget temp-widget';
 
-        if (state.includes('cwu') || state.includes('heating_cwu')) {
+        const stateClass = STATE_CLASSES[state];
+        if (stateClass) {
+            quickStateBadge.classList.add(stateClass);
+            quickTempWidget.classList.add(stateClass);
+        } else if (state.includes('cwu') || state.includes('heating_cwu')) {
             quickStateBadge.classList.add('state-cwu');
             quickTempWidget.classList.add('state-cwu');
         } else if (state.includes('floor')) {
@@ -2753,18 +2757,47 @@ function updateSystemVisualization() {
     const attrs = currentData.attributes || {};
 
     // Determine states
-    const isFloorHeating = state.includes('floor') || state === 'heating_floor';
-    const isIdle = state === 'idle';
+    const isBothHeating = state === 'pump_both';
+    const isFloorHeating = (state.includes('floor') || state === 'heating_floor') && !isBothHeating;
+    const isIdle = state === 'idle' || state === 'pump_idle';
     const isDefrost = (bsb.hp_status || '').toLowerCase().includes('defrost');
 
     // Apply classes to all viz cards
     vizCards.forEach(vizCard => {
-        // Toggle tank/floor view based on current heating state
+        // Toggle tank/floor/both view based on current heating state
         vizCard.classList.toggle('show-floor', isFloorHeating);
+        vizCard.classList.toggle('show-both', isBothHeating);
         // Toggle defrost mode
         vizCard.classList.toggle('defrost', isDefrost);
         // Toggle stopped state (no animations when idle and low power)
         vizCard.classList.toggle('stopped', isIdle && power < 50);
+    });
+
+    // Update electric heater indicators
+    const cwuHeaterOn = (bsb.electric_heater_cwu_state || '').toLowerCase() === 'on';
+    const floorHeater1On = (bsb.electric_heater_floor_1_state || '').toLowerCase() === 'on';
+    const floorHeater2On = (bsb.electric_heater_floor_2_state || '').toLowerCase() === 'on';
+    const floorHeaterOn = floorHeater1On || floorHeater2On;
+
+    // Get compressor target from attributes (cwu/floor/idle)
+    const compressorTarget = attrs.compressor_target || 'idle';
+    const compressorHeatingCwu = compressorTarget === 'cwu';
+    const compressorHeatingFloor = compressorTarget === 'floor';
+
+    // Toggle heater indicators (both mobile and desktop)
+    document.querySelectorAll('#viz-cwu-heater-indicator, .viz-cwu-heater-indicator-desktop').forEach(el => {
+        el.classList.toggle('active', cwuHeaterOn);
+    });
+    document.querySelectorAll('#viz-floor-heater-indicator, .viz-floor-heater-indicator-desktop').forEach(el => {
+        el.classList.toggle('active', floorHeaterOn);
+    });
+
+    // Toggle compressor indicators (both mobile and desktop)
+    document.querySelectorAll('#viz-cwu-compressor-indicator, .viz-cwu-compressor-indicator-desktop').forEach(el => {
+        el.classList.toggle('active', compressorHeatingCwu);
+    });
+    document.querySelectorAll('#viz-floor-compressor-indicator, .viz-floor-compressor-indicator-desktop').forEach(el => {
+        el.classList.toggle('active', compressorHeatingFloor);
     });
 
     // Update power display and fan speed

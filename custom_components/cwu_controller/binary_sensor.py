@@ -10,7 +10,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, STATE_HEATING_CWU, STATE_EMERGENCY_CWU
+from .const import (
+    DOMAIN,
+    MANUFACTURER,
+    STATE_HEATING_CWU,
+    STATE_HEATING_FLOOR,
+    STATE_EMERGENCY_CWU,
+    STATE_EMERGENCY_FLOOR,
+    STATE_PUMP_CWU,
+    STATE_PUMP_FLOOR,
+    STATE_PUMP_BOTH,
+)
 from .coordinator import CWUControllerCoordinator
 
 
@@ -28,6 +38,10 @@ async def async_setup_entry(
         FakeHeatingBinarySensor(coordinator, entry),
         ManualOverrideBinarySensor(coordinator, entry),
         BsbLanAvailableBinarySensor(coordinator, entry),
+        # Electric heater sensors (from BSB-LAN) - each has its own history
+        ElectricHeaterCwuBinarySensor(coordinator, entry),
+        ElectricHeaterFloor1BinarySensor(coordinator, entry),
+        ElectricHeaterFloor2BinarySensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -52,7 +66,7 @@ class CWUControllerBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.5",
+            "sw_version": "6.0.0",
         }
 
 
@@ -71,7 +85,8 @@ class CWUHeatingBinarySensor(CWUControllerBaseBinarySensor):
         if self.coordinator.data is None:
             return False
         state = self.coordinator.data.get("controller_state", "")
-        return state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU)
+        # Include Heat Pump mode states (pump_cwu, pump_both)
+        return state in (STATE_HEATING_CWU, STATE_EMERGENCY_CWU, STATE_PUMP_CWU, STATE_PUMP_BOTH)
 
 
 class FloorHeatingBinarySensor(CWUControllerBaseBinarySensor):
@@ -89,7 +104,8 @@ class FloorHeatingBinarySensor(CWUControllerBaseBinarySensor):
         if self.coordinator.data is None:
             return False
         state = self.coordinator.data.get("controller_state", "")
-        return state in ("heating_floor", "emergency_floor")
+        # Include Heat Pump mode states (pump_floor, pump_both)
+        return state in (STATE_HEATING_FLOOR, STATE_EMERGENCY_FLOOR, STATE_PUMP_FLOOR, STATE_PUMP_BOTH)
 
 
 class FakeHeatingBinarySensor(CWUControllerBaseBinarySensor):
@@ -146,4 +162,101 @@ class BsbLanAvailableBinarySensor(CWUControllerBaseBinarySensor):
         """Return extra state attributes."""
         return {
             "control_source": self.coordinator.control_source,
+        }
+
+
+# =============================================================================
+# Electric Heater Binary Sensors (from BSB-LAN with history)
+# =============================================================================
+
+class ElectricHeaterCwuBinarySensor(CWUControllerBaseBinarySensor):
+    """Binary sensor showing if CWU electric heater is on (BSB-LAN param 8821)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "electric_heater_cwu", "Electric Heater CWU")
+        self._attr_device_class = BinarySensorDeviceClass.HEAT
+        self._attr_icon = "mdi:water-boiler-alert"
+
+    @property
+    def is_on(self) -> bool:
+        """Return if CWU electric heater is on."""
+        if self.coordinator.data is None:
+            return False
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        state = bsb.get("electric_heater_cwu_state", "Off")
+        return state.lower() == "on"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra state attributes."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return {
+            "run_hours": bsb.get("electric_heater_cwu_hours"),
+            "start_count": bsb.get("electric_heater_cwu_starts"),
+            "bsb_param": 8821,
+        }
+
+
+class ElectricHeaterFloor1BinarySensor(CWUControllerBaseBinarySensor):
+    """Binary sensor showing if floor electric heater 1 is on (BSB-LAN param 8402)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "electric_heater_floor_1", "Electric Heater Floor 1")
+        self._attr_device_class = BinarySensorDeviceClass.HEAT
+        self._attr_icon = "mdi:heating-coil"
+
+    @property
+    def is_on(self) -> bool:
+        """Return if floor electric heater 1 is on."""
+        if self.coordinator.data is None:
+            return False
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        state = bsb.get("electric_heater_floor_1_state", "Off")
+        return state.lower() == "on"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra state attributes."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return {
+            "run_hours": bsb.get("electric_heater_floor_hours"),
+            "start_count": bsb.get("electric_heater_floor_starts"),
+            "bsb_param": 8402,
+        }
+
+
+class ElectricHeaterFloor2BinarySensor(CWUControllerBaseBinarySensor):
+    """Binary sensor showing if floor electric heater 2 is on (BSB-LAN param 8403)."""
+
+    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
+        """Initialize sensor."""
+        super().__init__(coordinator, entry, "electric_heater_floor_2", "Electric Heater Floor 2")
+        self._attr_device_class = BinarySensorDeviceClass.HEAT
+        self._attr_icon = "mdi:heating-coil"
+
+    @property
+    def is_on(self) -> bool:
+        """Return if floor electric heater 2 is on."""
+        if self.coordinator.data is None:
+            return False
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        state = bsb.get("electric_heater_floor_2_state", "Off")
+        return state.lower() == "on"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return extra state attributes."""
+        if self.coordinator.data is None:
+            return {}
+        bsb = self.coordinator.data.get("bsb_lan", {})
+        return {
+            "run_hours": bsb.get("electric_heater_floor_hours"),
+            "start_count": bsb.get("electric_heater_floor_starts"),
+            "bsb_param": 8403,
         }

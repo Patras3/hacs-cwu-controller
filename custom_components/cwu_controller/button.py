@@ -56,7 +56,7 @@ class CWUControllerBaseButton(CoordinatorEntity, ButtonEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.0.5",
+            "sw_version": "6.0.0",
         }
 
 
