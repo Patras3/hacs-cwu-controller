@@ -17,6 +17,7 @@ from .const import (
     BSB_LAN_PARAM_FLOOR_MODE,
     BSB_LAN_PARAM_FLOOR_COMFORT_SETPOINT,
     BSB_LAN_PARAM_CWU_TARGET_NOMINAL,
+    BSB_LAN_PARAM_CWU_TARGET_REDUCED,
     BSB_LAN_CWU_MAX_TEMP,
     BSB_LAN_STATE_VERIFY_INTERVAL,
     MANUAL_HEAT_TO_MIN_TEMP,
@@ -188,13 +189,16 @@ class BSBLanClient:
         return await self.async_write_parameter(BSB_LAN_PARAM_FLOOR_MODE, mode)
 
     async def async_set_cwu_target_temp(self, temp: float) -> bool:
-        """Set CWU target temperature (param 1610).
+        """Set CWU target temperature (params 1610 and 1612).
+
+        Sets BOTH nominal (1610) and reduced (1612) setpoints to ensure
+        the pump heats to our target regardless of its internal mode.
 
         Args:
             temp: Target temperature in °C (36-55).
 
         Returns:
-            True if successful, False otherwise.
+            True if both writes successful, False otherwise.
         """
         if temp < MANUAL_HEAT_TO_MIN_TEMP or temp > BSB_LAN_CWU_MAX_TEMP:
             _LOGGER.warning(
@@ -202,7 +206,23 @@ class BSBLanClient:
                 temp, MANUAL_HEAT_TO_MIN_TEMP, BSB_LAN_CWU_MAX_TEMP
             )
             return False
-        return await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, int(temp))
+
+        temp_int = int(temp)
+
+        # Set nominal setpoint (1610)
+        nominal_ok = await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_NOMINAL, temp_int)
+
+        # Set reduced setpoint (1612) - ensures pump heats to target in Eco mode too
+        reduced_ok = await self.async_write_parameter(BSB_LAN_PARAM_CWU_TARGET_REDUCED, temp_int)
+
+        if nominal_ok and reduced_ok:
+            _LOGGER.debug("CWU target set to %d°C (both nominal and reduced)", temp_int)
+        elif nominal_ok:
+            _LOGGER.warning("CWU nominal set OK but reduced setpoint failed")
+        elif reduced_ok:
+            _LOGGER.warning("CWU reduced set OK but nominal setpoint failed")
+
+        return nominal_ok and reduced_ok
 
     async def async_set_floor_comfort_setpoint(self, temp: float) -> bool:
         """Set floor heating comfort setpoint (param 710).

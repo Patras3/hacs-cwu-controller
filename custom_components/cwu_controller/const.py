@@ -8,8 +8,9 @@ MANUFACTURER: Final = "CWU Controller"
 MODE_BROKEN_HEATER: Final = "broken_heater"
 MODE_WINTER: Final = "winter"
 MODE_SUMMER: Final = "summer"
+MODE_HEAT_PUMP: Final = "heat_pump"
 
-OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER]
+OPERATING_MODES: Final = [MODE_BROKEN_HEATER, MODE_WINTER, MODE_SUMMER, MODE_HEAT_PUMP]
 
 # Configuration keys
 CONF_OPERATING_MODE: Final = "operating_mode"
@@ -26,11 +27,17 @@ CONF_WORKDAY_SENSOR: Final = "workday_sensor"  # binary_sensor.workday_sensor
 
 # Energy meter sensor for accurate energy tracking
 CONF_ENERGY_SENSOR: Final = "energy_sensor"
-DEFAULT_ENERGY_SENSOR: Final = "sensor.ogrzewanie_total_active_energy"
+DEFAULT_ENERGY_SENSOR: Final = "sensor.ogrzewanie_import_active_energy"
 
 # Energy tracking intervals and thresholds
 ENERGY_TRACKING_INTERVAL: Final = 60  # seconds - how often to check energy meter
 ENERGY_DELTA_ANOMALY_THRESHOLD: Final = 10.0  # kWh - skip deltas larger than this (likely meter issue)
+
+# Electric heater rated power (constant when ON)
+# From BSB-LAN params: 5740 (K6), 5811 (K25), 5813 (K26)
+HEATER_POWER_CWU: Final = 3.3      # kW - K6 (CWU immersion heater)
+HEATER_POWER_FLOOR_1: Final = 3.0  # kW - K25 (Floor heater 1)
+HEATER_POWER_FLOOR_2: Final = 3.0  # kW - K26 (Floor heater 2)
 
 # Temperature thresholds
 CONF_CWU_TARGET_TEMP: Final = "cwu_target_temp"
@@ -58,6 +65,7 @@ POWER_SPIKE_THRESHOLD: Final = 200  # Min power spike indicating real CWU heatin
 POWER_PUMP_RUNNING: Final = 80  # Pump running but not compressor
 POWER_THERMODYNAMIC_MIN: Final = 300  # Thermodynamic heating active
 POWER_THERMODYNAMIC_FULL: Final = 1000  # Full thermodynamic heating
+POWER_ELECTRIC_HEATER_MIN: Final = 2500  # Electric heater should draw ~3.3kW, >2.5kW expected
 
 # Time constants
 CWU_MAX_HEATING_TIME: Final = 170  # 2h50m in minutes (before 3h limit)
@@ -80,6 +88,19 @@ STATE_EMERGENCY_FLOOR: Final = "emergency_floor"
 STATE_FAKE_HEATING_DETECTED: Final = "fake_heating_detected"
 STATE_FAKE_HEATING_RESTARTING: Final = "fake_heating_restarting"
 STATE_SAFE_MODE: Final = "safe_mode"  # Sensors unavailable - heat pump controls everything
+
+# Heat Pump mode states (pump decides, we monitor)
+# Main state reflects what has priority / what is actively heating
+STATE_PUMP_IDLE: Final = "pump_idle"  # Both enabled, pump not heating anything
+STATE_PUMP_CWU: Final = "pump_cwu"  # CWU is being heated (compressor or electric or both)
+STATE_PUMP_FLOOR: Final = "pump_floor"  # Floor is being heated (compressor or electric or both)
+STATE_PUMP_BOTH: Final = "pump_both"  # Both CWU and floor are being heated simultaneously
+
+# Compressor target (what the compressor is heating)
+# Values: "cwu", "floor", "idle"
+COMPRESSOR_TARGET_CWU: Final = "cwu"
+COMPRESSOR_TARGET_FLOOR: Final = "floor"
+COMPRESSOR_TARGET_IDLE: Final = "idle"
 
 # Urgency levels
 URGENCY_NONE: Final = 0
@@ -130,15 +151,19 @@ WINTER_CWU_MIN_TEMP_INCREASE: Final = 1.0  # Minimum temp increase required in t
 # BSB-LAN Heat Pump Integration
 CONF_BSB_LAN_HOST: Final = "bsb_lan_host"
 DEFAULT_BSB_LAN_HOST: Final = "192.168.50.219"
-BSB_LAN_READ_TIMEOUT: Final = 5  # seconds for reads
+BSB_LAN_READ_TIMEOUT: Final = 15  # seconds for reads (22 params takes 5-10s)
 BSB_LAN_WRITE_TIMEOUT: Final = 10  # seconds for writes (allow more time)
 BSB_LAN_FAILURES_THRESHOLD: Final = 3  # consecutive failures before marking unavailable
 BSB_LAN_STATE_VERIFY_INTERVAL: Final = 5  # minutes - how often to verify pump state matches expected
 
 # BSB-LAN Parameters for reading (includes 1610 for CWU target setpoint)
-# Diagnostic parameters: 8749 (HC1 thermostat demand), 8820/8821 (pump/heater state),
-# 8840-8843 (run hours and start counters for DHW pump and electric heater)
-BSB_LAN_READ_PARAMS: Final = "700,710,1600,1610,8000,8003,8006,8412,8410,8830,8700,8749,8820,8821,8840,8841,8842,8843"
+# Diagnostic parameters:
+#   8749 - HC1 thermostat demand
+#   8820/8821 - DHW pump/heater state
+#   8402/8403 - Floor heater 1/2 state
+#   8840-8843 - Run hours and start counters for DHW pump and electric heater
+#   8456/8457 - Run hours and start counters for floor heaters
+BSB_LAN_READ_PARAMS: Final = "700,710,1600,1610,8000,8003,8006,8412,8410,8830,8700,8749,8820,8821,8402,8403,8840,8841,8842,8843,8456,8457"
 
 # BSB-LAN Control Parameters (write)
 BSB_LAN_PARAM_CWU_MODE: Final = 1600  # 0=Off, 1=On, 2=Eco

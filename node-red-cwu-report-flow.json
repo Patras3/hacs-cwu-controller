@@ -1,0 +1,416 @@
+[
+    {
+        "id": "cwu_report_flow",
+        "type": "tab",
+        "label": "CWU Controller Daily Report",
+        "disabled": false,
+        "info": "Daily report for CWU Controller integration - sends stats about heating, energy usage, costs to Telegram",
+        "env": []
+    },
+    {
+        "id": "cwu_inject_trigger",
+        "type": "inject",
+        "z": "cwu_report_flow",
+        "name": "Daily 00:07",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "07 00 * * *",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 80,
+        "wires": [
+            [
+                "cwu_all_metrics"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_manual_trigger",
+        "type": "inject",
+        "z": "cwu_report_flow",
+        "name": "Manual test",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 140,
+        "wires": [
+            [
+                "cwu_all_metrics"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_all_metrics",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "CWU Metrics",
+        "func": "const metrics = {\n    // Energy sensors (cumulative daily, need last value)\n    \"cwu_controller_cwu_energy_today\": { overA: 0, overB: 0, metric: \"cwu_controller_cwu_energy_today\" },\n    \"cwu_controller_floor_energy_today\": { overA: 0, overB: 0, metric: \"cwu_controller_floor_energy_today\" },\n    \"cwu_controller_total_energy_today\": { overA: 0, overB: 0, metric: \"cwu_controller_total_energy_today\" },\n    // Cost sensors\n    \"cwu_controller_cwu_energy_cost_today\": { overA: 0, overB: 0, metric: \"cwu_controller_cwu_energy_cost_today\" },\n    \"cwu_controller_floor_energy_cost_today\": { overA: 0, overB: 0, metric: \"cwu_controller_floor_energy_cost_today\" },\n    // Daily counters\n    \"cwu_controller_electric_fallback_today\": { overA: 0, overB: 0, metric: \"cwu_controller_electric_fallback_today\" },\n    \"cwu_controller_bsb_lan_errors_today\": { overA: 0, overB: 0, metric: \"cwu_controller_bsb_lan_errors_today\" },\n    // BSB-LAN temperature sensors\n    \"cwu_controller_bsb_cwu_temperature\": { overA: 0, overB: 0, metric: \"cwu_controller_bsb_cwu_temperature\" },\n    \"cwu_controller_bsb_outside_temperature\": { overA: 0, overB: 0, metric: \"cwu_controller_bsb_outside_temperature\" },\n    \"cwu_controller_bsb_flow_temperature\": { overA: 0, overB: 0, metric: \"cwu_controller_bsb_flow_temperature\" },\n    \"cwu_controller_bsb_return_temperature\": { overA: 0, overB: 0, metric: \"cwu_controller_bsb_return_temperature\" },\n    \"cwu_controller_average_power\": { overA: 0, overB: 0, metric: \"cwu_controller_average_power\" },\n};\n\nmsg.payload = metrics;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 100,
+        "wires": [
+            [
+                "cwu_split"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_split",
+        "type": "split",
+        "z": "cwu_report_flow",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "entity_id",
+        "x": 490,
+        "y": 100,
+        "wires": [
+            [
+                "cwu_influx_stats"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_influx_stats",
+        "type": "subflow:b860dab7fd2994c8",
+        "z": "cwu_report_flow",
+        "name": "",
+        "env": [
+            {
+                "name": "metric",
+                "value": "{{entity_id}}",
+                "type": "env"
+            }
+        ],
+        "x": 680,
+        "y": 100,
+        "wires": [
+            [
+                "cwu_join"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_join",
+        "type": "join",
+        "z": "cwu_report_flow",
+        "name": "",
+        "mode": "auto",
+        "build": "object",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": true,
+        "timeout": "",
+        "count": "",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "num",
+        "reduceFixup": "",
+        "x": 870,
+        "y": 100,
+        "wires": [
+            [
+                "cwu_query_all_states"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_query_all_states",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Query Controller States",
+        "func": "// Save stats data\nmsg.stats = msg.payload;\n\n// Query ALL controller state values from yesterday with timestamps\nmsg.query = `\nimport \"experimental/date/boundaries\"\nimport \"timezone\"\n\ntimezone.location(name: \"Europe/Warsaw\")\noption location = timezone.location(name: \"Europe/Warsaw\")\nyesterdayDate = boundaries.yesterday()\n\nfrom(bucket: \"ha\")\n  |> range(start: yesterdayDate.start, stop: yesterdayDate.stop)\n  |> filter(fn: (r) => r.entity_id == \"cwu_controller_state\" and r._field == \"state\")\n  |> sort(columns: [\"_time\"])\n`\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1090,
+        "y": 100,
+        "wires": [
+            [
+                "cwu_influx_controller_states"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_influx_controller_states",
+        "type": "influxdb in",
+        "z": "cwu_report_flow",
+        "influxdb": "b1f482eeb1590bf0",
+        "name": "Controller States",
+        "query": "",
+        "rawOutput": false,
+        "precision": "",
+        "retentionPolicy": "",
+        "org": "Borkowska",
+        "x": 150,
+        "y": 200,
+        "wires": [
+            [
+                "cwu_process_controller_states"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_process_controller_states",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Process Controller States",
+        "func": "// Parse all state transitions and calculate durations\nconst stateData = msg.payload || [];\nmsg.controllerStates = stateData;\n\n// Initialize counters\nconst stateStats = {\n    stateCounts: {},\n    stateDurations: {},\n    cwuSessions: 0,\n    floorSessions: 0,\n    cwuToFloorTransitions: 0,\n    floorToCwuTransitions: 0,\n    emergencyCwuCount: 0,\n    emergencyFloorCount: 0,\n    fakeHeatingCount: 0,\n    pauseCount: 0,\n    firstState: null,\n    lastState: null\n};\n\nlet prevState = null;\nlet prevTime = null;\n\nfor (let i = 0; i < stateData.length; i++) {\n    const row = stateData[i];\n    const state = row._value;\n    const time = new Date(row._time);\n    \n    if (i === 0) stateStats.firstState = state;\n    stateStats.lastState = state;\n    \n    stateStats.stateCounts[state] = (stateStats.stateCounts[state] || 0) + 1;\n    \n    if (prevState && prevTime) {\n        const durationMinutes = (time - prevTime) / 60000;\n        stateStats.stateDurations[prevState] = (stateStats.stateDurations[prevState] || 0) + durationMinutes;\n    }\n    \n    if (state === \"heating_cwu\" && prevState !== \"heating_cwu\" && prevState !== \"emergency_cwu\") {\n        stateStats.cwuSessions++;\n        if (prevState === \"heating_floor\" || prevState === \"emergency_floor\") {\n            stateStats.floorToCwuTransitions++;\n        }\n    }\n    \n    if (state === \"heating_floor\" && prevState !== \"heating_floor\" && prevState !== \"emergency_floor\") {\n        stateStats.floorSessions++;\n        if (prevState === \"heating_cwu\" || prevState === \"emergency_cwu\") {\n            stateStats.cwuToFloorTransitions++;\n        }\n    }\n    \n    if (state === \"emergency_cwu\") stateStats.emergencyCwuCount++;\n    if (state === \"emergency_floor\") stateStats.emergencyFloorCount++;\n    if (state === \"fake_heating_detected\") stateStats.fakeHeatingCount++;\n    if (state === \"pause\") stateStats.pauseCount++;\n    \n    prevState = state;\n    prevTime = time;\n}\n\nif (prevState && prevTime) {\n    const endOfDay = new Date(prevTime);\n    endOfDay.setHours(23, 59, 59, 999);\n    const durationMinutes = (endOfDay - prevTime) / 60000;\n    stateStats.stateDurations[prevState] = (stateStats.stateDurations[prevState] || 0) + durationMinutes;\n}\n\nmsg.stateStats = stateStats;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 200,
+        "wires": [
+            [
+                "cwu_query_hp_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_query_hp_status",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Query HP Status",
+        "func": "// Query Heat Pump status for real compressor/defrost time\nmsg.query = `\nimport \"experimental/date/boundaries\"\nimport \"timezone\"\n\ntimezone.location(name: \"Europe/Warsaw\")\noption location = timezone.location(name: \"Europe/Warsaw\")\nyesterdayDate = boundaries.yesterday()\n\nfrom(bucket: \"ha\")\n  |> range(start: yesterdayDate.start, stop: yesterdayDate.stop)\n  |> filter(fn: (r) => r.entity_id == \"cwu_controller_bsb_heat_pump_status\" and r._field == \"state\")\n  |> sort(columns: [\"_time\"])\n`\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 660,
+        "y": 200,
+        "wires": [
+            [
+                "cwu_influx_hp_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_influx_hp_status",
+        "type": "influxdb in",
+        "z": "cwu_report_flow",
+        "influxdb": "b1f482eeb1590bf0",
+        "name": "HP Status",
+        "query": "",
+        "rawOutput": false,
+        "precision": "",
+        "retentionPolicy": "",
+        "org": "Borkowska",
+        "x": 860,
+        "y": 200,
+        "wires": [
+            [
+                "cwu_process_hp_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_process_hp_status",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Process HP Status",
+        "func": "// Process HP status to get compressor and defrost times\nconst hpData = msg.payload || [];\n\nconst hpStats = {\n    compressorMinutes: 0,\n    compressorSessions: 0,\n    defrostMinutes: 0,\n    defrostCount: 0,\n    offTimeMinutes: 0,\n    offTimeCount: 0,\n    idleMinutes: 0\n};\n\nlet prevStatus = null;\nlet prevTime = null;\nlet wasCompressor = false;\nlet wasDefrost = false;\nlet wasOffTime = false;\n\nfor (let i = 0; i < hpData.length; i++) {\n    const row = hpData[i];\n    const status = (row._value || \"\").toLowerCase();\n    const time = new Date(row._time);\n    \n    const isCompressor = status.includes(\"compressor\") && !status.includes(\"off\");\n    const isDefrost = status.includes(\"defrost\");\n    const isOffTime = status.includes(\"off time\");\n    \n    // Calculate duration for previous status\n    if (prevTime) {\n        const durationMinutes = (time - prevTime) / 60000;\n        \n        if (wasCompressor) {\n            hpStats.compressorMinutes += durationMinutes;\n        } else if (wasDefrost) {\n            hpStats.defrostMinutes += durationMinutes;\n        } else if (wasOffTime) {\n            hpStats.offTimeMinutes += durationMinutes;\n        } else {\n            hpStats.idleMinutes += durationMinutes;\n        }\n    }\n    \n    // Count session starts\n    if (isCompressor && !wasCompressor) {\n        hpStats.compressorSessions++;\n    }\n    if (isDefrost && !wasDefrost) {\n        hpStats.defrostCount++;\n    }\n    if (isOffTime && !wasOffTime) {\n        hpStats.offTimeCount++;\n    }\n    \n    prevStatus = status;\n    prevTime = time;\n    wasCompressor = isCompressor;\n    wasDefrost = isDefrost;\n    wasOffTime = isOffTime;\n}\n\n// Add duration for last status until end of day\nif (prevTime) {\n    const endOfDay = new Date(prevTime);\n    endOfDay.setHours(23, 59, 59, 999);\n    const durationMinutes = (endOfDay - prevTime) / 60000;\n    \n    if (wasCompressor) {\n        hpStats.compressorMinutes += durationMinutes;\n    } else if (wasDefrost) {\n        hpStats.defrostMinutes += durationMinutes;\n    } else if (wasOffTime) {\n        hpStats.offTimeMinutes += durationMinutes;\n    } else {\n        hpStats.idleMinutes += durationMinutes;\n    }\n}\n\nmsg.hpStats = hpStats;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1070,
+        "y": 200,
+        "wires": [
+            [
+                "cwu_query_dhw_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_query_dhw_status",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Query DHW Status",
+        "func": "// Query DHW status for real CWU charging time\nmsg.query = `\nimport \"experimental/date/boundaries\"\nimport \"timezone\"\n\ntimezone.location(name: \"Europe/Warsaw\")\noption location = timezone.location(name: \"Europe/Warsaw\")\nyesterdayDate = boundaries.yesterday()\n\nfrom(bucket: \"ha\")\n  |> range(start: yesterdayDate.start, stop: yesterdayDate.stop)\n  |> filter(fn: (r) => r.entity_id == \"cwu_controller_bsb_dhw_status\" and r._field == \"state\")\n  |> sort(columns: [\"_time\"])\n`\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 150,
+        "y": 300,
+        "wires": [
+            [
+                "cwu_influx_dhw_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_influx_dhw_status",
+        "type": "influxdb in",
+        "z": "cwu_report_flow",
+        "influxdb": "b1f482eeb1590bf0",
+        "name": "DHW Status",
+        "query": "",
+        "rawOutput": false,
+        "precision": "",
+        "retentionPolicy": "",
+        "org": "Borkowska",
+        "x": 370,
+        "y": 300,
+        "wires": [
+            [
+                "cwu_process_dhw_status"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_process_dhw_status",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Process DHW Status",
+        "func": "// Process DHW status for real CWU charging/charged times\nconst dhwData = msg.payload || [];\n\nconst dhwStats = {\n    chargingMinutes: 0,\n    chargingSessions: 0,\n    chargingElectricMinutes: 0,\n    chargingElectricCount: 0,\n    chargedMinutes: 0,\n    readyMinutes: 0,\n    offMinutes: 0\n};\n\nlet prevStatus = null;\nlet prevTime = null;\nlet wasCharging = false;\nlet wasChargingElectric = false;\n\nfor (let i = 0; i < dhwData.length; i++) {\n    const row = dhwData[i];\n    const status = (row._value || \"\").toLowerCase();\n    const time = new Date(row._time);\n    \n    const isChargingElectric = status.includes(\"electric\");\n    const isCharging = status.includes(\"charging\") && !isChargingElectric;\n    const isCharged = status.includes(\"charged\");\n    const isReady = status.includes(\"ready\") && !isCharged;\n    const isOff = status.includes(\"off\") || status === \"---\";\n    \n    // Calculate duration for previous status\n    if (prevTime) {\n        const durationMinutes = (time - prevTime) / 60000;\n        \n        if (wasChargingElectric) {\n            dhwStats.chargingElectricMinutes += durationMinutes;\n        } else if (wasCharging) {\n            dhwStats.chargingMinutes += durationMinutes;\n        } else if (prevStatus && prevStatus.includes(\"charged\")) {\n            dhwStats.chargedMinutes += durationMinutes;\n        } else if (prevStatus && prevStatus.includes(\"ready\")) {\n            dhwStats.readyMinutes += durationMinutes;\n        } else {\n            dhwStats.offMinutes += durationMinutes;\n        }\n    }\n    \n    // Count session starts\n    if (isCharging && !wasCharging && !wasChargingElectric) {\n        dhwStats.chargingSessions++;\n    }\n    if (isChargingElectric && !wasChargingElectric) {\n        dhwStats.chargingElectricCount++;\n    }\n    \n    prevStatus = status;\n    prevTime = time;\n    wasCharging = isCharging;\n    wasChargingElectric = isChargingElectric;\n}\n\n// Add duration for last status until end of day\nif (prevTime) {\n    const endOfDay = new Date(prevTime);\n    endOfDay.setHours(23, 59, 59, 999);\n    const durationMinutes = (endOfDay - prevTime) / 60000;\n    \n    if (wasChargingElectric) {\n        dhwStats.chargingElectricMinutes += durationMinutes;\n    } else if (wasCharging) {\n        dhwStats.chargingMinutes += durationMinutes;\n    } else if (prevStatus && prevStatus.includes(\"charged\")) {\n        dhwStats.chargedMinutes += durationMinutes;\n    } else if (prevStatus && prevStatus.includes(\"ready\")) {\n        dhwStats.readyMinutes += durationMinutes;\n    } else {\n        dhwStats.offMinutes += durationMinutes;\n    }\n}\n\nmsg.dhwStats = dhwStats;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 300,
+        "wires": [
+            [
+                "cwu_prepare_msg"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_prepare_msg",
+        "type": "function",
+        "z": "cwu_report_flow",
+        "name": "Prepare message",
+        "func": "const stats = msg.stats;\nconst stateStats = msg.stateStats;\nconst hpStats = msg.hpStats;\nconst dhwStats = msg.dhwStats;\n\n// Helper functions\nfunction roundTo2(val) {\n    return Number(Number(val || 0).toFixed(2));\n}\n\nfunction formatDuration(minutes) {\n    if (!minutes || minutes === 0) return \"0min\";\n    minutes = Math.round(minutes);\n    const hours = Math.floor(minutes / 60);\n    const mins = minutes % 60;\n    if (hours === 0) return `${mins}min`;\n    if (mins === 0) return `${hours}h`;\n    return `${hours}h ${mins}min`;\n}\n\nfunction getMaxValue(metric) {\n    return stats[metric]?.max || 0;\n}\n\nfunction getMinMaxMean(metric, unit = \"\") {\n    const m = stats[metric];\n    if (!m || m.count === 0) return \"brak danych\";\n    return `${roundTo2(m.min)} - ${roundTo2(m.max)}${unit} (śr: ${roundTo2(m.mean)}${unit})`;\n}\n\nfunction getDuration(state) {\n    return stateStats.stateDurations[state] || 0;\n}\n\n// Energy data\nconst cwuEnergy = roundTo2(getMaxValue(\"cwu_controller_cwu_energy_today\"));\nconst floorEnergy = roundTo2(getMaxValue(\"cwu_controller_floor_energy_today\"));\nconst totalEnergy = roundTo2(getMaxValue(\"cwu_controller_total_energy_today\"));\n\n// Costs\nconst cwuCost = roundTo2(getMaxValue(\"cwu_controller_cwu_energy_cost_today\"));\nconst floorCost = roundTo2(getMaxValue(\"cwu_controller_floor_energy_cost_today\"));\nconst totalCost = roundTo2(cwuCost + floorCost);\n\n// Counters\nconst fakeHeatingFromSensor = Math.round(getMaxValue(\"cwu_controller_electric_fallback_today\"));\nconst bsbErrors = Math.round(getMaxValue(\"cwu_controller_bsb_lan_errors_today\"));\n\n// Controller state durations\nconst cwuStateMinutes = getDuration(\"heating_cwu\") + getDuration(\"emergency_cwu\");\nconst floorStateMinutes = getDuration(\"heating_floor\") + getDuration(\"emergency_floor\");\nconst fakeHeatingStateMinutes = getDuration(\"fake_heating_detected\") + getDuration(\"fake_heating_restarting\");\nconst pauseMinutes = getDuration(\"pause\");\nconst idleMinutes = getDuration(\"idle\");\nconst safeModeMinutes = getDuration(\"safe_mode\");\n\n// REAL heating times from BSB-LAN\nconst realCompressorMinutes = hpStats.compressorMinutes || 0;\nconst compressorSessions = hpStats.compressorSessions || 0;\nconst defrostMinutes = hpStats.defrostMinutes || 0;\nconst defrostCount = hpStats.defrostCount || 0;\nconst offTimeMinutes = hpStats.offTimeMinutes || 0;\nconst offTimeCount = hpStats.offTimeCount || 0;\n\n// DHW real times\nconst realCwuChargingMinutes = dhwStats.chargingMinutes || 0;\nconst cwuChargingSessions = dhwStats.chargingSessions || 0;\nconst electricChargingMinutes = dhwStats.chargingElectricMinutes || 0;\nconst electricChargingCount = dhwStats.chargingElectricCount || 0;\nconst cwuChargedMinutes = dhwStats.chargedMinutes || 0;\n\n// Controller session counts\nconst cwuSessions = stateStats.cwuSessions;\nconst floorSessions = stateStats.floorSessions;\nconst emergencyCwu = stateStats.emergencyCwuCount;\nconst emergencyFloor = stateStats.emergencyFloorCount;\nconst cwuToFloor = stateStats.cwuToFloorTransitions;\nconst floorToCwu = stateStats.floorToCwuTransitions;\nconst pauseEvents = stateStats.pauseCount;\nconst totalStateChanges = msg.controllerStates?.length || 0;\n\n// Temperatures\nconst cwuTemp = getMinMaxMean(\"cwu_controller_bsb_cwu_temperature\", \"°C\");\nconst outsideTemp = getMinMaxMean(\"cwu_controller_bsb_outside_temperature\", \"°C\");\nconst flowTemp = getMinMaxMean(\"cwu_controller_bsb_flow_temperature\", \"°C\");\nconst returnTemp = getMinMaxMean(\"cwu_controller_bsb_return_temperature\", \"°C\");\nconst avgPower = getMinMaxMean(\"cwu_controller_average_power\", \"W\");\n\n// Calculate savings\nconst expensiveRate = 0.85;\nconst effectiveRate = totalEnergy > 0 ? totalCost / totalEnergy : 0;\nconst savingsEstimate = roundTo2(totalEnergy * (expensiveRate - effectiveRate));\n\n// Percentages\nconst cwuPercent = totalEnergy > 0 ? Math.round((cwuEnergy / totalEnergy) * 100) : 0;\nconst floorPercent = totalEnergy > 0 ? Math.round((floorEnergy / totalEnergy) * 100) : 0;\n\n// Comparison with previous report\nconst previousReport = flow.get(\"cwu_previous_report\") || {};\n\nfunction compareToPrevious(fieldName, value) {\n    const prev = previousReport[fieldName];\n    if (prev === undefined) return \"\";\n    const diff = roundTo2(value - prev);\n    if (diff > 0) return ` (+${diff})`;\n    if (diff < 0) return ` (${diff})`;\n    return \"\";\n}\n\nfunction compareMinutes(fieldName, value) {\n    const prev = previousReport[fieldName];\n    if (prev === undefined) return \"\";\n    const diff = Math.round(value - prev);\n    if (diff > 0) return ` (+${diff}min)`;\n    if (diff < 0) return ` (${diff}min)`;\n    return \"\";\n}\n\n// Build message\nconst text = `🔥 *CWU Controller - Raport Dzienny*\n\n━━━━ 📊 *Energia* ━━━━\n  💡 *Łącznie*: ${totalEnergy} kWh${compareToPrevious(\"totalEnergy\", totalEnergy)} (${totalCost} zł)\n  🚿 *CWU*: ${cwuEnergy} kWh (${cwuCost} zł) [${cwuPercent}%]\n  🏠 *Podłoga*: ${floorEnergy} kWh (${floorCost} zł) [${floorPercent}%]\n  💰 *Oszczędności*: ~${savingsEstimate} zł vs droga taryfa\n\n━━━━ ⚙️ *Sprężarka (realnie)* ━━━━\n  🔥 *Czas pracy*: ${formatDuration(realCompressorMinutes)}${compareMinutes(\"realCompressorMinutes\", realCompressorMinutes)}\n  🔄 *Uruchomień*: ${compressorSessions}x${compareToPrevious(\"compressorSessions\", compressorSessions)}\n  ❄️ *Rozmrażanie*: ${formatDuration(defrostMinutes)} (${defrostCount}x)\n  ⏸️ *Obowiązkowy postój*: ${formatDuration(offTimeMinutes)} (${offTimeCount}x)\n\n━━━━ 🚿 *CWU (realnie z BSB)* ━━━━\n  🔥 *Ładowanie*: ${formatDuration(realCwuChargingMinutes)} (${cwuChargingSessions}x)\n  ⚡ *Grzałka elektryczna*: ${formatDuration(electricChargingMinutes)} (${electricChargingCount}x)\n  ✅ *Naładowane (idle)*: ${formatDuration(cwuChargedMinutes)}\n\n━━━━ ⏱️ *Tryby controllera* ━━━━\n  🚿 *Tryb CWU*: ${formatDuration(cwuStateMinutes)}${compareMinutes(\"cwuStateMinutes\", cwuStateMinutes)}\n  🏠 *Tryb podłogi*: ${formatDuration(floorStateMinutes)}${compareMinutes(\"floorStateMinutes\", floorStateMinutes)}\n  ⏸️ *Pauza (3h limit)*: ${formatDuration(pauseMinutes)}\n  😴 *Idle*: ${formatDuration(idleMinutes)}\n  ⚡ *Fake heating detected*: ${formatDuration(fakeHeatingStateMinutes)}\n${safeModeMinutes > 0 ? `  ⚠️ *Safe mode*: ${formatDuration(safeModeMinutes)}\\n` : \"\"}\n\n━━━━ 🔢 *Sesje i zdarzenia* ━━━━\n  🚿 *Sesji CWU*: ${cwuSessions}${compareToPrevious(\"cwuSessions\", cwuSessions)}\n  🏠 *Sesji podłogi*: ${floorSessions}${compareToPrevious(\"floorSessions\", floorSessions)}\n  🔄 *CWU→Podłoga*: ${cwuToFloor} | *Podłoga→CWU*: ${floorToCwu}\n  ⚡ *Fake heating*: ${fakeHeatingFromSensor}x (sensor)\n  ⏸️ *Limit 3h*: ${pauseEvents}x\n${emergencyCwu > 0 ? `  🚨 *Emergency CWU*: ${emergencyCwu}x\\n` : \"\"}${emergencyFloor > 0 ? `  🚨 *Emergency Floor*: ${emergencyFloor}x\\n` : \"\"}  📈 *Zmian stanu*: ${totalStateChanges}\n  ❌ *Błędy BSB-LAN*: ${bsbErrors}\n\n━━━━ 🌡️ *Temperatury* ━━━━\n  🚿 *CWU*: ${cwuTemp}\n  🌡️ *Zewnętrzna*: ${outsideTemp}\n  ⬆️ *Zasilanie*: ${flowTemp}\n  ⬇️ *Powrót*: ${returnTemp}\n\n━━━━ ⚡ *Moc* ━━━━\n  📊 ${avgPower}`;\n\n// Store for next comparison\nflow.set(\"cwu_previous_report\", {\n    totalEnergy,\n    cwuEnergy,\n    floorEnergy,\n    realCompressorMinutes,\n    compressorSessions,\n    cwuStateMinutes,\n    floorStateMinutes,\n    cwuSessions,\n    floorSessions,\n    defrostCount,\n    bsbErrors\n});\n\nmsg.payload = {\n    chatId: -4045390579,\n    content: text,\n    type: 'message',\n    options: {\n        parse_mode: \"Markdown\",\n        disable_notification: true\n    }\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 300,
+        "wires": [
+            [
+                "cwu_telegram_send",
+                "cwu_debug"
+            ]
+        ]
+    },
+    {
+        "id": "cwu_telegram_send",
+        "type": "telegram sender",
+        "z": "cwu_report_flow",
+        "name": "Send to Telegram",
+        "bot": "2f1b62abd4c20f6c",
+        "haserroroutput": false,
+        "outputs": 1,
+        "x": 1090,
+        "y": 300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cwu_debug",
+        "type": "debug",
+        "z": "cwu_report_flow",
+        "name": "Debug output",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1070,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "b1f482eeb1590bf0",
+        "type": "influxdb",
+        "hostname": "127.0.0.1",
+        "port": "8086",
+        "protocol": "http",
+        "database": "database",
+        "name": "InfluxDB",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://192.168.50.58:8086",
+        "timeout": "30",
+        "rejectUnauthorized": true
+    },
+    {
+        "id": "2f1b62abd4c20f6c",
+        "type": "telegram bot",
+        "botname": "BorkowskaBot",
+        "usernames": "peluska,Patras3",
+        "chatids": "-871350243,-4150952984,-1002104471271,-1002048870282,-4767037172",
+        "baseapiurl": "",
+        "updatemode": "polling",
+        "pollinterval": "300",
+        "usesocks": false,
+        "sockshost": "",
+        "socksprotocol": "socks5",
+        "socksport": "6667",
+        "socksusername": "anonymous",
+        "sockspassword": "",
+        "bothost": "",
+        "botpath": "",
+        "localbotport": "8443",
+        "publicbotport": "8443",
+        "privatekey": "",
+        "certificate": "",
+        "useselfsignedcertificate": false,
+        "sslterminated": false,
+        "verboselogging": false
+    }
+]

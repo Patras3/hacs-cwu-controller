@@ -83,7 +83,7 @@ class CWUControllerNumberEntity(CoordinatorEntity, RestoreEntity, NumberEntity):
             "name": "CWU Controller",
             "manufacturer": MANUFACTURER,
             "model": "Smart Heat Pump Controller",
-            "sw_version": "4.3.0",
+            "sw_version": "6.0.0",
         }
 
     async def async_added_to_hass(self) -> None:

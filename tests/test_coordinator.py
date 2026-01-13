@@ -219,58 +219,55 @@ class TestEnergyTracking:
     def test_energy_tracking_initialization(self, mock_coordinator):
         """Test first energy meter reading initializes tracking."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = None
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
 
         # First reading should just initialize
         assert mock_coordinator._energy_tracker._last_meter_reading == 100.0
-        assert mock_coordinator._energy_tracker._last_meter_state == STATE_HEATING_CWU
-        assert mock_coordinator._energy_tracker._last_meter_tariff_cheap is True
         # No energy should be attributed on first reading
         assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
 
     def test_energy_tracking_cwu_state(self, mock_coordinator):
-        """Test energy tracking attributes to CWU during CWU heating."""
+        """Test energy tracking attributes to CWU when compressor targets CWU."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
-        # Meter increased by 0.5 kWh
+        # Meter increased by 0.5 kWh, compressor targeting CWU, no heaters
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
 
-        # 0.5 kWh should go to CWU
-        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.5
+        # 0.5 kWh should go to CWU (compressor target)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.5)
         assert mock_coordinator._energy_tracker._cwu_expensive_today == 0.0
         assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
         assert mock_coordinator._energy_tracker._floor_expensive_today == 0.0
 
     def test_energy_tracking_floor_state(self, mock_coordinator):
-        """Test energy tracking attributes to floor during floor heating."""
+        """Test energy tracking attributes to floor when compressor targets floor."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_FLOOR
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_FLOOR
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
-        # Meter increased by 0.3 kWh
+        # Meter increased by 0.3 kWh, compressor targeting floor, no heaters
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.3):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='floor'):
+                        mock_coordinator._energy_tracker.update()
 
-        # 0.3 kWh should go to Floor
+        # 0.3 kWh should go to Floor (compressor target)
         assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
         assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.3)
 
@@ -282,13 +279,13 @@ class TestEnergyTracking:
         mock_coordinator._energy_tracker._floor_cheap_today = 2.0
         mock_coordinator._energy_tracker._floor_expensive_today = 1.0
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now() - timedelta(days=1)
-        mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
-        mock_coordinator._energy_tracker._last_meter_state = STATE_IDLE
 
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
 
         # Yesterday should have previous today's values
         assert mock_coordinator._energy_tracker._cwu_cheap_yesterday == 3.0
@@ -304,98 +301,101 @@ class TestEnergyTracking:
     def test_energy_tracking_cheap_tariff(self, mock_coordinator):
         """Test energy goes to cheap bucket during cheap tariff."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
 
-        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.5
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.5)
         assert mock_coordinator._energy_tracker._cwu_expensive_today == 0.0
 
     def test_energy_tracking_expensive_tariff(self, mock_coordinator):
         """Test energy goes to expensive bucket during expensive tariff."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = False
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
 
         assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
-        assert mock_coordinator._energy_tracker._cwu_expensive_today == 0.5
+        assert mock_coordinator._energy_tracker._cwu_expensive_today == pytest.approx(0.5)
 
-    def test_energy_tracking_state_changed(self, mock_coordinator):
-        """Test energy attribution when state changes during interval."""
+    def test_energy_tracking_cwu_heater(self, mock_coordinator):
+        """Test CWU heater energy is attributed to CWU (known power: 3.3kW)."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
-        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_FLOOR  # Was floor, now CWU
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
-        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.5):
+        # CWU heater ON, compressor idle, meter shows some consumption
+        # 0.1 kWh in 60 seconds = 6kW average power
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
 
-        # Energy should go to current state (CWU)
-        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.5
-        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+        # CWU heater should add 3.3kW * (60s/3600s) = 0.055 kWh to CWU
+        # Remaining: 0.1 - 0.055 = 0.045 kWh → split 50/50 (idle)
+        # CWU total: 0.055 + 0.0225 = 0.0775 kWh
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.0775, abs=0.001)
+        # Floor: 0.0225 kWh (idle half)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.0225, abs=0.001)
 
-    def test_energy_tracking_heating_stopped(self, mock_coordinator):
-        """Test energy attribution when heating just stopped."""
+    def test_energy_tracking_floor_heaters(self, mock_coordinator):
+        """Test floor heaters energy is attributed to floor (known power: 3.0kW each)."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_IDLE  # Now idle
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
-        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU  # Was heating CWU
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
+        # Both floor heaters ON, compressor idle
+        # 0.2 kWh in 60 seconds = 12kW average power
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.2):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, True, True)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
 
-        # Energy should go to previous state (CWU) since we just stopped
-        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.2)
-        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+        # Floor heaters: (3.0 + 3.0) * (60/3600) = 0.1 kWh
+        # Remaining 0.1 kWh → 50/50 split (idle)
+        # CWU: 0.05 kWh, Floor: 0.1 + 0.05 = 0.15 kWh
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.05, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.15, abs=0.001)
 
-    def test_energy_tracking_idle_standby(self, mock_coordinator):
-        """Test standby energy is not attributed to heating."""
+    def test_energy_tracking_idle_splits_50_50(self, mock_coordinator):
+        """Test idle/standby energy is split 50/50 between CWU and floor."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_IDLE
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_IDLE  # Was also idle
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = True
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
-        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.05):
+        # No heaters, compressor idle, small power consumption
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
 
-        # Standby energy should not be attributed
-        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
-        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+        # Idle energy split 50/50 (0.1 kWh / 2 = 0.05 kWh each)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.05)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.05)
 
     def test_energy_tracking_meter_backwards(self, mock_coordinator):
         """Test handling of meter going backwards (reset/error)."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
         # Meter went backwards
@@ -410,16 +410,16 @@ class TestEnergyTracking:
     def test_energy_tracking_large_delta_skipped(self, mock_coordinator):
         """Test unusually large delta is skipped (anomaly detection)."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=10)
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
         # 15 kWh in one interval is suspicious
         with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=115.0):
             with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
-                mock_coordinator._energy_tracker.update()
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
 
         # Large delta should be skipped
         assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
@@ -428,7 +428,6 @@ class TestEnergyTracking:
     def test_energy_tracking_meter_unavailable(self, mock_coordinator):
         """Test handling of unavailable meter sensor."""
         mock_coordinator._energy_tracker._data_loaded = True  # Enable energy tracking
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
@@ -442,7 +441,6 @@ class TestEnergyTracking:
     def test_energy_tracking_skipped_before_data_loaded(self, mock_coordinator):
         """Test energy tracking is skipped until persisted data is loaded."""
         mock_coordinator._energy_tracker._data_loaded = False
-        mock_coordinator._current_state = STATE_HEATING_CWU
         mock_coordinator._energy_tracker._last_meter_reading = 100.0
         mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
@@ -455,31 +453,403 @@ class TestEnergyTracking:
         assert mock_coordinator._energy_tracker._last_meter_reading == 100.0
         assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
 
-    def test_is_heating_state_helper(self, mock_coordinator):
-        """Test _is_heating_state helper method."""
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_HEATING_CWU) is True
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_HEATING_FLOOR) is True
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_EMERGENCY_CWU) is True
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_EMERGENCY_FLOOR) is True
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_IDLE) is False
-        assert mock_coordinator._energy_tracker._is_heating_state(STATE_PAUSE) is False
-        assert mock_coordinator._energy_tracker._is_heating_state(None) is False
+    def test_energy_tracking_short_interval_skipped(self, mock_coordinator):
+        """Test energy tracking skips if too little time passed (< 10 seconds)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=5)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
 
-    def test_is_cwu_state_helper(self, mock_coordinator):
-        """Test _is_cwu_state helper method."""
-        assert mock_coordinator._energy_tracker._is_cwu_state(STATE_HEATING_CWU) is True
-        assert mock_coordinator._energy_tracker._is_cwu_state(STATE_EMERGENCY_CWU) is True
-        assert mock_coordinator._energy_tracker._is_cwu_state(STATE_HEATING_FLOOR) is False
-        assert mock_coordinator._energy_tracker._is_cwu_state(STATE_IDLE) is False
-        assert mock_coordinator._energy_tracker._is_cwu_state(None) is False
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
 
-    def test_is_floor_state_helper(self, mock_coordinator):
-        """Test _is_floor_state helper method."""
-        assert mock_coordinator._energy_tracker._is_floor_state(STATE_HEATING_FLOOR) is True
-        assert mock_coordinator._energy_tracker._is_floor_state(STATE_EMERGENCY_FLOOR) is True
-        assert mock_coordinator._energy_tracker._is_floor_state(STATE_HEATING_CWU) is False
-        assert mock_coordinator._energy_tracker._is_floor_state(STATE_IDLE) is False
-        assert mock_coordinator._energy_tracker._is_floor_state(None) is False
+        # Too little time - tracking skipped
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_tracker._last_meter_reading == 100.0  # Not updated
+
+    def test_energy_tracking_mixed_cwu_heater_and_floor_compressor(self, mock_coordinator):
+        """Test CWU heater ON + compressor heating floor = split attribution."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Total: 0.2 kWh, CWU heater (3.3kW) ON, compressor targeting floor
+        # CWU heater: 3.3kW * (60/3600) = 0.055 kWh to CWU
+        # Remaining: 0.2 - 0.055 = 0.145 kWh to floor (compressor target)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.2):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='floor'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.055, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.145, abs=0.001)
+
+    def test_energy_tracking_floor_heater_and_cwu_compressor(self, mock_coordinator):
+        """Test floor heater ON + compressor heating CWU = split attribution."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Total: 0.2 kWh, floor heater 1 (3.0kW) ON, compressor targeting CWU
+        # Floor heater: 3.0kW * (60/3600) = 0.05 kWh to floor
+        # Remaining: 0.2 - 0.05 = 0.15 kWh to CWU (compressor target)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.2):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, True, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.15, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.05, abs=0.001)
+
+    def test_energy_tracking_all_heaters_on(self, mock_coordinator):
+        """Test all 3 heaters ON simultaneously (max load scenario)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Total: 0.3 kWh in 60s (18kW average)
+        # CWU heater: 3.3kW * (60/3600) = 0.055 kWh to CWU
+        # Floor heaters: (3.0 + 3.0) * (60/3600) = 0.1 kWh to floor
+        # Remaining: 0.3 - 0.055 - 0.1 = 0.145 kWh to compressor target (cwu)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.3):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, True, True)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        # CWU: 0.055 (heater) + 0.145 (compressor) = 0.2
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.2, abs=0.001)
+        # Floor: 0.1 (heaters)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.1, abs=0.001)
+
+    def test_energy_tracking_heater_capped_to_delta(self, mock_coordinator):
+        """Test heater energy is capped to meter delta (heater turned on mid-interval)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Meter delta: 0.03 kWh (heater was ON for ~33s, not full 60s)
+        # Calculated heater: 3.3kW * 60s = 0.055 kWh
+        # Heater energy should be CAPPED to delta: 0.03 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.03):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        # CWU heater capped to meter delta (0.03 kWh, not 0.055)
+        # Remaining is 0 (all energy attributed to heater)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.03, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+
+    def test_energy_tracking_multiple_heaters_scaled_proportionally(self, mock_coordinator):
+        """Test multiple heaters are scaled proportionally when exceeding delta."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Meter delta: 0.08 kWh
+        # Calculated: CWU 0.055 + Floor1 0.05 + Floor2 0.05 = 0.155 kWh
+        # Scale factor: 0.08 / 0.155 = 0.516
+        # Scaled: CWU 0.0284, Floor1 0.0258, Floor2 0.0258
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.08):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, True, True)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
+
+        # All heaters scaled proportionally to fit meter delta
+        # CWU: 0.055 * (0.08/0.155) = 0.0284
+        # Floor: (0.05 + 0.05) * (0.08/0.155) = 0.0516
+        # Total: 0.08 (matches meter delta)
+        scale = 0.08 / 0.155
+        expected_cwu = 0.055 * scale
+        expected_floor = 0.1 * scale
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(expected_cwu, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(expected_floor, abs=0.001)
+        # Total should equal meter delta
+        total = mock_coordinator._energy_tracker._cwu_cheap_today + mock_coordinator._energy_tracker._floor_cheap_today
+        assert total == pytest.approx(0.08, abs=0.001)
+
+    def test_energy_tracking_actual_elapsed_time(self, mock_coordinator):
+        """Test energy calculation uses actual elapsed time, not fixed interval."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        # 2 minutes elapsed instead of 1 minute
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=120)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # CWU heater ON for 2 minutes = 3.3kW * (120/3600) = 0.11 kWh
+        # Total delta: 0.15 kWh, remaining = 0.04 kWh to compressor target
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.15):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='floor'):
+                        mock_coordinator._energy_tracker.update()
+
+        # CWU: 0.11 kWh (heater for 2 min)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.11, abs=0.001)
+        # Floor: 0.04 kWh (remaining to compressor target)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.04, abs=0.001)
+
+    def test_energy_tracking_zero_delta(self, mock_coordinator):
+        """Test handling of zero energy delta (pump idle, no consumption)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Zero delta - nothing consumed
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+
+    def test_energy_tracking_tariff_changes_during_interval(self, mock_coordinator):
+        """Test tariff is captured at update time (not retroactively changed)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # First update - cheap tariff
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.1)
+        assert mock_coordinator._energy_tracker._cwu_expensive_today == 0.0
+
+        # Second update - expensive tariff (tariff changed)
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.2):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.1)
+        assert mock_coordinator._energy_tracker._cwu_expensive_today == pytest.approx(0.1)
+
+    def test_energy_tracking_cumulative_over_multiple_updates(self, mock_coordinator):
+        """Test energy accumulates correctly over multiple update cycles."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Simulate 5 update cycles, each with 0.05 kWh consumption
+        for i in range(5):
+            with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.0 + (i + 1) * 0.05):
+                with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                    with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                        with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                            mock_coordinator._energy_tracker.update()
+            mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+
+        # Total: 5 * 0.05 = 0.25 kWh
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.25)
+
+    def test_energy_tracking_one_floor_heater_only(self, mock_coordinator):
+        """Test with only one floor heater ON (K25 or K26 individually)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Only floor heater 2 (K26) ON: 3.0kW * (60/3600) = 0.05 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, True)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
+
+        # Floor heater: 0.05 kWh
+        # Remaining: 0.05 kWh → 50/50 split
+        # CWU: 0.025, Floor: 0.05 + 0.025 = 0.075
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.075, abs=0.001)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.025, abs=0.001)
+
+    def test_energy_tracking_fake_heating_ignores_heater(self, mock_coordinator):
+        """Test that during fake heating states, heater is not counted (broken heater mode).
+
+        In fake_heating_detected/fake_heating_restarting states, BSB-LAN reports heater ON
+        but it's not actually consuming power. Energy tracking should ignore the heater.
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Set state to fake_heating_detected
+        mock_coordinator._current_state = STATE_FAKE_HEATING_DETECTED
+
+        # BSB-LAN reports CWU heater ON, but due to fake heating state, _get_heater_states returns False
+        mock_coordinator._bsb_lan_data = {"electric_heater_cwu_state": "On"}
+
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.05):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                    mock_coordinator._energy_tracker.update()
+
+        # No heater energy should be attributed (heater is broken)
+        # All goes to idle (50/50 split): 0.025 each
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.025)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.025)
+
+    def test_energy_tracking_bsb_lan_unavailable(self, mock_coordinator):
+        """Test energy tracking when BSB-LAN is unavailable (no heater states).
+
+        When BSB-LAN data is unavailable, heater states default to (False, False, False)
+        and compressor target defaults to 'idle'. Energy is split 50/50.
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Simulate BSB-LAN unavailable - returns defaults
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.1):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                # Simulate BSB-LAN unavailable - heater states all False, compressor idle
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='idle'):
+                        mock_coordinator._energy_tracker.update()
+
+        # All energy split 50/50 (compressor idle)
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.05)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.05)
+
+    def test_energy_tracking_realistic_scenario_cwu_heating(self, mock_coordinator):
+        """Test realistic CWU heating scenario: compressor + pumps, no electric heaters.
+
+        Heat pump heating CWU thermodynamically uses ~2kW compressor.
+        In 60 seconds: 2kW * (60/3600) = 0.033 kWh
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Compressor drawing ~2kW for CWU heating
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.033):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        # All goes to CWU
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.033)
+        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+
+    def test_energy_tracking_realistic_scenario_floor_with_electric(self, mock_coordinator):
+        """Test realistic floor heating with electric heater backup.
+
+        Compressor targeting floor + 1 electric floor heater (3kW) active.
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Compressor (2kW) + floor heater 1 (3kW) = 5kW
+        # In 60 seconds: 5kW * (60/3600) = 0.083 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.083):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, True, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='floor'):
+                        mock_coordinator._energy_tracker.update()
+
+        # Floor heater: 3kW * (60/3600) = 0.05 kWh
+        # Compressor remainder: 0.083 - 0.05 = 0.033 kWh
+        # All goes to floor
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == 0.0
+        assert mock_coordinator._energy_tracker._floor_cheap_today == pytest.approx(0.083, abs=0.001)
+
+    def test_energy_tracking_realistic_broken_heater_mode(self, mock_coordinator):
+        """Test broken heater mode: CWU heater ON but power low - capped to meter delta.
+
+        Broken heater scenario: pump reports CWU heater on, but actual power is much lower
+        because the heater is broken. Energy is capped to meter delta (actual consumption).
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Pump reports CWU heater ON but actual consumption is only 0.01 kWh (broken heater)
+        # Calculated: 3.3kW * (60/3600) = 0.055 kWh
+        # CAPPED to meter delta: 0.01 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.01):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        # Heater energy capped to meter delta (0.01 kWh, not 0.055)
+        # This is correct - we can't attribute more than meter actually shows
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(0.01, abs=0.001)
+        # No remaining energy
+        assert mock_coordinator._energy_tracker._floor_cheap_today == 0.0
+
+    def test_energy_tracking_very_long_interval(self, mock_coordinator):
+        """Test energy tracking handles long intervals correctly (e.g., after HA restart)."""
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        # 30 minutes elapsed (1800 seconds)
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(minutes=30)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Compressor heating CWU for 30 minutes at ~2kW = 2kW * 0.5h = 1 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=101.0):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=True):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(False, False, False)):
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        assert mock_coordinator._energy_tracker._cwu_cheap_today == pytest.approx(1.0)
+
+    def test_energy_tracking_multiple_heaters_during_peak_demand(self, mock_coordinator):
+        """Test simultaneous operation: CWU heater + both floor heaters + compressor.
+
+        Worst case scenario: all electric heaters on during high demand.
+        CWU heater (3.3kW) + Floor 1 (3kW) + Floor 2 (3kW) + Compressor (~2kW) = ~11kW
+        """
+        mock_coordinator._energy_tracker._data_loaded = True
+        mock_coordinator._energy_tracker._last_meter_reading = 100.0
+        mock_coordinator._energy_tracker._last_meter_time = datetime.now() - timedelta(seconds=60)
+        mock_coordinator._energy_tracker._meter_tracking_date = datetime.now()
+
+        # Total: 11kW * (60/3600) = 0.183 kWh
+        with patch.object(mock_coordinator, '_get_energy_meter_value', return_value=100.183):
+            with patch.object(mock_coordinator, 'is_cheap_tariff', return_value=False):
+                with patch.object(mock_coordinator, '_get_heater_states', return_value=(True, True, True)):
+                    # Compressor targeting CWU while electric heaters supplement
+                    with patch.object(mock_coordinator, '_get_compressor_target', return_value='cwu'):
+                        mock_coordinator._energy_tracker.update()
+
+        # CWU: 3.3kW * (60/3600) = 0.055 kWh (CWU heater)
+        # Floor: 6kW * (60/3600) = 0.1 kWh (both floor heaters)
+        # Remaining: 0.183 - 0.055 - 0.1 = 0.028 kWh → CWU (compressor target)
+        # Total CWU: 0.055 + 0.028 = 0.083 kWh
+        assert mock_coordinator._energy_tracker._cwu_expensive_today == pytest.approx(0.083, abs=0.001)
+        assert mock_coordinator._energy_tracker._floor_expensive_today == pytest.approx(0.1, abs=0.001)
 
 
 class TestStateManagement:
@@ -733,8 +1103,6 @@ class TestEnergyPersistence:
             "floor_cheap_yesterday": 5.0,
             "floor_expensive_yesterday": 1.0,
             "last_meter_reading": 150.0,
-            "last_meter_state": STATE_HEATING_CWU,
-            "last_meter_tariff_cheap": True,
         }
 
         await mock_coordinator.async_load_energy_data()
@@ -747,7 +1115,6 @@ class TestEnergyPersistence:
         assert mock_coordinator._energy_tracker._cwu_cheap_yesterday == 4.0
         assert mock_coordinator._energy_tracker._floor_cheap_yesterday == 5.0
         assert mock_coordinator._energy_tracker._last_meter_reading == 150.0
-        assert mock_coordinator._energy_tracker._last_meter_state == STATE_HEATING_CWU
 
     @pytest.mark.asyncio
     async def test_load_yesterday_data_moves_to_yesterday(self, mock_coordinator):
@@ -811,8 +1178,6 @@ class TestEnergyPersistence:
         mock_coordinator._energy_tracker._floor_expensive_yesterday = 1.2
         mock_coordinator._energy_tracker._last_meter_reading = 200.0
         mock_coordinator._energy_tracker._last_meter_time = datetime.now()
-        mock_coordinator._energy_tracker._last_meter_state = STATE_HEATING_FLOOR
-        mock_coordinator._energy_tracker._last_meter_tariff_cheap = False
 
         await mock_coordinator.async_save_energy_data()
 
@@ -825,8 +1190,6 @@ class TestEnergyPersistence:
         assert saved["cwu_cheap_yesterday"] == 5.0
         assert saved["floor_cheap_yesterday"] == 6.0
         assert saved["last_meter_reading"] == 200.0
-        assert saved["last_meter_state"] == STATE_HEATING_FLOOR
-        assert saved["last_meter_tariff_cheap"] is False
         assert "date" in saved
 
     @pytest.mark.asyncio
@@ -883,8 +1246,6 @@ class TestEnergyPersistence:
             "floor_expensive_today": 0.0,
             "last_meter_reading": 175.5,
             "last_meter_time": meter_time,
-            "last_meter_state": STATE_HEATING_CWU,
-            "last_meter_tariff_cheap": True,
             "meter_tracking_date": datetime.now().isoformat(),
         }
 
@@ -892,8 +1253,6 @@ class TestEnergyPersistence:
 
         assert mock_coordinator._energy_tracker._last_meter_reading == 175.5
         assert mock_coordinator._energy_tracker._last_meter_time is not None
-        assert mock_coordinator._energy_tracker._last_meter_state == STATE_HEATING_CWU
-        assert mock_coordinator._energy_tracker._last_meter_tariff_cheap is True
 
 
 class TestHPReadyForCWU:
