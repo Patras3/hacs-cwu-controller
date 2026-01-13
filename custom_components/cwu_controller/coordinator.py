@@ -182,6 +182,10 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._cwu_session_start_temp: float | None = None
         self._cwu_session_start_energy_kwh: float | None = None  # Energy meter at session start
 
+        # Floor Session tracking (for UI)
+        self._floor_heating_start: datetime | None = None
+        self._floor_session_start_energy_kwh: float | None = None  # Energy meter at session start
+
         # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
         self._last_action_time: datetime | None = None  # For calculating duration between actions
@@ -1042,9 +1046,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         power = self._get_sensor_value(self.config.get(CONF_POWER_SENSOR, DEFAULT_POWER_SENSOR))
 
-        # Session data (if we have an active CWU session)
-        session_start_temp = self._cwu_session_start_temp
-        session_energy = self.session_energy_kwh
+        # CWU session data (if we have an active CWU session)
+        cwu_session_start_temp = self._cwu_session_start_temp
+        cwu_session_energy = self.session_energy_kwh
+
+        # Floor session data (if we have an active floor session)
+        floor_session_energy = self.floor_session_energy_kwh
+        floor_session_minutes: int | None = None
+        if self._floor_heating_start:
+            floor_session_minutes = int((now - self._floor_heating_start).total_seconds() / 60)
 
         # Compressor target for heat pump mode
         compressor_target = self._get_compressor_target()
@@ -1058,8 +1068,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             # State snapshot at time of action
             "cwu_temp": round(cwu_temp, 1) if cwu_temp is not None else None,
             "power": round(power, 0) if power is not None else None,
-            "session_start_temp": round(session_start_temp, 1) if session_start_temp is not None else None,
-            "session_energy_kwh": round(session_energy, 3) if session_energy is not None else None,
+            # CWU session
+            "session_start_temp": round(cwu_session_start_temp, 1) if cwu_session_start_temp is not None else None,
+            "session_energy_kwh": round(cwu_session_energy, 3) if cwu_session_energy is not None else None,
+            # Floor session
+            "floor_session_energy_kwh": round(floor_session_energy, 3) if floor_session_energy is not None else None,
+            "floor_session_minutes": floor_session_minutes,
+            # Heat pump mode
             "compressor_target": compressor_target,
         }
         self._action_history.append(entry)
@@ -1169,6 +1184,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             return None
         return max(0.0, current_energy - self._cwu_session_start_energy_kwh)
 
+    @property
+    def floor_session_energy_kwh(self) -> float | None:
+        """Return energy consumed in current floor session (kWh)."""
+        if self._floor_session_start_energy_kwh is None:
+            return None
+        current_energy = self._get_energy_meter_value()
+        if current_energy is None:
+            return None
+        return max(0.0, current_energy - self._floor_session_start_energy_kwh)
 
     async def async_enable(self) -> None:
         """Enable the controller."""

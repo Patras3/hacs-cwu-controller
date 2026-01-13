@@ -191,6 +191,10 @@ class HeatPumpMode(BaseModeHandler):
         """Check if state indicates CWU is being heated."""
         return state in (STATE_PUMP_CWU, STATE_PUMP_BOTH)
 
+    def _is_floor_heating_state(self, state: str) -> bool:
+        """Check if state indicates floor is being heated."""
+        return state in (STATE_PUMP_FLOOR, STATE_PUMP_BOTH)
+
     async def _handle_state_change(
         self,
         new_state: str,
@@ -204,7 +208,7 @@ class HeatPumpMode(BaseModeHandler):
         old_state = self._current_state
         now = datetime.now()
 
-        # Track CWU session start/end for UI compatibility
+        # Track CWU session start/end for UI
         was_heating_cwu = self._is_cwu_heating_state(old_state)
         will_heat_cwu = self._is_cwu_heating_state(new_state)
 
@@ -227,6 +231,21 @@ class HeatPumpMode(BaseModeHandler):
             self.coord._cwu_heating_start = None
             self.coord._cwu_session_start_temp = None
             self.coord._cwu_session_start_energy_kwh = None
+
+        # Track Floor session start/end for UI
+        was_heating_floor = self._is_floor_heating_state(old_state)
+        will_heat_floor = self._is_floor_heating_state(new_state)
+
+        if will_heat_floor and not was_heating_floor:
+            # Starting floor heating - begin session
+            self.coord._floor_heating_start = now
+            self.coord._floor_session_start_energy_kwh = self.coord._get_energy_meter_value()
+            _LOGGER.debug("Heat Pump: Floor session started")
+        elif was_heating_floor and not will_heat_floor:
+            # Stopped floor heating - end session
+            _LOGGER.debug("Heat Pump: Floor session ended")
+            self.coord._floor_heating_start = None
+            self.coord._floor_session_start_energy_kwh = None
 
         self._change_state(new_state)
 

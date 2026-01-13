@@ -1196,6 +1196,10 @@ body {
     color: var(--accent-orange, #ed8936);
 }
 
+.snapshot-floor {
+    color: var(--accent-purple, #b794f4);
+}
+
 .history-icon {
     font-size: 18px;
     color: var(--accent-cyan);

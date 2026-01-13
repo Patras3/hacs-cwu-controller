@@ -1419,9 +1419,19 @@ function buildSnapshotHtml(item) {
         }
     }
 
-    // Session energy consumed
+    // CWU session energy consumed
     if (item.session_energy_kwh !== null && item.session_energy_kwh !== undefined && item.session_energy_kwh > 0) {
-        parts.push(`<span class="snapshot-energy" title="Energy consumed in session">⚡ ${item.session_energy_kwh.toFixed(2)} kWh</span>`);
+        parts.push(`<span class="snapshot-energy" title="CWU session energy consumed">⚡CWU ${item.session_energy_kwh.toFixed(2)} kWh</span>`);
+    }
+
+    // Floor session data
+    if (item.floor_session_energy_kwh !== null && item.floor_session_energy_kwh !== undefined && item.floor_session_energy_kwh > 0) {
+        const floorMinutes = item.floor_session_minutes;
+        const durationStr = floorMinutes ? ` (${formatDuration(floorMinutes)})` : '';
+        parts.push(`<span class="snapshot-floor" title="Floor session: ${formatDuration(floorMinutes)}, energy: ${item.floor_session_energy_kwh.toFixed(2)} kWh">🏠 ${item.floor_session_energy_kwh.toFixed(2)} kWh${durationStr}</span>`);
+    } else if (item.floor_session_minutes !== null && item.floor_session_minutes !== undefined && item.floor_session_minutes > 0) {
+        // Show floor duration even without energy data
+        parts.push(`<span class="snapshot-floor" title="Floor session duration">🏠 ${formatDuration(item.floor_session_minutes)}</span>`);
     }
 
     // Current power
