@@ -1157,6 +1157,14 @@ body {
     font-weight: 600;
 }
 
+.history-duration {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-left: 4px;
+    opacity: 0.8;
+}
+
 .history-icon {
     font-size: 18px;
     color: var(--accent-cyan);

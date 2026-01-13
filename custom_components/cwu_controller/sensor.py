@@ -190,6 +190,8 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             # BSB-LAN data for frontend
             "bsb_lan": data.get("bsb_lan", {}),
             "bsb_lan_data": data.get("bsb_lan", {}),  # Alias for compatibility
+            # Heat Pump mode - compressor target (cwu/floor/idle)
+            "compressor_target": data.get("compressor_target"),
             # Floor boost status
             "floor_boost_active": data.get("floor_boost_active", False),
             "floor_boost_session": data.get("floor_boost_session", False),

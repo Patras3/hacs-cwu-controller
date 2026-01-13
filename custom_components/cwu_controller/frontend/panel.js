@@ -1390,7 +1390,20 @@ function updateOverrideAlert() {
 }
 
 /**
- * Update action history with relative time
+ * Format duration in minutes to human readable string
+ */
+function formatDuration(minutes) {
+    if (minutes === null || minutes === undefined) return '';
+    if (minutes < 1) return '<1min';
+    if (minutes < 60) return `${minutes}min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (mins === 0) return `${hours}h`;
+    return `${hours}h ${mins}min`;
+}
+
+/**
+ * Update action history with full timestamps and duration
  */
 function updateActionHistory(history) {
     const container = document.getElementById('action-history');
@@ -1416,9 +1429,15 @@ function updateActionHistory(history) {
         const reasoningHtml = reasoning ?
             `<div class="history-reasoning">${reasoning}</div>` : '';
 
+        // Show duration if available (how long previous state lasted)
+        const durationMinutes = item.duration_minutes;
+        const durationHtml = durationMinutes !== null && durationMinutes !== undefined ?
+            `<span class="history-duration" title="Previous state lasted ${formatDuration(durationMinutes)}">(${formatDuration(durationMinutes)})</span>` : '';
+
         return `
             <div class="history-item" onclick="showHistoryDetail('action', '${item.action}', '${item.timestamp}')">
-                <span class="history-time" title="${absTime}">${relTime}</span>
+                <span class="history-time" title="${relTime}">${absTime}</span>
+                ${durationHtml}
                 <span class="history-icon mdi ${icon}"></span>
                 <div class="history-content">
                     <span class="history-text">${item.action}</span>
@@ -1885,13 +1904,17 @@ async function openHistoryModal(type) {
                             actionLower.includes('floor') ? 'mdi-heating-coil' : 'mdi-chevron-right';
                 const reasoningHtml = item.reasoning ?
                     `<span class="history-reasoning">${item.reasoning}</span>` : '';
+                // Show duration if available (how long previous state lasted)
+                const durationMinutes = item.duration_minutes;
+                const durationText = durationMinutes !== null && durationMinutes !== undefined ?
+                    ` - lasted ${formatDuration(durationMinutes)}` : '';
                 return `
                     <div class="history-item-full">
                         <span class="history-icon mdi ${icon}"></span>
                         <div class="history-details">
                             <span class="history-action">${item.action}</span>
                             ${reasoningHtml}
-                            <span class="history-time-full">${absTime} (${relTime})</span>
+                            <span class="history-time-full">${absTime} (${relTime})${durationText}</span>
                         </div>
                     </div>
                 `;

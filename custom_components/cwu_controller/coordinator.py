@@ -184,6 +184,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
+        self._last_action_time: datetime | None = None  # For calculating duration between actions
 
         # Power tracking for trend analysis
         self._recent_power_readings: list[tuple[datetime, float]] = []
@@ -1026,13 +1027,23 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             action: Short action description (e.g., "CWU ON", "Switch to floor")
             reasoning: Specific reasoning at this decision point
         """
+        now = datetime.now()
+
+        # Calculate duration since last action
+        duration_minutes: int | None = None
+        if self._last_action_time:
+            duration_seconds = (now - self._last_action_time).total_seconds()
+            duration_minutes = int(duration_seconds / 60)
+
         entry = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now.isoformat(),
             "action": action,
             "state": self._current_state,
             "reasoning": reasoning,
+            "duration_minutes": duration_minutes,  # How long the previous state lasted
         }
         self._action_history.append(entry)
+        self._last_action_time = now
         self._cleanup_old_history()
         if reasoning:
             _LOGGER.info("CWU Controller: %s (%s)", action, reasoning)
