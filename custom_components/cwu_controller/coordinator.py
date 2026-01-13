@@ -1742,6 +1742,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "bsb_lan_errors_today": self.bsb_lan_errors_today,
             # Session energy tracking
             "session_energy_kwh": self.session_energy_kwh,
+            "floor_session_energy_kwh": self.floor_session_energy_kwh,
             # Heat Pump mode - compressor target (cwu/floor/idle)
             "compressor_target": self._get_compressor_target(),
         }
