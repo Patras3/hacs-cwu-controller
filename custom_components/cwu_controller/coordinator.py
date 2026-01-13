@@ -1021,7 +1021,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._action_history = [e for e in self._action_history if is_recent(e)]
 
     def _log_action(self, action: str, reasoning: str = "") -> None:
-        """Log an action to history with optional reasoning.
+        """Log an action to history with optional reasoning and state snapshot.
 
         Args:
             action: Short action description (e.g., "CWU ON", "Switch to floor")
@@ -1035,12 +1035,32 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             duration_seconds = (now - self._last_action_time).total_seconds()
             duration_minutes = int(duration_seconds / 60)
 
+        # Capture current state snapshot
+        cwu_temp = self._get_cwu_temperature()
+        if cwu_temp is None:
+            cwu_temp = self._last_known_cwu_temp
+
+        power = self._get_sensor_value(self.config.get(CONF_POWER_SENSOR, DEFAULT_POWER_SENSOR))
+
+        # Session data (if we have an active CWU session)
+        session_start_temp = self._cwu_session_start_temp
+        session_energy = self.session_energy_kwh
+
+        # Compressor target for heat pump mode
+        compressor_target = self._get_compressor_target()
+
         entry = {
             "timestamp": now.isoformat(),
             "action": action,
             "state": self._current_state,
             "reasoning": reasoning,
             "duration_minutes": duration_minutes,  # How long the previous state lasted
+            # State snapshot at time of action
+            "cwu_temp": round(cwu_temp, 1) if cwu_temp is not None else None,
+            "power": round(power, 0) if power is not None else None,
+            "session_start_temp": round(session_start_temp, 1) if session_start_temp is not None else None,
+            "session_energy_kwh": round(session_energy, 3) if session_energy is not None else None,
+            "compressor_target": compressor_target,
         }
         self._action_history.append(entry)
         self._last_action_time = now

@@ -1165,6 +1165,37 @@ body {
     opacity: 0.8;
 }
 
+.history-snapshot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 11px;
+    margin-top: 2px;
+    color: var(--text-muted);
+}
+
+.history-snapshot span {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.snapshot-temp {
+    color: var(--accent-cyan);
+}
+
+.snapshot-energy {
+    color: var(--accent-green, #68d391);
+}
+
+.snapshot-power {
+    color: var(--accent-yellow, #ecc94b);
+}
+
+.snapshot-compressor {
+    color: var(--accent-orange, #ed8936);
+}
+
 .history-icon {
     font-size: 18px;
     color: var(--accent-cyan);

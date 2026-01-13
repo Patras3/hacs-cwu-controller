@@ -1403,7 +1403,44 @@ function formatDuration(minutes) {
 }
 
 /**
- * Update action history with full timestamps and duration
+ * Build state snapshot HTML for action history entry
+ */
+function buildSnapshotHtml(item) {
+    const parts = [];
+
+    // CWU temperature with session delta if available
+    if (item.cwu_temp !== null && item.cwu_temp !== undefined) {
+        if (item.session_start_temp !== null && item.session_start_temp !== undefined) {
+            const delta = item.cwu_temp - item.session_start_temp;
+            const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
+            parts.push(`<span class="snapshot-temp" title="CWU: ${item.session_start_temp}°C → ${item.cwu_temp}°C">CWU: ${item.cwu_temp}°C (${deltaStr}°C)</span>`);
+        } else {
+            parts.push(`<span class="snapshot-temp">CWU: ${item.cwu_temp}°C</span>`);
+        }
+    }
+
+    // Session energy consumed
+    if (item.session_energy_kwh !== null && item.session_energy_kwh !== undefined && item.session_energy_kwh > 0) {
+        parts.push(`<span class="snapshot-energy" title="Energy consumed in session">⚡ ${item.session_energy_kwh.toFixed(2)} kWh</span>`);
+    }
+
+    // Current power
+    if (item.power !== null && item.power !== undefined && item.power > 0) {
+        parts.push(`<span class="snapshot-power" title="Power at moment of action">${item.power.toFixed(0)}W</span>`);
+    }
+
+    // Compressor target (for heat pump mode)
+    if (item.compressor_target && item.compressor_target !== 'idle') {
+        const targetLabel = item.compressor_target === 'cwu' ? 'CWU' : 'Floor';
+        parts.push(`<span class="snapshot-compressor" title="Compressor heating">🔥 ${targetLabel}</span>`);
+    }
+
+    if (parts.length === 0) return '';
+    return `<div class="history-snapshot">${parts.join(' · ')}</div>`;
+}
+
+/**
+ * Update action history with full timestamps, duration and state snapshot
  */
 function updateActionHistory(history) {
     const container = document.getElementById('action-history');
@@ -1434,6 +1471,9 @@ function updateActionHistory(history) {
         const durationHtml = durationMinutes !== null && durationMinutes !== undefined ?
             `<span class="history-duration" title="Previous state lasted ${formatDuration(durationMinutes)}">(${formatDuration(durationMinutes)})</span>` : '';
 
+        // Build state snapshot (temps, energy, power)
+        const snapshotHtml = buildSnapshotHtml(item);
+
         return `
             <div class="history-item" onclick="showHistoryDetail('action', '${item.action}', '${item.timestamp}')">
                 <span class="history-time" title="${relTime}">${absTime}</span>
@@ -1441,6 +1481,7 @@ function updateActionHistory(history) {
                 <span class="history-icon mdi ${icon}"></span>
                 <div class="history-content">
                     <span class="history-text">${item.action}</span>
+                    ${snapshotHtml}
                     ${reasoningHtml}
                 </div>
             </div>
@@ -1908,11 +1949,14 @@ async function openHistoryModal(type) {
                 const durationMinutes = item.duration_minutes;
                 const durationText = durationMinutes !== null && durationMinutes !== undefined ?
                     ` - lasted ${formatDuration(durationMinutes)}` : '';
+                // Build state snapshot for modal
+                const snapshotHtml = buildSnapshotHtml(item);
                 return `
                     <div class="history-item-full">
                         <span class="history-icon mdi ${icon}"></span>
                         <div class="history-details">
                             <span class="history-action">${item.action}</span>
+                            ${snapshotHtml}
                             ${reasoningHtml}
                             <span class="history-time-full">${absTime} (${relTime})${durationText}</span>
                         </div>
