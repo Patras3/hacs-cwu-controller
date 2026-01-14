@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.storage import Store
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EVENT_HOMEASSISTANT_STOP
 from homeassistant.components.water_heater import SERVICE_SET_OPERATION_MODE
 from homeassistant.components.climate import SERVICE_TURN_ON, SERVICE_TURN_OFF
@@ -141,11 +142,15 @@ from .notifications import async_send_notification, async_check_and_send_daily_r
 
 _LOGGER = logging.getLogger(__name__)
 
+# Storage for persisting operating mode across restarts
+OPERATING_MODE_STORAGE_VERSION = 1
+OPERATING_MODE_STORAGE_KEY = "cwu_controller_operating_mode"
+
 
 class CWUControllerCoordinator(DataUpdateCoordinator):
     """Coordinator for CWU Controller."""
 
-    def __init__(self, hass: HomeAssistant, config: dict[str, Any]) -> None:
+    def __init__(self, hass: HomeAssistant, config: dict[str, Any], entry_id: str | None = None) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
@@ -155,6 +160,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         )
         self.config = config
         self.hass = hass
+        self._entry_id = entry_id
 
         # State tracking
         self._current_state = STATE_IDLE
@@ -199,6 +205,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         # Operating mode
         self._operating_mode: str = config.get(CONF_OPERATING_MODE, MODE_BROKEN_HEATER)
+        self._operating_mode_store = Store(hass, OPERATING_MODE_STORAGE_VERSION, OPERATING_MODE_STORAGE_KEY)
 
         # BSB-LAN client for direct heat pump control
         bsb_host = config.get(CONF_BSB_LAN_HOST, DEFAULT_BSB_LAN_HOST)
@@ -338,6 +345,38 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         """Load persisted energy data from storage."""
         await self._energy_tracker.async_load()
 
+    async def async_restore_operating_mode(self) -> None:
+        """Restore operating mode from persistent storage before first refresh.
+
+        This ensures the correct mode is active before control logic runs,
+        avoiding a brief period in the default mode after restart.
+        """
+        try:
+            data = await self._operating_mode_store.async_load()
+            if data and isinstance(data, dict):
+                mode = data.get("mode")
+                if mode in OPERATING_MODES:
+                    _LOGGER.info("Restored operating mode from storage: %s", mode)
+                    self._operating_mode = mode
+                    # Call on_mode_enter for the restored mode
+                    handler = self._mode_handlers.get(mode)
+                    if handler:
+                        handler.on_mode_enter()
+                    return
+
+            _LOGGER.debug("No previous operating mode in storage, using default: %s", self._operating_mode)
+
+        except Exception as ex:
+            _LOGGER.warning("Failed to restore operating mode: %s", ex)
+
+    async def _async_save_operating_mode(self) -> None:
+        """Save operating mode to persistent storage."""
+        try:
+            await self._operating_mode_store.async_save({"mode": self._operating_mode})
+            _LOGGER.debug("Saved operating mode to storage: %s", self._operating_mode)
+        except Exception as ex:
+            _LOGGER.warning("Failed to save operating mode: %s", ex)
+
     async def async_save_energy_data(self) -> None:
         """Save energy data to persistent storage."""
         await self._energy_tracker.async_save()
@@ -398,6 +437,9 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         self._operating_mode = mode
         self._log_action(f"Operating mode changed: {old_mode} -> {mode}", "User selected new operating mode")
+
+        # Persist the new mode to storage
+        await self._async_save_operating_mode()
 
         # Reset state when changing modes
         self._cwu_heating_start = None

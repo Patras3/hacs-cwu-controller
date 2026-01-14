@@ -42,10 +42,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up CWU Controller from a config entry."""
-    coordinator = CWUControllerCoordinator(hass, dict(entry.data))
+    coordinator = CWUControllerCoordinator(hass, dict(entry.data), entry.entry_id)
 
-    # Load persisted energy data before first refresh
+    # Load persisted data before first refresh
     await coordinator.async_load_energy_data()
+    await coordinator.async_restore_operating_mode()
 
     await coordinator.async_config_entry_first_refresh()
 
