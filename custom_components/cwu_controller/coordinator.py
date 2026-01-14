@@ -32,6 +32,7 @@ from .const import (
     COMPRESSOR_TARGET_CWU,
     COMPRESSOR_TARGET_FLOOR,
     COMPRESSOR_TARGET_IDLE,
+    COMPRESSOR_TARGET_DEFROST,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -404,6 +405,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._pause_start = None
         self._low_power_start = None
         self._fake_heating_detected_at = None
+
+        # Notify the new mode handler that it's becoming active
+        handler = self._mode_handlers.get(mode)
+        if handler:
+            handler.on_mode_enter()
 
         # Heat Pump mode: start with pump_idle, enable both CWU and floor
         if mode == MODE_HEAT_PUMP:
@@ -1044,7 +1050,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if cwu_temp is None:
             cwu_temp = self._last_known_cwu_temp
 
-        power = self._get_sensor_value(self.config.get(CONF_POWER_SENSOR, DEFAULT_POWER_SENSOR))
+        power = self._get_sensor_value(self.config.get("power_sensor"))
 
         # CWU session data (if we have an active CWU session)
         cwu_session_start_temp = self._cwu_session_start_temp
@@ -1131,29 +1137,57 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if not self._bsb_lan_data:
             return COMPRESSOR_TARGET_IDLE
 
-        dhw_status = self._bsb_lan_data.get("dhw_status", "").lower()
         hp_status = self._bsb_lan_data.get("hp_status", "").lower()
-        hc1_status = self._bsb_lan_data.get("hc1_status", "").lower()
 
-        # Check if compressor is running
+        # Check for defrost first - compressor is running but for defrost, not heating
+        if "defrost" in hp_status:
+            return COMPRESSOR_TARGET_DEFROST
+
+        # Check if compressor is actively heating
         compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_status
         if not compressor_on:
             return COMPRESSOR_TARGET_IDLE
 
-        # Check if heating CWU (thermodynamically, not electric)
-        if BSB_DHW_STATUS_CHARGING.lower() in dhw_status and "electric" not in dhw_status:
-            return COMPRESSOR_TARGET_CWU
+        dhw_status = self._bsb_lan_data.get("dhw_status", "").lower()
+        hc1_status = self._bsb_lan_data.get("hc1_status", "").lower()
 
-        # Check if heating floor
-        # HC1 status values that indicate floor heating: "Heating", "Warmer function active", "Comfort"
-        if any(x in hc1_status for x in ["heating", "warmer", "comfort"]):
+        # Check if floor is actively heating (needed for limitation/locked logic)
+        floor_heating = any(x in hc1_status for x in ["heating", "warmer", "comfort"])
+
+        # Check if DHW is in any charging state (including electric)
+        dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_status
+
+        if dhw_charging:
+            # Check if it's paused (limitation/locked)
+            is_paused = "limitation" in dhw_status or "locked" in dhw_status
+
+            if is_paused:
+                # Limitation or Locked - check if we switched to floor
+                if floor_heating:
+                    # Floor took over, CWU is waiting
+                    return COMPRESSOR_TARGET_FLOOR
+                else:
+                    # Floor not heating, this is just a pause in CWU session
+                    return COMPRESSOR_TARGET_CWU
+            else:
+                # Active charging - check if floor is also heating
+                if floor_heating:
+                    # Both heating: compressor on floor, electric heater on CWU
+                    # (if "electric" in dhw) or compressor prioritizes floor
+                    if "electric" in dhw_status:
+                        return COMPRESSOR_TARGET_FLOOR
+                    else:
+                        return COMPRESSOR_TARGET_CWU
+                else:
+                    # Only CWU charging, compressor must be on CWU
+                    return COMPRESSOR_TARGET_CWU
+
+        # Check if heating floor (when DHW not charging)
+        if floor_heating:
             return COMPRESSOR_TARGET_FLOOR
 
-        # Compressor on but unclear target - check if DHW is not active
-        if "charging" not in dhw_status:
-            return COMPRESSOR_TARGET_FLOOR
-
-        return COMPRESSOR_TARGET_IDLE
+        # Compressor on but unclear target - default to floor
+        return COMPRESSOR_TARGET_FLOOR
 
     def _check_daily_counters_reset(self) -> None:
         """Reset daily counters at midnight."""

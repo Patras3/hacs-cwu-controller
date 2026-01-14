@@ -55,6 +55,14 @@ class BaseModeHandler(ABC):
         """
         raise NotImplementedError
 
+    def on_mode_enter(self) -> None:
+        """Called when this mode becomes active.
+
+        Override in subclasses to reset mode-specific state.
+        This is called by the coordinator when operating mode changes.
+        """
+        pass
+
     # =========================================================================
     # Helper methods - shortcuts to coordinator methods
     # =========================================================================

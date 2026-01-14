@@ -97,10 +97,11 @@ STATE_PUMP_FLOOR: Final = "pump_floor"  # Floor is being heated (compressor or e
 STATE_PUMP_BOTH: Final = "pump_both"  # Both CWU and floor are being heated simultaneously
 
 # Compressor target (what the compressor is heating)
-# Values: "cwu", "floor", "idle"
+# Values: "cwu", "floor", "idle", "defrost"
 COMPRESSOR_TARGET_CWU: Final = "cwu"
 COMPRESSOR_TARGET_FLOOR: Final = "floor"
 COMPRESSOR_TARGET_IDLE: Final = "idle"
+COMPRESSOR_TARGET_DEFROST: Final = "defrost"
 
 # Urgency levels
 URGENCY_NONE: Final = 0
