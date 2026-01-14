@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
+from .const import DOMAIN, MANUFACTURER, BSB_HP_COMPRESSOR_ON, BSB_DHW_STATUS_CHARGING
 from .coordinator import CWUControllerCoordinator
 
 
@@ -63,11 +63,10 @@ async def async_setup_entry(
         BsbDhwPumpStateSensor(coordinator, entry),
         BsbDhwPumpHoursSensor(coordinator, entry),
         BsbDhwPumpStartsSensor(coordinator, entry),
-        # Electric heater CWU (param 8821, 8842, 8843)
-        BsbElectricHeaterCwuStateSensor(coordinator, entry),
+        # Electric heater CWU (params 8842, 8843 - state is in binary_sensor.py)
         BsbElectricHeaterCwuHoursSensor(coordinator, entry),
         BsbElectricHeaterCwuStartsSensor(coordinator, entry),
-        # Electric heater Floor (params 8402, 8403, 8456, 8457)
+        # Electric heater Floor (params 8456, 8457 - state is in binary_sensor.py)
         BsbElectricHeaterFloorHoursSensor(coordinator, entry),
         BsbElectricHeaterFloorStartsSensor(coordinator, entry),
         # Compressor target sensor (what is compressor heating: cwu/floor/idle)
@@ -190,6 +189,8 @@ class CWUControllerStateSensor(CWUControllerBaseSensor):
             # BSB-LAN data for frontend
             "bsb_lan": data.get("bsb_lan", {}),
             "bsb_lan_data": data.get("bsb_lan", {}),  # Alias for compatibility
+            # Heat Pump mode - compressor target (cwu/floor/idle)
+            "compressor_target": data.get("compressor_target"),
             # Floor boost status
             "floor_boost_active": data.get("floor_boost_active", False),
             "floor_boost_session": data.get("floor_boost_session", False),
@@ -914,23 +915,6 @@ class BsbDhwPumpStateSensor(CWUControllerBaseSensor):
         return bsb.get("dhw_pump_state", "---")
 
 
-class BsbElectricHeaterCwuStateSensor(CWUControllerBaseSensor):
-    """Sensor showing CWU electric immersion heater state from BSB-LAN (param 8821)."""
-
-    def __init__(self, coordinator: CWUControllerCoordinator, entry: ConfigEntry) -> None:
-        """Initialize sensor."""
-        super().__init__(coordinator, entry, "bsb_electric_heater_cwu_state", "BSB Electric Heater CWU State")
-        self._attr_icon = "mdi:water-boiler-alert"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return CWU electric heater state."""
-        if self.coordinator.data is None:
-            return None
-        bsb = self.coordinator.data.get("bsb_lan", {})
-        return bsb.get("electric_heater_cwu_state", "---")
-
-
 class BsbDhwPumpHoursSensor(CWUControllerBaseSensor):
     """Sensor showing DHW pump run hours from BSB-LAN (param 8840)."""
 
@@ -1072,25 +1056,56 @@ class CompressorTargetSensor(CWUControllerBaseSensor):
             return "idle"
 
         bsb = self.coordinator.data.get("bsb_lan", {})
-        dhw_status = bsb.get("dhw_status", "").lower()
         hp_status = bsb.get("hp_status", "").lower()
-        hc1_status = bsb.get("hc1_status", "").lower()
 
-        compressor_on = "compressor" in hp_status
+        # Check for defrost first
+        if "defrost" in hp_status:
+            return "defrost"
 
+        # Check if compressor is actively heating
+        compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_status
         if not compressor_on:
             return "idle"
 
-        # Check if heating CWU (thermodynamically, not electric)
-        if "charging" in dhw_status and "electric" not in dhw_status:
-            return "cwu"
+        dhw_status = bsb.get("dhw_status", "").lower()
+        hc1_status = bsb.get("hc1_status", "").lower()
 
-        # Check if heating floor
-        if any(x in hc1_status for x in ["heating", "warmer", "comfort"]):
+        # Check if floor is actively heating (needed for limitation/locked logic)
+        floor_heating = any(x in hc1_status for x in ["heating", "warmer", "comfort"])
+
+        # Check if DHW is in any charging state (including electric)
+        dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_status
+
+        if dhw_charging:
+            # Check if it's paused (limitation/locked)
+            is_paused = "limitation" in dhw_status or "locked" in dhw_status
+
+            if is_paused:
+                # Limitation or Locked - check if we switched to floor
+                if floor_heating:
+                    # Floor took over, CWU is waiting
+                    return "floor"
+                else:
+                    # Floor not heating, this is just a pause in CWU session
+                    return "cwu"
+            else:
+                # Active charging - check if floor is also heating
+                if floor_heating:
+                    # Both heating: compressor on floor, electric heater on CWU
+                    if "electric" in dhw_status:
+                        return "floor"
+                    else:
+                        return "cwu"
+                else:
+                    # Only CWU charging, compressor must be on CWU
+                    return "cwu"
+
+        # Check if heating floor (when DHW not charging)
+        if floor_heating:
             return "floor"
 
-        # Compressor on but not clear what it's heating
-        return "idle"
+        # Compressor on but unclear target - default to floor
+        return "floor"
 
     @property
     def extra_state_attributes(self) -> dict:

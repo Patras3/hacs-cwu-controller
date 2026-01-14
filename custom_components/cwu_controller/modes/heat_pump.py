@@ -36,6 +36,7 @@ from ..const import (
     COMPRESSOR_TARGET_CWU,
     COMPRESSOR_TARGET_FLOOR,
     COMPRESSOR_TARGET_IDLE,
+    COMPRESSOR_TARGET_DEFROST,
 )
 from .base import BaseModeHandler
 
@@ -64,10 +65,23 @@ class HeatPumpMode(BaseModeHandler):
         self._electric_heater_floor_notified: bool = False
         # Track when we last detected low power during electric heating
         self._low_power_electric_warning_at: datetime | None = None
+        self._low_power_warned: bool = False
         # Track last detected states for change detection
         self._last_compressor_target: str = COMPRESSOR_TARGET_IDLE
         self._last_cwu_electric: bool = False
         self._last_floor_electric: bool = False
+
+    def on_mode_enter(self) -> None:
+        """Reset notification and warning flags when entering Heat Pump mode.
+
+        This ensures notifications are sent fresh after mode changes,
+        even if heaters were already on before the mode switch.
+        """
+        self._electric_heater_cwu_notified = False
+        self._electric_heater_floor_notified = False
+        self._low_power_electric_warning_at = None
+        self._low_power_warned = False
+        _LOGGER.debug("Heat Pump mode entered - notification flags reset")
 
     async def run_logic(
         self,
@@ -133,33 +147,65 @@ class HeatPumpMode(BaseModeHandler):
         hp_status: str,
         hc1_status: str,
     ) -> str:
-        """Detect what the compressor is currently heating.
+        """Detect what the compressor is currently doing.
 
-        Returns: COMPRESSOR_TARGET_CWU, COMPRESSOR_TARGET_FLOOR, or COMPRESSOR_TARGET_IDLE
+        Returns:
+            COMPRESSOR_TARGET_CWU: Compressor heating CWU
+            COMPRESSOR_TARGET_FLOOR: Compressor heating floor
+            COMPRESSOR_TARGET_DEFROST: Compressor in defrost mode
+            COMPRESSOR_TARGET_IDLE: Compressor not active
         """
-        dhw_lower = dhw_status.lower()
         hp_lower = hp_status.lower()
-        hc1_lower = hc1_status.lower()
 
+        # Check for defrost first - compressor is running but for defrost, not heating
+        if "defrost" in hp_lower:
+            return COMPRESSOR_TARGET_DEFROST
+
+        # Check if compressor is actively heating
         compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_lower
-
         if not compressor_on:
             return COMPRESSOR_TARGET_IDLE
 
-        # Check if heating CWU (thermodynamically, not electric)
-        if BSB_DHW_STATUS_CHARGING.lower() in dhw_lower and "electric" not in dhw_lower:
-            return COMPRESSOR_TARGET_CWU
+        dhw_lower = dhw_status.lower()
+        hc1_lower = hc1_status.lower()
 
-        # Check if heating floor
-        # HC1 status values that indicate floor heating: "Heating", "Warmer function active", "Comfort"
-        if any(x in hc1_lower for x in ["heating", "warmer", "comfort"]):
+        # Check if floor is actively heating (needed for limitation/locked logic)
+        floor_heating = any(x in hc1_lower for x in ["heating", "warmer", "comfort"])
+
+        # Check if DHW is in any charging state (including electric)
+        dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_lower
+
+        if dhw_charging:
+            # Check if it's paused (limitation/locked)
+            is_paused = "limitation" in dhw_lower or "locked" in dhw_lower
+
+            if is_paused:
+                # Limitation or Locked - check if we switched to floor
+                if floor_heating:
+                    # Floor took over, CWU is waiting
+                    return COMPRESSOR_TARGET_FLOOR
+                else:
+                    # Floor not heating, this is just a pause in CWU session
+                    return COMPRESSOR_TARGET_CWU
+            else:
+                # Active charging - check if floor is also heating
+                if floor_heating:
+                    # Both heating: compressor on floor, electric heater on CWU
+                    # (if "electric" in dhw) or compressor prioritizes floor
+                    if "electric" in dhw_lower:
+                        return COMPRESSOR_TARGET_FLOOR
+                    else:
+                        return COMPRESSOR_TARGET_CWU
+                else:
+                    # Only CWU charging, compressor must be on CWU
+                    return COMPRESSOR_TARGET_CWU
+
+        # Check if heating floor (when DHW not charging)
+        if floor_heating:
             return COMPRESSOR_TARGET_FLOOR
 
-        # Compressor on but unclear target - check if DHW is not active
-        if "charging" not in dhw_lower:
-            return COMPRESSOR_TARGET_FLOOR
-
-        return COMPRESSOR_TARGET_IDLE
+        # Compressor on but unclear target - default to floor
+        return COMPRESSOR_TARGET_FLOOR
 
     def _determine_main_state(
         self,
@@ -191,6 +237,10 @@ class HeatPumpMode(BaseModeHandler):
         """Check if state indicates CWU is being heated."""
         return state in (STATE_PUMP_CWU, STATE_PUMP_BOTH)
 
+    def _is_floor_heating_state(self, state: str) -> bool:
+        """Check if state indicates floor is being heated."""
+        return state in (STATE_PUMP_FLOOR, STATE_PUMP_BOTH)
+
     async def _handle_state_change(
         self,
         new_state: str,
@@ -204,7 +254,7 @@ class HeatPumpMode(BaseModeHandler):
         old_state = self._current_state
         now = datetime.now()
 
-        # Track CWU session start/end for UI compatibility
+        # Track CWU session start/end for UI
         was_heating_cwu = self._is_cwu_heating_state(old_state)
         will_heat_cwu = self._is_cwu_heating_state(new_state)
 
@@ -227,6 +277,21 @@ class HeatPumpMode(BaseModeHandler):
             self.coord._cwu_heating_start = None
             self.coord._cwu_session_start_temp = None
             self.coord._cwu_session_start_energy_kwh = None
+
+        # Track Floor session start/end for UI
+        was_heating_floor = self._is_floor_heating_state(old_state)
+        will_heat_floor = self._is_floor_heating_state(new_state)
+
+        if will_heat_floor and not was_heating_floor:
+            # Starting floor heating - begin session
+            self.coord._floor_heating_start = now
+            self.coord._floor_session_start_energy_kwh = self.coord._get_energy_meter_value()
+            _LOGGER.debug("Heat Pump: Floor session started")
+        elif was_heating_floor and not will_heat_floor:
+            # Stopped floor heating - end session
+            _LOGGER.debug("Heat Pump: Floor session ended")
+            self.coord._floor_heating_start = None
+            self.coord._floor_session_start_energy_kwh = None
 
         self._change_state(new_state)
 
@@ -270,6 +335,8 @@ class HeatPumpMode(BaseModeHandler):
             self._electric_heater_cwu_notified = True
         elif not cwu_electric_on:
             self._electric_heater_cwu_notified = False
+            # Also reset low power warning flag when heater turns off
+            self._low_power_warned = False
 
         # Floor heater notification
         if floor_electric_on and not self._electric_heater_floor_notified:
@@ -319,7 +386,7 @@ class HeatPumpMode(BaseModeHandler):
             elapsed = (now - self._low_power_electric_warning_at).total_seconds() / 60
             if elapsed >= 2:
                 # Only warn once per electric heating session
-                if not getattr(self, '_low_power_warned', False):
+                if not self._low_power_warned:
                     self._low_power_warned = True
                     cwu_str = f"{cwu_temp:.1f}C" if cwu_temp is not None else "unknown"
 

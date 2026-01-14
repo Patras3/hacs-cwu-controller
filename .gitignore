@@ -41,3 +41,4 @@ htmlcov/
 # Local development
 *.log
 *.Zone.Identifier
+node-red-cwu-report-flow.json

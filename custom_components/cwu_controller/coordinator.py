@@ -32,6 +32,7 @@ from .const import (
     COMPRESSOR_TARGET_CWU,
     COMPRESSOR_TARGET_FLOOR,
     COMPRESSOR_TARGET_IDLE,
+    COMPRESSOR_TARGET_DEFROST,
     URGENCY_NONE,
     URGENCY_LOW,
     URGENCY_MEDIUM,
@@ -182,8 +183,13 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._cwu_session_start_temp: float | None = None
         self._cwu_session_start_energy_kwh: float | None = None  # Energy meter at session start
 
+        # Floor Session tracking (for UI)
+        self._floor_heating_start: datetime | None = None
+        self._floor_session_start_energy_kwh: float | None = None  # Energy meter at session start
+
         # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
+        self._last_action_time: datetime | None = None  # For calculating duration between actions
 
         # Power tracking for trend analysis
         self._recent_power_readings: list[tuple[datetime, float]] = []
@@ -399,6 +405,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._pause_start = None
         self._low_power_start = None
         self._fake_heating_detected_at = None
+
+        # Notify the new mode handler that it's becoming active
+        handler = self._mode_handlers.get(mode)
+        if handler:
+            handler.on_mode_enter()
 
         # Heat Pump mode: start with pump_idle, enable both CWU and floor
         if mode == MODE_HEAT_PUMP:
@@ -1020,19 +1031,60 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         self._action_history = [e for e in self._action_history if is_recent(e)]
 
     def _log_action(self, action: str, reasoning: str = "") -> None:
-        """Log an action to history with optional reasoning.
+        """Log an action to history with optional reasoning and state snapshot.
 
         Args:
             action: Short action description (e.g., "CWU ON", "Switch to floor")
             reasoning: Specific reasoning at this decision point
         """
+        now = datetime.now()
+
+        # Calculate duration since last action
+        duration_minutes: int | None = None
+        if self._last_action_time:
+            duration_seconds = (now - self._last_action_time).total_seconds()
+            duration_minutes = int(duration_seconds / 60)
+
+        # Capture current state snapshot
+        cwu_temp = self._get_cwu_temperature()
+        if cwu_temp is None:
+            cwu_temp = self._last_known_cwu_temp
+
+        power = self._get_sensor_value(self.config.get("power_sensor"))
+
+        # CWU session data (if we have an active CWU session)
+        cwu_session_start_temp = self._cwu_session_start_temp
+        cwu_session_energy = self.session_energy_kwh
+
+        # Floor session data (if we have an active floor session)
+        floor_session_energy = self.floor_session_energy_kwh
+        floor_session_minutes: int | None = None
+        if self._floor_heating_start:
+            floor_session_minutes = int((now - self._floor_heating_start).total_seconds() / 60)
+
+        # Compressor target for heat pump mode
+        compressor_target = self._get_compressor_target()
+
         entry = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now.isoformat(),
             "action": action,
             "state": self._current_state,
             "reasoning": reasoning,
+            "duration_minutes": duration_minutes,  # How long the previous state lasted
+            # State snapshot at time of action
+            "cwu_temp": round(cwu_temp, 1) if cwu_temp is not None else None,
+            "power": round(power, 0) if power is not None else None,
+            # CWU session
+            "session_start_temp": round(cwu_session_start_temp, 1) if cwu_session_start_temp is not None else None,
+            "session_energy_kwh": round(cwu_session_energy, 3) if cwu_session_energy is not None else None,
+            # Floor session
+            "floor_session_energy_kwh": round(floor_session_energy, 3) if floor_session_energy is not None else None,
+            "floor_session_minutes": floor_session_minutes,
+            # Heat pump mode
+            "compressor_target": compressor_target,
         }
         self._action_history.append(entry)
+        self._last_action_time = now
         self._cleanup_old_history()
         if reasoning:
             _LOGGER.info("CWU Controller: %s (%s)", action, reasoning)
@@ -1085,29 +1137,57 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         if not self._bsb_lan_data:
             return COMPRESSOR_TARGET_IDLE
 
-        dhw_status = self._bsb_lan_data.get("dhw_status", "").lower()
         hp_status = self._bsb_lan_data.get("hp_status", "").lower()
-        hc1_status = self._bsb_lan_data.get("hc1_status", "").lower()
 
-        # Check if compressor is running
+        # Check for defrost first - compressor is running but for defrost, not heating
+        if "defrost" in hp_status:
+            return COMPRESSOR_TARGET_DEFROST
+
+        # Check if compressor is actively heating
         compressor_on = BSB_HP_COMPRESSOR_ON.lower() in hp_status
         if not compressor_on:
             return COMPRESSOR_TARGET_IDLE
 
-        # Check if heating CWU (thermodynamically, not electric)
-        if BSB_DHW_STATUS_CHARGING.lower() in dhw_status and "electric" not in dhw_status:
-            return COMPRESSOR_TARGET_CWU
+        dhw_status = self._bsb_lan_data.get("dhw_status", "").lower()
+        hc1_status = self._bsb_lan_data.get("hc1_status", "").lower()
 
-        # Check if heating floor
-        # HC1 status values that indicate floor heating: "Heating", "Warmer function active", "Comfort"
-        if any(x in hc1_status for x in ["heating", "warmer", "comfort"]):
+        # Check if floor is actively heating (needed for limitation/locked logic)
+        floor_heating = any(x in hc1_status for x in ["heating", "warmer", "comfort"])
+
+        # Check if DHW is in any charging state (including electric)
+        dhw_charging = BSB_DHW_STATUS_CHARGING.lower() in dhw_status
+
+        if dhw_charging:
+            # Check if it's paused (limitation/locked)
+            is_paused = "limitation" in dhw_status or "locked" in dhw_status
+
+            if is_paused:
+                # Limitation or Locked - check if we switched to floor
+                if floor_heating:
+                    # Floor took over, CWU is waiting
+                    return COMPRESSOR_TARGET_FLOOR
+                else:
+                    # Floor not heating, this is just a pause in CWU session
+                    return COMPRESSOR_TARGET_CWU
+            else:
+                # Active charging - check if floor is also heating
+                if floor_heating:
+                    # Both heating: compressor on floor, electric heater on CWU
+                    # (if "electric" in dhw) or compressor prioritizes floor
+                    if "electric" in dhw_status:
+                        return COMPRESSOR_TARGET_FLOOR
+                    else:
+                        return COMPRESSOR_TARGET_CWU
+                else:
+                    # Only CWU charging, compressor must be on CWU
+                    return COMPRESSOR_TARGET_CWU
+
+        # Check if heating floor (when DHW not charging)
+        if floor_heating:
             return COMPRESSOR_TARGET_FLOOR
 
-        # Compressor on but unclear target - check if DHW is not active
-        if "charging" not in dhw_status:
-            return COMPRESSOR_TARGET_FLOOR
-
-        return COMPRESSOR_TARGET_IDLE
+        # Compressor on but unclear target - default to floor
+        return COMPRESSOR_TARGET_FLOOR
 
     def _check_daily_counters_reset(self) -> None:
         """Reset daily counters at midnight."""
@@ -1138,6 +1218,15 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             return None
         return max(0.0, current_energy - self._cwu_session_start_energy_kwh)
 
+    @property
+    def floor_session_energy_kwh(self) -> float | None:
+        """Return energy consumed in current floor session (kWh)."""
+        if self._floor_session_start_energy_kwh is None:
+            return None
+        current_energy = self._get_energy_meter_value()
+        if current_energy is None:
+            return None
+        return max(0.0, current_energy - self._floor_session_start_energy_kwh)
 
     async def async_enable(self) -> None:
         """Enable the controller."""
@@ -1687,6 +1776,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "bsb_lan_errors_today": self.bsb_lan_errors_today,
             # Session energy tracking
             "session_energy_kwh": self.session_energy_kwh,
+            "floor_session_energy_kwh": self.floor_session_energy_kwh,
             # Heat Pump mode - compressor target (cwu/floor/idle)
             "compressor_target": self._get_compressor_target(),
         }
