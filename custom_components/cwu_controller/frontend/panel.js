@@ -753,6 +753,7 @@ async function updateUI() {
     updateOverrideAlert();
 
     updateActionHistory(attrs.action_history || []);
+    updateSessionHistory(attrs.session_history || []);
     // State history from HA history API (not coordinator attributes)
     const stateHistory = await fetchStateHistory(24);
     updateStateHistory(stateHistory);
@@ -1502,6 +1503,69 @@ function updateActionHistory(history) {
 }
 
 /**
+ * Update session history - completed heating sessions with energy stats
+ */
+function updateSessionHistory(sessions) {
+    const container = document.getElementById('session-history');
+
+    if (!sessions || sessions.length === 0) {
+        container.innerHTML = '<div class="empty-state"><span class="mdi mdi-lightning-bolt"></span><p>No completed sessions yet</p></div>';
+        return;
+    }
+
+    const items = sessions.slice(-10).reverse().map(session => {
+        const startTime = new Date(session.start);
+        const endTime = new Date(session.end);
+        const dateStr = startTime.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+        const startStr = startTime.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+        const endStr = endTime.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+        const relTime = getRelativeTime(endTime);
+
+        const isCwu = session.type === 'cwu';
+        const icon = isCwu ? 'mdi-water-boiler' : 'mdi-heating-coil';
+        const typeLabel = isCwu ? 'CWU' : 'Floor';
+        const typeClass = isCwu ? 'cwu' : 'floor';
+
+        // Format duration
+        const durationStr = formatDuration(session.duration_minutes);
+
+        // Format energy
+        const energyStr = session.energy_kwh !== null && session.energy_kwh !== undefined
+            ? `${session.energy_kwh.toFixed(2)} kWh`
+            : '-- kWh';
+
+        // Build temperature info for CWU
+        let tempHtml = '';
+        if (isCwu && session.start_temp !== null && session.end_temp !== null) {
+            const delta = session.temp_delta || (session.end_temp - session.start_temp);
+            const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
+            tempHtml = `<span class="session-temp" title="Temperature change">${session.start_temp}°C → ${session.end_temp}°C (${deltaStr}°C)</span>`;
+        }
+
+        return `
+            <div class="session-item ${typeClass}">
+                <div class="session-header">
+                    <span class="session-icon mdi ${icon}"></span>
+                    <span class="session-type">${typeLabel}</span>
+                    <span class="session-time" title="${dateStr} ${startStr} - ${endStr}">${relTime}</span>
+                </div>
+                <div class="session-stats">
+                    <span class="session-duration" title="Duration">
+                        <span class="mdi mdi-clock-outline"></span> ${durationStr}
+                    </span>
+                    <span class="session-energy" title="Energy consumed">
+                        <span class="mdi mdi-lightning-bolt"></span> ${energyStr}
+                    </span>
+                </div>
+                ${tempHtml ? `<div class="session-details">${tempHtml}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = items;
+}
+
+/**
  * Update state history with relative time
  */
 function updateStateHistory(history) {
@@ -1926,17 +1990,24 @@ async function openHistoryModal(type) {
     const title = document.getElementById('history-modal-title');
     const content = document.getElementById('history-modal-content');
 
-    title.textContent = type === 'actions' ? 'Action History' : 'State Timeline';
+    const titles = {
+        'actions': 'Action History',
+        'sessions': 'Session History',
+        'states': 'State Timeline'
+    };
+    title.textContent = titles[type] || 'History';
 
     // Show loading state
     content.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading...</span></div>';
     modal.classList.add('open');
 
-    // Fetch history - actions from attributes, states from HA history API
+    // Fetch history - actions/sessions from attributes, states from HA history API
     const attrs = currentData.attributes || {};
     let history;
     if (type === 'actions') {
         history = attrs.action_history || [];
+    } else if (type === 'sessions') {
+        history = attrs.session_history || [];
     } else {
         history = await fetchStateHistory(48); // 48h for modal view
     }
@@ -1945,11 +2016,10 @@ async function openHistoryModal(type) {
         content.innerHTML = '<div class="empty-state"><span class="mdi mdi-history"></span><p>No history available</p></div>';
     } else {
         const items = history.slice().reverse().map(item => {
-            const time = new Date(item.timestamp);
-            const relTime = getRelativeTime(time);
-            const absTime = time.toLocaleString('pl-PL');
-
             if (type === 'actions') {
+                const time = new Date(item.timestamp);
+                const relTime = getRelativeTime(time);
+                const absTime = time.toLocaleString('pl-PL');
                 const actionLower = (item.action || '').toLowerCase();
                 const icon = actionLower.includes('cwu') ? 'mdi-water-boiler' :
                             actionLower.includes('floor') ? 'mdi-heating-coil' : 'mdi-chevron-right';
@@ -1972,7 +2042,52 @@ async function openHistoryModal(type) {
                         </div>
                     </div>
                 `;
+            } else if (type === 'sessions') {
+                // Session history item
+                const startTime = new Date(item.start);
+                const endTime = new Date(item.end);
+                const dateStr = startTime.toLocaleDateString('pl-PL');
+                const startStr = startTime.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                const endStr = endTime.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+                const relTime = getRelativeTime(endTime);
+
+                const isCwu = item.type === 'cwu';
+                const icon = isCwu ? 'mdi-water-boiler' : 'mdi-heating-coil';
+                const typeLabel = isCwu ? 'CWU' : 'Floor';
+                const typeClass = isCwu ? 'cwu' : 'floor';
+
+                const durationStr = formatDuration(item.duration_minutes);
+                const energyStr = item.energy_kwh !== null && item.energy_kwh !== undefined
+                    ? `${item.energy_kwh.toFixed(2)} kWh`
+                    : '-- kWh';
+
+                let tempHtml = '';
+                if (isCwu && item.start_temp !== null && item.end_temp !== null) {
+                    const delta = item.temp_delta || (item.end_temp - item.start_temp);
+                    const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
+                    tempHtml = `<div class="session-temp-full">${item.start_temp}°C → ${item.end_temp}°C (${deltaStr}°C)</div>`;
+                }
+
+                return `
+                    <div class="session-item-full ${typeClass}">
+                        <div class="session-header-full">
+                            <span class="session-icon mdi ${icon}"></span>
+                            <span class="session-type-full">${typeLabel}</span>
+                            <span class="session-date-full">${dateStr}</span>
+                        </div>
+                        <div class="session-stats-full">
+                            <span><span class="mdi mdi-clock-outline"></span> ${startStr} - ${endStr} (${durationStr})</span>
+                            <span><span class="mdi mdi-lightning-bolt"></span> ${energyStr}</span>
+                        </div>
+                        ${tempHtml}
+                        <div class="session-rel-time">${relTime}</div>
+                    </div>
+                `;
             } else {
+                // State history item
+                const time = new Date(item.timestamp);
+                const relTime = getRelativeTime(time);
+                const absTime = time.toLocaleString('pl-PL');
                 const stateClass = item.to_state.includes('cwu') ? 'cwu' :
                                   item.to_state.includes('floor') ? 'floor' :
                                   item.to_state.includes('pause') ? 'pause' :

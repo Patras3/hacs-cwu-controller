@@ -1145,6 +1145,25 @@
                 </div>
             </div>
 
+            <!-- Session History - completed heating sessions with energy stats -->
+            <div class="card glass-effect history-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <span class="icon mdi mdi-lightning-bolt"></span>
+                        Session History
+                    </span>
+                    <button class="btn btn-icon btn-sm" onclick="openHistoryModal('sessions')" title="View All">
+                        <span class="mdi mdi-arrow-expand"></span>
+                    </button>
+                </div>
+                <div class="history-log" id="session-history">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <span>Loading sessions...</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- State History Timeline - with relative time and modal -->
             <div class="card glass-effect history-card">
                 <div class="card-header">

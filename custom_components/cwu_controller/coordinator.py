@@ -188,14 +188,20 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
         # CWU Session tracking (for UI)
         self._cwu_session_start_temp: float | None = None
         self._cwu_session_start_energy_kwh: float | None = None  # Energy meter at session start
+        self._last_completed_cwu_session_energy_kwh: float | None = None  # Energy of just-completed session
 
         # Floor Session tracking (for UI)
         self._floor_heating_start: datetime | None = None
         self._floor_session_start_energy_kwh: float | None = None  # Energy meter at session start
+        self._last_completed_floor_session_energy_kwh: float | None = None  # Energy of just-completed session
 
         # Action history for UI (state history is tracked by HA natively)
         self._action_history: list[dict] = []
         self._last_action_time: datetime | None = None  # For calculating duration between actions
+
+        # Session history - completed heating sessions with stats
+        self._session_history: list[dict] = []
+        self._max_session_history: int = 50  # Keep last 50 sessions
 
         # Power tracking for trend analysis
         self._recent_power_readings: list[tuple[datetime, float]] = []
@@ -304,6 +310,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
     def action_history(self) -> list[dict]:
         """Return action history (today + yesterday)."""
         return self._action_history
+
+    @property
+    def session_history(self) -> list[dict]:
+        """Return completed heating session history."""
+        return self._session_history
 
     @property
     def operating_mode(self) -> str:
@@ -1094,15 +1105,23 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
         power = self._get_sensor_value(self.config.get("power_sensor"))
 
-        # CWU session data (if we have an active CWU session)
+        # CWU session data - use active session or just-completed session
         cwu_session_start_temp = self._cwu_session_start_temp
         cwu_session_energy = self.session_energy_kwh
+        if cwu_session_energy is None and self._last_completed_cwu_session_energy_kwh is not None:
+            # Session just ended - use the saved final value
+            cwu_session_energy = self._last_completed_cwu_session_energy_kwh
+            self._last_completed_cwu_session_energy_kwh = None  # Clear after use
 
-        # Floor session data (if we have an active floor session)
+        # Floor session data - use active session or just-completed session
         floor_session_energy = self.floor_session_energy_kwh
         floor_session_minutes: int | None = None
         if self._floor_heating_start:
             floor_session_minutes = int((now - self._floor_heating_start).total_seconds() / 60)
+        if floor_session_energy is None and self._last_completed_floor_session_energy_kwh is not None:
+            # Session just ended - use the saved final value
+            floor_session_energy = self._last_completed_floor_session_energy_kwh
+            self._last_completed_floor_session_energy_kwh = None  # Clear after use
 
         # Compressor target for heat pump mode
         compressor_target = self._get_compressor_target()
@@ -1132,6 +1151,55 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             _LOGGER.info("CWU Controller: %s (%s)", action, reasoning)
         else:
             _LOGGER.info("CWU Controller: %s", action)
+
+    def _log_completed_session(
+        self,
+        session_type: str,  # "cwu" or "floor"
+        start_time: datetime,
+        end_time: datetime,
+        energy_kwh: float | None,
+        start_temp: float | None = None,
+        end_temp: float | None = None,
+    ) -> None:
+        """Log a completed heating session to session history.
+
+        Args:
+            session_type: Type of session ("cwu" or "floor")
+            start_time: When the session started
+            end_time: When the session ended
+            energy_kwh: Total energy consumed during session
+            start_temp: Starting temperature (CWU only)
+            end_temp: Ending temperature (CWU only)
+        """
+        duration_minutes = int((end_time - start_time).total_seconds() / 60)
+
+        entry = {
+            "type": session_type,
+            "start": start_time.isoformat(),
+            "end": end_time.isoformat(),
+            "duration_minutes": duration_minutes,
+            "energy_kwh": round(energy_kwh, 3) if energy_kwh is not None else None,
+        }
+
+        # Add temperature data for CWU sessions
+        if session_type == "cwu":
+            entry["start_temp"] = round(start_temp, 1) if start_temp is not None else None
+            entry["end_temp"] = round(end_temp, 1) if end_temp is not None else None
+            if start_temp is not None and end_temp is not None:
+                entry["temp_delta"] = round(end_temp - start_temp, 1)
+
+        self._session_history.append(entry)
+
+        # Keep only last N sessions
+        if len(self._session_history) > self._max_session_history:
+            self._session_history = self._session_history[-self._max_session_history:]
+
+        _LOGGER.debug(
+            "Session logged: %s, %d min, %.3f kWh",
+            session_type,
+            duration_minutes,
+            energy_kwh or 0
+        )
 
     def _change_state(self, new_state: str) -> None:
         """Change controller state."""
@@ -1722,6 +1790,7 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
             "manual_override_until": self._manual_override_until.isoformat() if self._manual_override_until else None,
             "cwu_heating_minutes": 0,
             "action_history": self._action_history[-20:],
+            "session_history": self._session_history[-20:],
             "cwu_target_temp": self._get_target_temp(),
             "cwu_min_temp": self._get_min_temp(),
             "cwu_critical_temp": self._get_critical_temp(),
@@ -2403,6 +2472,11 @@ class CWUControllerCoordinator(DataUpdateCoordinator):
 
             # Then enable floor heating
             await self._async_set_floor_on()
+
+            # Save final CWU energy before clearing session (for action history)
+            final_cwu_energy = self.session_energy_kwh
+            if final_cwu_energy is not None:
+                self._last_completed_cwu_session_energy_kwh = final_cwu_energy
 
             # Clear CWU session
             self._cwu_session_start_temp = None
