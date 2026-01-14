@@ -2222,6 +2222,160 @@ body {
 }
 
 /* ============================================
+   Session History
+   ============================================ */
+.session-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: var(--surface-secondary);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    border-left: 3px solid var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.session-item:hover {
+    background: var(--surface-hover);
+}
+
+.session-item.cwu {
+    border-left-color: var(--accent-cyan);
+}
+
+.session-item.floor {
+    border-left-color: var(--accent-orange);
+}
+
+.session-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.session-icon {
+    font-size: 18px;
+}
+
+.session-item.cwu .session-icon {
+    color: var(--accent-cyan);
+}
+
+.session-item.floor .session-icon {
+    color: var(--accent-orange);
+}
+
+.session-type {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.session-time {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.session-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.session-stats .mdi {
+    font-size: 14px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.session-duration .mdi {
+    color: var(--text-muted);
+}
+
+.session-energy .mdi {
+    color: var(--accent-yellow);
+}
+
+.session-details {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.session-temp {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Session History - Modal/Full view */
+.session-item-full {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    background: var(--surface-secondary);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    border-left: 4px solid var(--text-muted);
+}
+
+.session-item-full.cwu {
+    border-left-color: var(--accent-cyan);
+}
+
+.session-item-full.floor {
+    border-left-color: var(--accent-orange);
+}
+
+.session-header-full {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.session-header-full .session-icon {
+    font-size: 20px;
+}
+
+.session-type-full {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.session-date-full {
+    margin-left: auto;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.session-stats-full {
+    display: flex;
+    gap: 24px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.session-stats-full .mdi {
+    margin-right: 6px;
+}
+
+.session-temp-full {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding-left: 4px;
+}
+
+.session-rel-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ============================================
    Power Cycle Info
    ============================================ */
 .power-cycle-info {
