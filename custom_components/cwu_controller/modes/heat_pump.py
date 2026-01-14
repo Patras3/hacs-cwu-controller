@@ -269,10 +269,15 @@ class HeatPumpMode(BaseModeHandler):
             )
         elif was_heating_cwu and not will_heat_cwu:
             # Stopped CWU heating - end session
+            # Save final energy before clearing session (for action history)
+            final_cwu_energy = self.coord.session_energy_kwh
+            if final_cwu_energy is not None:
+                self.coord._last_completed_cwu_session_energy_kwh = final_cwu_energy
             _LOGGER.debug(
-                "Heat Pump: CWU session ended (was %.1f°C, now %.1f°C)",
+                "Heat Pump: CWU session ended (was %.1f°C, now %.1f°C, energy %.3f kWh)",
                 self.coord._cwu_session_start_temp or 0,
-                cwu_temp or 0
+                cwu_temp or 0,
+                final_cwu_energy or 0
             )
             self.coord._cwu_heating_start = None
             self.coord._cwu_session_start_temp = None
@@ -289,7 +294,14 @@ class HeatPumpMode(BaseModeHandler):
             _LOGGER.debug("Heat Pump: Floor session started")
         elif was_heating_floor and not will_heat_floor:
             # Stopped floor heating - end session
-            _LOGGER.debug("Heat Pump: Floor session ended")
+            # Save final energy before clearing session (for action history)
+            final_floor_energy = self.coord.floor_session_energy_kwh
+            if final_floor_energy is not None:
+                self.coord._last_completed_floor_session_energy_kwh = final_floor_energy
+            _LOGGER.debug(
+                "Heat Pump: Floor session ended (energy %.3f kWh)",
+                final_floor_energy or 0
+            )
             self.coord._floor_heating_start = None
             self.coord._floor_session_start_energy_kwh = None
 
