@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=9.3.0">
+    <link rel="stylesheet" href="styles.css?v=9.3.1">
 </head>
 <body>
     <div class="container">
@@ -207,15 +207,15 @@
                 <!-- Status section -->
                 <g transform="translate(15, 250)">
                     <rect x="-8" y="-16" width="320" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-                    <g class="viz-tank-view">
+                    <g class="viz-tank-view viz-status-item viz-status-dhw">
                         <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
                         <text id="viz-dhw-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
-                    <g class="viz-floor-view">
+                    <g class="viz-floor-view viz-status-item viz-status-hc1">
                         <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
                         <text id="viz-hc1-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
-                    <g transform="translate(0, 20)">
+                    <g class="viz-status-hp" transform="translate(0, 20)">
                         <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
                         <text id="viz-hp-status" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                     </g>
@@ -514,15 +514,15 @@
                         <!-- Status section -->
                         <g transform="translate(15, 250)">
                             <rect x="-8" y="-16" width="220" height="52" rx="6" fill="rgba(0,20,40,0.8)" stroke="rgba(0,255,255,0.2)" stroke-width="1"/>
-                            <g class="viz-tank-view viz-tank-view-desktop">
+                            <g class="viz-tank-view viz-tank-view-desktop viz-status-item viz-status-dhw">
                                 <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-hot);letter-spacing:2px;">DHW:</text>
                                 <text class="viz-dhw-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
-                            <g class="viz-floor-view viz-floor-view-desktop">
+                            <g class="viz-floor-view viz-floor-view-desktop viz-status-item viz-status-hc1">
                                 <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-warm1);letter-spacing:2px;">HC1:</text>
                                 <text class="viz-hc1-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
-                            <g transform="translate(0, 20)">
+                            <g class="viz-status-hp" transform="translate(0, 20)">
                                 <text x="0" y="0" style="font-family:'Oxanium',sans-serif;font-size:12px;font-weight:700;fill:var(--viz-cyan);letter-spacing:2px;">HP:</text>
                                 <text class="viz-hp-status-desktop" x="55" y="0" style="font-family:'IBM Plex Mono',monospace;font-size:11px;fill:rgba(0,255,255,0.9);">---</text>
                             </g>
@@ -1392,6 +1392,6 @@
     <!-- Notification Container -->
     <div id="notification-container"></div>
 
-    <script src="panel.js?v=9.3.0"></script>
+    <script src="panel.js?v=9.3.1"></script>
 </body>
 </html>
